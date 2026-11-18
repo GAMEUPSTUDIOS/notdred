@@ -185,7 +185,7 @@ const BOT_TYPES = {
   // saw: the radius is the saw's outer rim (bot_saw.png, 156px) and the body is drawn at 126/156 inside it,
   // so the physics circle is the teeth. ℵ15 blue bots damage ships by ramming.
   // Silver bots: shooters like the red raiders, found only in Finch II and Sparrow I; they carry iron.
-  silver: {label: 'Silver bot', hp: 600, radius: 2.4, ranged: true, shots: 2, spread: .03, interval: 9, damage: 30, shotType: 'ammo', thrust: 7, minimap: '#d6dde3', tag: 'SLV', body: '#b9c2ca'},
+  silver: {label: 'Silver bot', hp: 600, radius: 2.4, ranged: true, shots: 2, spread: .03, interval: 9, damage: 30, shotType: 'scatter', thrust: 7, minimap: '#d6dde3', tag: 'SLV', body: '#b9c2ca'},
   // Canary seekers: dormant as rock tiles until shot, then they wake and hunt the nearest ship (contact damage).
   seeker: {label: 'Seeker', hp: 300, radius: 1.7, density: 45, smart: true, ranged: false, contact: 30, contactInterval: 1, knockback: 3, thrust: 16, minimap: '#cfefff', tag: 'SEK', body: '#a9d8f0', dormant: true},
   blue:  {label: 'Blue rammer', hp: 800,  radius: 3.0, saw: true, sawSpin: 7, ranged: false, contact: 60, contactInterval: 1.2, knockback: 14, shipKnock: 9, thrust: 26, minimap: '#4aa8ff', tag: 'BLU', body: '#4a8cff'}
