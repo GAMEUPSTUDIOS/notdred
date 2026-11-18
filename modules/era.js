@@ -102,15 +102,27 @@ const TREASURE_LOOT = [['flux', 8], ['turret', 1], ['booster', 6], ['explosives'
 //   decay: damage falls linearly to `decay` × damage at the end of the round's life (trash).
 //   bounces: ricochets off rock (sniper).  rockBreaker: mines a rock tile in one hit (breaker).
 //   impulse: + pushes the target away (punch), − pulls it toward the shooter (yank).
+// Rebalanced to ℵ30 (5 Sep 2019) from the changelog, line by line:
+//   ℵ7  punch/yank "damage was increased to the same as Standard Ammo" — the 50% cut came later (ℵ33, 8 Oct).
+//   ℵ10 "All ammo types except Standard now have a 100% increased delay between shots" (AMMO_RELOAD below);
+//       trash "now has the same damage as standard ammo"; flak's 50% penalty on its first projectile removed;
+//       flak and scatter got 50% more lifetime and 300% more spread.
+//   ℵ23 trash "randomly decays … in item form and in expando-boxes" — the items decay, not the bullet's damage.
+//   ℵ26 scatter −20% damage and less spread; flak −30% damage.
+//   wiki: scatter and flak are 5 projectiles each; scatter's damage depends on distance (strong up close).
+// Mining: every round hits world tiles for WORLD_DAMAGE_SCALE × its damage (ℵ25: "Destructible blocks can now be
+// damaged by any type of player bullet"; breaker "still destroys blocks in one hit"). Rock (1000 HP) takes
+// standard 5, punch/yank 5, trash 5, sniper 3, scatter 3–8 pellets' worth depending on range, breaker 1.
+// PLACEHOLDER (not published): scatter/flak per-pellet numbers, all speeds.
 const AMMO = {
   ammo:    {name: 'Standard ammo', damage: 100, speed: 90,  life: 2,   trail: '#ffe08a', head: '#fff7c4'},
-  scatter: {name: 'Scatter ammo',  damage: 24,  speed: 80,  life: .75, pellets: 6, spread: .2, trail: '#ffb36b', head: '#ffe2c4'},
-  flak:    {name: 'Flak ammo',     damage: 35,  speed: 70,  life: 1.6, burst: {after: .45, count: 8, damage: 14, spread: 1.1, speed: 55, life: .5}, trail: '#c8c8c8', head: '#ffffff'},
+  scatter: {name: 'Scatter ammo',  damage: 32,  speed: 80,  life: .75, pellets: 5, spread: .2, decay: .35, trail: '#ffb36b', head: '#ffe2c4'},
+  flak:    {name: 'Flak ammo',     damage: 70,  speed: 70,  life: 1.6, burst: {after: .45, count: 5, damage: 21, spread: 1.1, speed: 55, life: .5}, trail: '#c8c8c8', head: '#ffffff'},
   sniper:  {name: 'Sniper ammo',   damage: 150, speed: 140, life: 2.4, bounces: 2, trail: '#9fe8ff', head: '#e8fbff'},
-  punch:   {name: 'Punch ammo',    damage: 50,  speed: 90,  life: 2,   impulse: 1, trail: '#ff6ec7', head: '#ffd2f0'},
-  yank:    {name: 'Yank ammo',     damage: 50,  speed: 90,  life: 2,   impulse: -1, trail: '#8d7bff', head: '#dcd6ff'},
+  punch:   {name: 'Punch ammo',    damage: 100,  speed: 90,  life: 2,   impulse: 1, trail: '#ff6ec7', head: '#ffd2f0'},
+  yank:    {name: 'Yank ammo',     damage: 100,  speed: 90,  life: 2,   impulse: -1, trail: '#8d7bff', head: '#dcd6ff'},
   breaker: {name: 'Breaker ammo',  damage: 200, speed: 110, life: 2,   rockBreaker: true, trail: '#ff7a5c', head: '#ffd8cc'},
-  trash:   {name: 'Trash ammo',    damage: 100, speed: 75,  life: 1.2, decay: .15, trail: '#8f9a6a', head: '#d9e0bf'}
+  trash:   {name: 'Trash ammo',    damage: 100, speed: 75,  life: 1.2, itemDecay: 45, trail: '#8f9a6a', head: '#d9e0bf'}
 };
 const AMMO_TYPES = Object.keys(AMMO);
 // Turret reload: seconds between shots for each turret, times the ammo's reloadScale. Each turret keeps its own
@@ -130,7 +142,8 @@ const TURRET_ORE_DROPS = ['turret', 'turret_burst', 'turret_auto'];
 // Treasure keeps the 4× ratio it had here before. PLACEHOLDER: the exact ℵ30 numbers aren't published.
 const WORLD_TILE_HP = {rock: 1000, iron: 1000, ore: 1000, flux: 1000, treasure: 4000};
 const WORLD_DAMAGE_SCALE = 2.25;
-const AMMO_RELOAD = {ammo: 1, scatter: 1.6, flak: 1.4, sniper: 2.2, punch: 1.2, yank: 1.2, breaker: 2, trash: .8};
+// ℵ10: every ammo type except standard waits twice as long between shots.
+const AMMO_RELOAD = {ammo: 1, scatter: 2, flak: 2, sniper: 2, punch: 2, yank: 2, breaker: 2, trash: 2};
 function turretDef(m) { return TURRETS[m?.starterRC ? 'starter_rc' : m?.kind || 'turret'] || TURRETS.turret; }
 function turretReload(m) { return turretDef(m).reload * (AMMO_RELOAD[m?.ammoType] || 1); }
 function turretCapacity(m) { return turretDef(m).capacity || 16; }
@@ -174,14 +187,17 @@ const BOT_TYPES = {
   silver: {label: 'Silver bot', hp: 600, radius: 2.4, ranged: true, shots: 2, spread: .03, interval: 9, damage: 30, shotType: 'ammo', thrust: 7, minimap: '#d6dde3', tag: 'SLV', body: '#b9c2ca'},
   // Canary seekers: dormant as rock tiles until shot, then they wake and hunt the nearest ship (contact damage).
   seeker: {label: 'Seeker', hp: 300, radius: 1.7, density: 45, smart: true, ranged: false, contact: 30, contactInterval: 1, knockback: 3, thrust: 16, minimap: '#cfefff', tag: 'SEK', body: '#a9d8f0', dormant: true},
-  blue:  {label: 'Blue rammer', hp: 800,  radius: 3.0, saw: true, sawSpin: 7, ranged: false, contact: 60, contactInterval: 1.2, knockback: 14, thrust: 11, minimap: '#4aa8ff', tag: 'BLU', body: '#4a8cff'}
+  blue:  {label: 'Blue rammer', hp: 800,  radius: 3.0, saw: true, sawSpin: 7, ranged: false, contact: 60, contactInterval: 1.2, knockback: 14, shipKnock: 9, thrust: 26, minimap: '#4aa8ff', tag: 'BLU', body: '#4a8cff'}
 };
 
-// ℵ30: flux replaced the hand-pusher drop from green bots. Counts are PLACEHOLDERS.
+// Green bots drop a handheld pusher (the drop drednot had before ℵ30 swapped it for stationary pushers; kept here
+// by request). Counts are PLACEHOLDERS.
+// Canary's iron tiles are its reward: each one drops 64 iron (four stacks).
+const CANARY_IRON_DROP = 64;
 const BOT_DROPS = {
   red: [['explosives', 16]],
   silver: [['iron', 16]],
-  green: [['flux', 4], ['punch', 16]],
+  green: [['pusher', 1], ['flux', 4], ['punch', 16]],
   // ℵ19: blue bots drop ammo and rare items; ℵ21: never trash.
   blue: [['iron', 16], ['ammo', 8], ['sniper', 8]],
   // ℵ30: silica crystals came with flux; seekers carry them.
@@ -201,13 +217,28 @@ const FREE_RECIPES = ['trash'];
 // items"). Recipe lists follow the unofficial wiki (Engineering / Machine / Munitions / Starter pages).
 // Legacy, per the design for this build: crafts every kind of fabricator. A placed fabricator is terrain
 // type 'fabricator' with a `kind`; the item that places each kind is `item`.
+// Footprints in ship tiles [width, height], top-left cell first. Recycler 3×4, anchor 3×3, comms station 1×2 and
+// spawn point 1×1 use the game's own sprites (recycler.png, anchor.png, comms_station.png, spawn.png, 40 px a tile).
+const MACHINE_SIZE = {fabricator: [2, 3], storage: [2, 2], turret_controller: [1, 3], door: [1, 2], recycler: [3, 4], anchor: [3, 3], comms: [1, 2], spawn: [1, 1]};
+// Standing machines placed like a fabricator (clear area, supported along the bottom), walked through, not solid.
+const STANDING_MACHINES = ['recycler', 'anchor', 'comms', 'spawn'];
+// Recycler (wiki: "converts items back to the materials it was made out of with a small loss"; 16 metal, 20 s).
+// Returns half of what the item cost, rounded down — this build's rule (drednot's ℵ25 recycler gave back 80%).
+// ℵ30: recycling a handheld pusher gives a stationary pusher. Starter items, trash and raw resources don't recycle.
+const RECYCLE_RETURN = 0.5;
+const RECYCLE_SWAP = {pusher: 'pusher_block'};
+// Comms station (ℵ14): talk to every ship in the zone. Ordinary chat stays aboard your own ship.
+const COMMS_RANGE = 2.5;
+// Spawn points (ℵ14): a joining player appears at a random spawn point set exactly to their rank, else at the helm.
+// ℵ15: "Crew can now edit door and spawn ranks."
+const SPAWN_RANKS = ['captain', 'crew', 'guest'];
 const FABRICATORS = {
   starter:     {name: 'Starter fabricator',     item: 'fab_starter',     badge: 'official-fab_t_starter',
                 recipes: ['block', 'ladder', 'walkway', 'net', 'wrench', 'door', 'booster', 'ammo', 'fab_machine', 'fab_engineering']},
   engineering: {name: 'Engineering fabricator', item: 'fab_engineering', badge: 'official-fab_t_engineering',
-                recipes: ['wrench', 'shredder', 'repair', 'booster', 'embiggener', 'shrinker', 'block', 'glass', 'wedge', 'ladder', 'walkway', 'walkway_wedge', 'net', 'door', 'storage', 'pusher']},
+                recipes: ['wrench', 'shredder', 'repair', 'booster', 'embiggener', 'shrinker', 'block', 'glass', 'wedge', 'ladder', 'walkway', 'walkway_wedge', 'net', 'door', 'storage', 'pusher', 'spawn', 'anchor']},
   machine:     {name: 'Machine fabricator',     item: 'fab_machine',     badge: 'official-fab_t_machine',
-                recipes: ['hatch', 'ejector', 'loader', 'pusher_block', 'turret_controller', 'thruster', 'fab_machine', 'fab_engineering', 'fab_munitions']},
+                recipes: ['hatch', 'ejector', 'loader', 'pusher_block', 'turret_controller', 'thruster', 'recycler', 'comms', 'fab_machine', 'fab_engineering', 'fab_munitions']},
   munitions:   {name: 'Munitions fabricator',   item: 'fab_munitions',   badge: 'official-fab_t_munitions',
                 recipes: ['ammo', 'scatter', 'flak', 'sniper', 'punch', 'yank', 'breaker', 'trash', 'fuel', 'booster']},
   legacy:      {name: 'Legacy fabricator',      item: 'fabricator',      badge: 'official-fab_t_legacy',
@@ -255,4 +286,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};

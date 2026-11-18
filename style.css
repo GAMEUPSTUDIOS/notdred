@@ -60,3 +60,5 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 /* The old '#lobby .shipcards button' rule made Delete as big as the whole card, covering it: keep it a small tab under the card. */
 #lobby .shipcard{display:flex;flex-direction:column;align-items:stretch}#lobby .shipcards .shipcard .deleteship{position:static;width:auto;height:auto;margin:4px auto 0;padding:3px 12px;font-size:12px;line-height:1.2;background:#5a2724;border:1px solid #c5605a;color:#ffd6d3;border-radius:2px}#lobby .shipcards .shipcard .deleteship:hover{background:#7a2a26}
 .privacyoption{display:block;margin:6px 0;padding:6px 10px;background:#192833;border:2px groove #85959d;font-size:14px}.privacyoption small{display:block;margin:2px 0 0 22px;color:#9aa9ac}.inviterow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#invitelink{flex:1;min-width:220px;padding:5px;font-size:12px;background:#0d151c;color:#eee;border:1px solid #6b7b84}
+#chatinput.comms{border-color:#7fffb0;background:#0f2418ee}
+.commstag{display:inline-block;background:#2e7d4f;color:#dfffe9;font-size:10px;font-weight:bold;padding:0 3px;border-radius:2px}
