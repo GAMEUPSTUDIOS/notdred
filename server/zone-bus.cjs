@@ -85,7 +85,7 @@ class ZoneBus{
  // Other ships in the same zone, for a client's snapshot. Layouts are sent only when they change.
  others(room,seen){const me=this.lastExteriors.get(room);if(!me)return [];const out=[];
   for(const [r,x] of this.lastExteriors){if(r===room||x.zone!==me.zone||!r.layoutCache)continue;
-   const layout=r.layoutCache?.layout;const o={id:r.id,name:r.name,x:+x.x.toFixed(3),y:+x.y.toFixed(3),vx:+x.vx.toFixed(3),vy:+x.vy.toFixed(3),hp:Math.ceil(x.hp),maxHp:x.maxHp,size:x.size,crew:r.crewCache||[],layoutKey:r.layoutCache?.key};
+   const layout=r.layoutCache?.layout;const o={id:r.id,name:r.name,x:+x.x.toFixed(3),y:+x.y.toFixed(3),vx:+x.vx.toFixed(3),vy:+x.vy.toFixed(3),hp:Math.ceil(x.hp),maxHp:x.maxHp,size:x.size,crew:r.crewCache||[],machines:r.machinesCache||[],layoutKey:r.layoutCache?.key};
    // Everything happening aboard, for ships close enough to see it (within ~160 world units, about two screens).
    if(r.liveCache&&Math.hypot(x.x-me.x,x.y-me.y)<LIVE_RANGE)o.live=r.liveCache;
    if(layout&&seen.get(r.id)!==o.layoutKey){o.layout=layout;seen.set(r.id,o.layoutKey);}out.push(o);}

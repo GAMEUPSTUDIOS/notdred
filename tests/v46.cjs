@@ -15,7 +15,7 @@ run(`addTerrain("recycler",${rx},${ry},0);addTerrain("loader",${rx-1},${fy},0);a
 // Feed: three stacks of 16 standard ammo, one after another on the feed loader's input tile.
 let fed=0;for(let k=0;k<3;k++){run(`spawnItem("ammo",V(${rx-2},${fy}),V(0,0),16)`);step(150);}
 fed=48;// 48 ammo cost 12 iron + 12 explosives; half back = 6 + 6.
-step(300);
+step(900);
 assert.equal(sum('ammo',-99,99),0,'all ammo went in through the feed loader');
 assert.equal(run('box.materials.iron||0'),6,'output loader unloaded the iron into the expando box');assert.equal(run('box.materials.explosives||0'),6,'…and the explosives');
 assert.equal(run(`items.filter(i=>i.body.getPosition().x>${rx-.5}&&i.body.getPosition().x<${rx+2.5}).length`),0,'nothing left inside the recycler');
@@ -29,12 +29,12 @@ run(`terrainAt({x:${rx-1},y:${fy}}).cargo=[];`);
 run(`spawnItem("pusher",V(${rx-2},${fy}),V(0,0),1)`);step(400);
 assert.equal(run('box.materials.pusher_block||0'),1,'stationary pusher came out and stayed whole');
 
-// Pushers can't load a recycler, but can sweep its output away; nothing thrown in is ever recycled.
-run(`for(const k of [${rx-1},${rx+3}]){const t=terrainAt({x:k,y:${fy}});if(t.f)interior.destroyFixture(t.f);terrain.delete(key(k,${fy}));}for(const i of [...items])inside.destroyBody(i.body);items.length=0;inside.destroyBody(box.body);boxes.splice(boxes.indexOf(box),1);addTerrain("pusher_block",${rx-1},${fy},0);spawnItem("ammo",V(${rx+1},${fy}),V(0,0),16);`);
-step(300);assert.equal(sum('ammo',-99,99),16,'pushed through, not recycled');assert.ok(sum('ammo',rx+2.5,99)===16,'swept out the far side');
+// Pushers can't load a recycler: a stack shoved against it just presses on it (it is a physics object), unrecycled.
+run(`for(const k of [${rx-1},${rx+3}]){const t=terrainAt({x:k,y:${fy}});if(t.f)interior.destroyFixture(t.f);terrain.delete(key(k,${fy}));}for(const i of [...items])inside.destroyBody(i.body);items.length=0;inside.destroyBody(box.body);boxes.splice(boxes.indexOf(box),1);addTerrain("pusher_block",${rx-3},${fy},0);spawnItem("ammo",V(${rx-1.6},${fy}),V(0,0),16);`);
+step(300);assert.equal(sum('ammo',-99,99),16,'pushed against it, not recycled');
 // Loaders fill a thruster's tanks (fuel or explosives only, up to THRUSTER_TANK each).
 run('globalThis.__th={type:"thruster"};globalThis.__mh=mountHit;mountHit=()=>__th;');
 assert.equal(run('loaderGive({},{x:99,y:99},{type:"fuel",count:12},V(1,0))'),12);assert.equal(run('loaderGive({},{x:99,y:99},{type:"fuel",count:12},V(1,0))'),4,'tank tops out at 16');
 assert.equal(run('loaderGive({},{x:99,y:99},{type:"iron",count:5},V(1,0))'),0,'not iron');run('mountHit=__mh;');
-console.log('PASS: automated recycling — feed loader into a recycler (holds what can\'t be recycled), unload loader for its output into an expando box, pushers sweep stacks through but never load it; loaders fill thruster tanks.');
+console.log('PASS: automated recycling — feed loader into a recycler (holds what can\'t be recycled), unload loader for its output into an expando box, pushers can\'t load it (solid); loaders fill thruster tanks.');
 process.exit(0);

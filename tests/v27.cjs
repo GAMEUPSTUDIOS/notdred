@@ -9,7 +9,7 @@ const s={ZoneGenerator:generator,ShipCodec:codec,planck:require('../dist/vendor/
 vm.createContext(s);for(const f of ['era','construction','cargo','machinery','safeguards','combat','zones','missions','hatches','controller'])vm.runInContext(fs.readFileSync('dist/modules/'+f+'.js','utf8'),s);vm.runInContext(fs.readFileSync('dist/game.js','utf8'),s);
 const run=c=>vm.runInContext('{'+c+'}',s);run('initialize()');
 const ticks=n=>run(`for(let k=0;k<${n};k++)step(1/60)`);
-const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
 
 
 // --- Turret loading -------------------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 {run('initialize();shipHP=0;CRITICAL.shrinkChance=0;const rc=mounts.find(m=>m.side==="right");damageShip(1000,mountPoint(rc),V(-1,0));damageShip(1000,mountPoint(rc),V(-1,0))');assert.equal(run('mounts.filter(m=>m.side==="right").length'),1);run('CRITICAL.shrinkChance=.08');console.log('PASS: starter attachments in the line of fire soak critical shots.');}
 
 // --- Loaders are solid, drop instead of throwing, and fill only what each machine uses ------------------------------
-{const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+{const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
  // Crew cannot walk through a loader (or a pusher).
  for(const type of ['loader','pusher_block']){run(clr+`addTerrain("${type}",-1,2,0);player.setTransform(V(-3.5,1.8),0);keys={d:true}`);ticks(120);run('keys={}');assert.ok(run('localPlayer().x<-1.6'),type+' is solid to crew');}
  // Loose cargo cannot pass through a loader either.
@@ -100,9 +100,9 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  run(clr+'addTerrain("loader",0,2,0);spawnItem("iron",V(-1,2),V(0,0),16)');ticks(100);
  assert.ok(run('(i=>i&&Math.abs(i.body.getPosition().x-1)<.5&&i.body.getLinearVelocity().length()<.5)(items.find(i=>i.type==="iron"))'),'dropped on the facing tile');
  // Fabricators accept only their recipes' ingredients from a loader.
- run(clr+'addTerrain("fabricator",1,0);const f=terrain.get(key(1,0));f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("wrench",V(-1,2),V(0,0),1)');ticks(120);
- assert.equal(run('terrain.get(key(1,0)).materials.wrench'),undefined,'a wrench is not loaded into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo[0]?.type'),'wrench','the loader holds it instead');
- run(clr+'addTerrain("fabricator",1,0);const f=terrain.get(key(1,0));f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("explosives",V(-1,2),V(0,0),8)');ticks(120);assert.equal(run('terrain.get(key(1,0)).materials.explosives'),8,'ingredients go in');
+ run(clr+'const f=addTerrain("fabricator",1,0);f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("wrench",V(-1,2),V(0,0),1)');ticks(120);
+ assert.equal(run('terrainAt({x:1,y:0}).materials.wrench'),undefined,'a wrench is not loaded into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo[0]?.type'),'wrench','the loader holds it instead');
+ run(clr+'const f=addTerrain("fabricator",1,0);f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("explosives",V(-1,2),V(0,0),8)');ticks(120);assert.equal(run('terrainAt({x:1,y:0}).materials.explosives'),8,'ingredients go in');
  // Only ammo goes into a turret.
  run('initialize();const rc=mounts.find(m=>m.side==="right"&&m.type==="turret");rc.ammo=0;const lt={type:"loader",x:bounds.r-2,y:mountPoint(rc).y,rotation:0,cargo:[]};globalThis.n1=loaderGive(lt,{x:bounds.r,y:mountPoint(rc).y},{type:"iron",count:16},V(1,0));globalThis.n2=loaderGive(lt,{x:bounds.r,y:mountPoint(rc).y},{type:"ammo",count:16},V(1,0))');
  assert.equal(run('n1'),0,'iron refused by a turret');assert.equal(run('n2'),16,'ammo accepted');
@@ -111,16 +111,19 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 // --- Fabricators and the helm stand on walkways ---------------------------------------------------------------------
 {const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of [...terrain.values()])if(t.type!=="fabricator"){if(t.f)interior.destroyFixture(t.f);terrain.delete(key(t.x,t.y));}for(const i of items)inside.destroyBody(i.body);items=[];';
  run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0)');
- assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'','fabricator on walkways');assert.ok(run('validity({x:0,y:-3},"fab_munitions")')!=='','but not floating above them');
+ assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'','a fabricator can be placed anywhere it fits (it is a physics object)');
+ run('giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
+ assert.ok(Math.abs(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return f.body.getPosition().y+1.5;})()')-.5)<.1,'it falls and stands on the walkways');
  run(clr+'addTerrain("walkway",3,1);addTerrain("walkway",4,1);player.setTransform(V(1,1.8),0)');
  assert.equal(run('validity({x:3,y:0},"helm")'),'','helm on walkways');assert.ok(run('validity({x:3,y:-1},"helm")')!=='','not floating');
- // Glass works too; a walkway holding up a fabricator cannot be pulled out from under it.
- run(clr+'addTerrain("glass",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0)');assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'');
- run('giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0);selectSlot(slots.indexOf("wrench"));removeAt({x:1,y:1})');assert.ok(run('!!terrainAt({x:1,y:1})'),'support stays while the fabricator is on it');
- console.log('PASS: fabricators and the helm can stand on walkways (and glass), not float; their supports cannot be removed from under them.');}
+ // Pull the walkways out and the fabricator drops to the floor, whole.
+ run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0);giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
+ run('selectSlot(slots.indexOf("wrench"));player.setTransform(V(3,1.8),0);removeAt({x:0,y:1});removeAt({x:1,y:1})');ticks(90);
+ assert.ok(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return !!f&&f.body.getPosition().y+1.5>bounds.b-.6;})()'),'support removed: it falls to the floor');
+ console.log('PASS: fabricators are physics objects — placed anywhere they fit, stand on walkways, fall when their support goes; the helm stands on walkways, not floating.');}
 
 // --- Loader pickup hotbox: thrown, dropped nearby, or falling through --------------------------------------------------
-{const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+{const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
  const held='terrain.get(key(0,2)).cargo.reduce((n,c)=>n+c.count,0)+items.filter(i=>i.type==="iron"&&i.body.getPosition().x>.6).reduce((n,i)=>n+i.count,0)';
  run(clr+'addTerrain("loader",0,2,0);spawnItem("iron",V(-3.5,1.6),V(9,0),16)');ticks(90);assert.equal(run(held),16,'item thrown at the loader is taken');
  run(clr+'addTerrain("loader",0,2,0);spawnItem("iron",V(-1.1,-1.5),V(0,0),16)');ticks(90);assert.equal(run(held),16,'item falling into the hotbox is taken');

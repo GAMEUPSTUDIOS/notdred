@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v48 (ℵ30 build)
+**Current version:** notdred.io — v49 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -120,6 +120,13 @@ Ships collide with each other and shove each other, push the same boulders, figh
 Each ship's room (`server/room.cjs`) still simulates its interior and crew. Every tick it sends its zone its thrust, knockbacks and shots, and gets back its position, damage (shields, or tiles once critical), loot taken in by its hatches, and score for its kills and mining.
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
+
+## Physics machines and loader swing (v49)
+
+- **Fabricators, recyclers and comms stations are physics objects**, like expando boxes. They're placed where you aim (not snapped to the grid), fall, slide, can be pushed by pushers and other objects, and stand on walkways (loose items still fall through walkways). Loaders still feed whichever machine covers the tile they face.
+- A **loader facing out of a recycler** takes the finished resources straight from it. With no loader there, the recycler drops them beside itself.
+- **A loader's swing is its cooldown.** The hand grabs a stack, carries it across in half a cycle and delivers only when it arrives (waiting there if the target is full), then swings back before it can grab again. A turret delivery adds the turret's loading wait.
+- **Fixed:** pusher beams and loader swings now show for every player (they weren't in the snapshot, so beams never drew).
 
 ## Pusher beams, signs and paint (v48)
 

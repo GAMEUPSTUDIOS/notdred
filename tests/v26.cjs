@@ -9,7 +9,7 @@ const s={ZoneGenerator:generator,ShipCodec:codec,planck:require('../dist/vendor/
 vm.createContext(s);for(const f of ['era','construction','cargo','machinery','safeguards','combat','zones','missions','hatches','controller'])vm.runInContext(fs.readFileSync('dist/modules/'+f+'.js','utf8'),s);vm.runInContext(fs.readFileSync('dist/game.js','utf8'),s);
 const run=c=>vm.runInContext('{'+c+'}',s);run('initialize()');
 const ticks=n=>run(`for(let k=0;k<${n};k++)step(1/60)`);
-const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
 
 // --- Ammo ---------------------------------------------------------------------------------------------------
 {const A=era.AMMO;

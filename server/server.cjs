@@ -144,7 +144,7 @@ const timer=setInterval(()=>{const now=performance.now();acc+=Math.min((now-prev
  if(frames>=3){frames=0;const live=[...rooms.values()].filter(r=>r.game&&r.members.size);
   // Pass 1: every ship's exterior (layout hash changes only when the ship is rebuilt), so pass 2 never
   // lists a ship to others before its hull is known.
-  for(const r of live){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();/* other ships' live view: 10 a second (every other snapshot) */r.liveCache=(r.livePass=!r.livePass)?r.game.zone.exteriorLive():null;}catch(e){recover(r,e);}}
+  for(const r of live){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();r.machinesCache=r.game.zone.exteriorMachines();/* other ships' live view: 10 a second (every other snapshot) */r.liveCache=(r.livePass=!r.livePass)?r.game.zone.exteriorLive():null;}catch(e){recover(r,e);}}
   for(const r of live){if(!r.game)continue;try{for(const ws of r.members){const st=r.game.snapshot(ws.uid);
     // Log: helm use, and zone changes (credited to whoever is at the helm).
     const pil=!!st?.self?.piloting;if(pil&&!ws.wasPiloting)logEvent(r,ws,'started using helm.','helm');ws.wasPiloting=pil;

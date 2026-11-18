@@ -12,7 +12,7 @@ const B=mk('Battleship'),run=B.game.run;step(10);
 // Grow to the limit with the ship's own resize rule (one more strip is refused).
 run('bounds={l:-40,r:39,t:-40,b:39};rebuildShell();rebuildMounts();');run('inventory.embiggener=2;resizeShip("right",true)');assert.equal(run('bounds.r-bounds.l'),80,'grown to 80 wide');
 run('resizeShip("right",true)');assert.equal(run('bounds.r-bounds.l'),80,'81 refused');
-run(`bounds={l:-40,r:40,t:-40,b:40};for(const t of [...terrain.values()])if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const b of [...blocks.values()])if(b.f)interior.destroyFixture(b.f);blocks.clear();helm={x:0,y:39};rebuildShell();
+run(`bounds={l:-40,r:40,t:-40,b:40};for(const t of [...terrain.values()]){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const b of [...blocks.values()])if(b.f)interior.destroyFixture(b.f);blocks.clear();helm={x:0,y:39};rebuildShell();
  mounts=[];for(let k=-38;k<=36;k+=3)for(const side of ['top','left','right'])mounts.push({type:'turret',side,at:k,rotation:0,ammo:16,ammoType:'ammo'});rebuildMounts();
  for(let x=-36;x<=36;x+=2){addTerrain('loader',x,-37,1);addTerrain('pusher_block',x,-35,0);}for(let y=-30;y<=30;y+=2){addTerrain('loader',-37,y,0);addTerrain('loader',37,y,2);addTerrain('pusher_block',-35,y,3);}
  for(let y=-36;y<=34;y+=2)for(let x=-37;x<=37;x++)if((x+y)%7===0&&!terrainAt({x,y}))addBlock(x,y,0);

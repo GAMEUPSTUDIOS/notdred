@@ -25,12 +25,12 @@ function client(name,devToken){return new Promise(res=>{const ws=new WebSocket(`
  // Build a comms station next to the captain, then talk to the zone through it.
  cap.act('dev',{op:'give',item:'comms',count:1});await until(()=>cap.snap.stacks.some(s=>s?.type==='comms'),3000,'given');
  const s=cap.snap,me=s.crew.find(c=>c.id===s.self.id).p,b=s.bounds,used=new Set();
- for(const k of s.blocks)used.add(k.x+','+k.y);for(const t of s.terrain){const [w,h]=era.MACHINE_SIZE[t.type]||[1,1];for(let dx=0;dx<w;dx++)for(let dy=0;dy<h;dy++)used.add((t.x+dx)+','+(t.y+dy));}
+ for(const k of s.blocks)used.add(k.x+','+k.y);for(const t of s.terrain){const [w,h]=era.MACHINE_SIZE[t.type]||[1,1];for(let dx=0;dx<w;dx++)for(let dy=0;dy<h;dy++)used.add((t.x+dx)+','+(t.y+dy));}for(const m of s.machines||[]){const [w,h]=era.MACHINE_SIZE[m.type];for(let x=Math.round(m.x-w/2+.5);x<=Math.round(m.x+w/2-.5);x++)for(let y=Math.round(m.y-h/2+.5);y<=Math.round(m.y+h/2-.5);y++)used.add(x+','+y);}
  for(const [dx,dy] of [[0,0],[1,0],[0,-1],[1,-1]])used.add((s.helm.x+dx)+','+(s.helm.y+dy));
- let cell=null,best=1e9;for(let x=b.l+1;x<b.r;x++){const y=b.b-2;if(used.has(x+','+y)||used.has(x+','+(y+1)))continue;const d=Math.hypot(x-me.x,y+.5-me.y);if(d<best){best=d;cell={x,y};}}
+ let cell=null,best=1e9;for(let x=b.l+1;x<b.r;x++){const y=b.b-2;if(used.has(x+','+y)||used.has(x+','+(y+1)))continue;if(Math.abs(x-me.x)<1.5)continue;/* not on top of the captain: it is a solid object now */const d=Math.hypot(x-me.x,y+.5-me.y);if(d<best){best=d;cell={x,y};}}
  assert.ok(cell&&best<era.COMMS_RANGE,'a free spot beside the captain');
  cap.act('select',{slot:s.stacks.findIndex(x=>x?.type==='comms')});await sleep(150);
- const world={x:s.position.x+cell.x,y:s.position.y+cell.y};cap.act('edit',{aim:world});await until(()=>cap.snap.terrain.some(t=>t.type==='comms'),4000,'comms station built');
+ const world={x:s.position.x+cell.x,y:s.position.y+cell.y+.5};/* centre of the 1×2 station, between its two tiles */cap.act('edit',{aim:world});await until(()=>(cap.snap.machines||[]).some(t=>t.type==='comms'),4000,'comms station built');
  cap.send({type:'comms',text:'hello zone'});await until(()=>other.chat.some(m=>m.comms&&m.text==='hello zone'&&m.ship==='Talker'),3000,'another ship hears comms');
  assert.ok(mate.chat.some(m=>m.comms&&m.text==='hello zone'),'own crew hear it too');
  ok=true;console.log('PASS: dev token printed at start-up and kept across restarts; chat stays aboard; comms needs a station and reaches every ship in the zone.');

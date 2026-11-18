@@ -78,7 +78,7 @@ run('activeFab.materials.flux=2;tickFabricators(.1)');assert.equal(run('activeFa
 run('clearQueue()');assert.equal(run('inventory.flux'),2,'cancel refunds flux');assert.ok(run('inventory.iron>=8'));
 run('activeFab.kind="machine";activeFab.materials={iron:64,flux:4,silica:4};craft("pusher_block");for(let n=0;n<400;n++)tickFabricators(1/60)');assert.ok(run('items.some(i=>i.type==="pusher_block")'),'stationary pusher crafted');
 // Stationary pusher drives loose cargo along its beam and stops at solid tiles.
-const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
 run(clear+'addTerrain("pusher_block",-2,2,0);const crate=spawnItem("iron",V(0,2),V(0,0),16);for(let n=0;n<20;n++)step(1/60)');assert.ok(run('crate.body.getLinearVelocity().x>3'),'pushes right at rotation 0');
 run(clear+'addTerrain("pusher_block",2,2,2);const crate2=spawnItem("iron",V(0,2),V(0,0),16);for(let n=0;n<20;n++)step(1/60)');assert.ok(run('crate2.body.getLinearVelocity().x<-3'),'rotation 2 pushes left');
 run(clear+'addTerrain("pusher_block",-2,2,0);addBlock(-1,2);const shielded=spawnItem("iron",V(0,2),V(0,0),16);for(let n=0;n<20;n++)step(1/60)');assert.ok(run('Math.abs(shielded.body.getLinearVelocity().x)<.5'),'beam stops at a block');
@@ -118,16 +118,16 @@ console.log('PASS: flux crystals, flux recipes (consume/cancel/refund), stationa
  // Legacy crafts every kind of fabricator; a placed fabricator item becomes that kind and wrenches back to it.
  assert.deepEqual([...F.legacy.recipes].sort(),Object.values(F).map(f=>f.item).sort());
  fab('legacy',{iron:64});run('craft("fab_munitions");for(let n=0;n<1300;n++)tickFabricators(1/60)');assert.ok(run('items.some(i=>i.type==="fab_munitions")'),'legacy crafts a munitions fabricator');
- run('slots=["wrench",null,null,null,null];stackCounts=[1,0,0,0,0];for(const t of [...terrain.values()])if(t.type==="fabricator"){terrain.delete(key(t.x,t.y));}giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));player.setTransform(V(2,1.8),0);commitBuild({x:2,y:0},"fab_munitions",0)');
- assert.equal(run('terrain.get(key(2,0))?.kind'),'munitions');run('selectSlot(0);player.setTransform(V(1,1.8),0);removeAt({x:2,y:0})');assert.ok(run('inventory.fab_munitions===1||items.some(i=>i.type==="fab_munitions")'),'wrench returns the munitions fabricator');
+ run('slots=["wrench",null,null,null,null];stackCounts=[1,0,0,0,0];for(const t of [...terrain.values()])if(t.type==="fabricator"){if(t.body)inside.destroyBody(t.body);terrain.delete(t.key||key(t.x,t.y));}giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));player.setTransform(V(2,1.8),0);commitBuild({x:2,y:0},"fab_munitions",0)');
+ assert.equal(run('terrainAt({x:2,y:0})?.kind'),'munitions');run('selectSlot(0);player.setTransform(V(1,1.8),0);removeAt({x:2,y:0})');assert.ok(run('inventory.fab_munitions===1||items.some(i=>i.type==="fab_munitions")'),'wrench returns the munitions fabricator');
  // Ammo crafts 4 rounds (ℵ29+); the kind survives a save round trip; old fabricators load as legacy.
  fab('munitions',{iron:8,explosives:8});run('craft("ammo");for(let n=0;n<200;n++)tickFabricators(1/60)');assert.equal(run('items.filter(i=>i.type==="ammo").reduce((n,i)=>n+i.count,0)'),4);
  fab('engineering',{iron:4});const sv=JSON.parse(JSON.stringify(run('state()')));run(`initialize(${JSON.stringify(sv)})`);assert.equal(run('[...terrain.values()].find(t=>t.type==="fabricator").kind'),'engineering');
- sv.schema=21;delete sv.terrain.find(t=>t.type==='fabricator').kind;run(`initialize(${JSON.stringify(sv)})`);assert.equal(run('[...terrain.values()].find(t=>t.type==="fabricator").kind'),'legacy');
+ sv.schema=21;{const m=sv.machines.find(t=>t.type==='fabricator');sv.machines=sv.machines.filter(x=>x!==m);sv.terrain.push({type:'fabricator',x:Math.round(m.x-.5),y:Math.round(m.y-1),materials:m.materials,queue:[],job:null,repeat:false});}run(`initialize(${JSON.stringify(sv)})`);assert.equal(run('[...terrain.values()].find(t=>t.type==="fabricator").kind'),'legacy');
  console.log('PASS: five fabricator types with their own recipes, legacy crafts all fabricators, kinds place/wrench/save correctly, ammo crafts 4.');}
 
 // --- Loaders and configurable pushers ----------------------------------------------------------------------------
-{const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+{const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
  const ticks=(n)=>run(`for(let k=0;k<${n};k++)step(1/60)`);
  const near=(x,y,type)=>run(`items.filter(i=>i.type==="${type}"&&Math.abs(i.body.getPosition().x-(${x}))<.8&&Math.abs(i.body.getPosition().y-(${y}))<.8).reduce((n,i)=>n+i.count,0)`);
  assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("loader"))')),{iron:8,flux:2});assert.ok(era.FABRICATORS.machine.recipes.includes('loader'));
@@ -136,7 +136,7 @@ console.log('PASS: flux crystals, flux recipes (consume/cancel/refund), stationa
  // Require output inventory: holds the stack rather than dropping it on the floor.
  run(clear+'addTerrain("loader",0,2,0);terrain.get(key(0,2)).requireOutput=true;spawnItem("iron",V(-1,2),V(0,0),16)');ticks(150);assert.equal(near(1,2,'iron'),0);assert.equal(run('terrain.get(key(0,2)).cargo[0].count'),16,'held, not dropped');
  // …and delivers as soon as an inventory is there: a fabricator (as material) and an expando box.
- run('addTerrain("fabricator",1,0);terrain.get(key(1,0)).materials={}');ticks(150);assert.equal(run('terrain.get(key(1,0)).materials.iron'),16,'into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo.length'),0);
+ run('addTerrain("fabricator",1,0).materials={}');ticks(150);assert.equal(run('terrainAt({x:1,y:1}).materials.iron'),16,'into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo.length'),0);
  run(clear+'addTerrain("loader",0,2,0);spawnItem("explosives",V(-1,2),V(0,0),9);const lb=spawnBox(V(1.9,1.3))');ticks(200);assert.equal(run('lb.materials.explosives'),9,'into an expando box');
  // Filters: a whitelist ignores other items.
  run(clear+'addTerrain("loader",0,2,0);const lt=terrain.get(key(0,2));lt.filterMode="whitelist";lt.filterItems=["explosives"];spawnItem("iron",V(-1,2),V(0,0),16)');ticks(150);assert.equal(near(-1,2,'iron'),16,'filtered item stays');
@@ -154,7 +154,7 @@ console.log('PASS: flux crystals, flux recipes (consume/cancel/refund), stationa
  console.log('PASS: loaders (floor, fabricator, expando box, filters, require-output hold, saves, wrench returns cargo); pushers pull/filter/persist and are solid to crew.');}
 
 // --- Safeguards ------------------------------------------------------------------------------------------------
-{const S=run('SAFETY');const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values())if(t.f)interior.destroyFixture(t.f);terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
+{const S=run('SAFETY');const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
  run(clear+'addBlock(1,1);const wedged=spawnItem("iron",V(1,1),V(0,0),16);wedged.body.setType("static")');run('for(let k=0;k<170;k++)tickSafeguards(1/60)');assert.equal(run('wedgedInSolid(wedged.body)'),false,'wedged item moved out of the block');assert.equal(run('wedged.count'),16);
  run(clear+'const launched=spawnItem("iron",V(0,1),V(500,0),16);tickSafeguards(1/60)');assert.ok(run('launched.body.getLinearVelocity().length()')<=S.maxCargoSpeed+1e-6,'launch speed capped');
  run(clear+'const broken=spawnItem("iron",V(0,1),V(0,0),16);broken.body.setTransform(V(NaN,NaN),0);tickSafeguards(1/60)');assert.ok(run('Number.isFinite(broken.body.getPosition().x)'),'NaN position repaired');

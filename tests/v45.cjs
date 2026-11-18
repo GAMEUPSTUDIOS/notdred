@@ -26,9 +26,10 @@ assert.ok(era.FABRICATORS.machine.recipes.includes('recycler')&&era.FABRICATORS.
 run('bounds={l:-9,r:9,t:-6,b:5};rebuildShell();rebuildMounts();');
 const spot=t=>run(`(()=>{for(let y=bounds.b-1;y>bounds.t;y--)for(let x=bounds.l+1;x<bounds.r;x++)if(fabFits(x,y,true,"${t}"))return {x,y};})()`);
 const rc=spot('recycler');assert.ok(rc,'room for a recycler');
-run(`giveItem("recycler",1);selectSlot(slots.indexOf("recycler"));player.setTransform(V(${rc.x+1},${rc.y+2}),0);`);
-assert.equal(run(`validity({x:${rc.x},y:${rc.y}},"recycler")`),'');run(`commitBuild({x:${rc.x},y:${rc.y}},"recycler",0)`);
-assert.equal(run(`terrainAt({x:${rc.x+2},y:${rc.y+3}})?.type`),'recycler','3×4 footprint');assert.equal(run(`terrainAt({x:${rc.x+3},y:${rc.y+3}})?.type`)??null,null);
+// Recyclers are physics objects placed by their centre: a free spot is accepted, a spot inside the hull wall is not.
+run(`player.setTransform(V(${rc.x-1},${rc.y+2}),0);`);assert.equal(run(`machineSpace("recycler",V(${rc.x+1},${rc.y+1.5}))`),true);assert.equal(run(`machineSpace("recycler",V(bounds.l,${rc.y+1.5}))`),false);
+run(`spawnMachine("recycler",V(${rc.x+1},${rc.y+1.5}))`);
+assert.equal(run(`terrainAt({x:${rc.x+2},y:${rc.y+3}})?.type`),'recycler','3×4 footprint');assert.ok(run(`!!terrainAt({x:${rc.x},y:${rc.y}}).body`),'a physics object');assert.equal(run(`terrainAt({x:${rc.x+3},y:${rc.y+3}})?.type`)??null,null);
 // Thrown in: ignored. Clicked in with the stack in hand: worked on for RECYCLE_SECONDS, then half of 16 standard ammo's
 // cost (4 per 1 iron + 1 explosive) drops out: 2 iron + 2 explosives. A handheld pusher → a stationary one (ℵ30).
 run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("ammo",V(${rc.x+1},${rc.y}),V(0,0),16);`);step(240);
@@ -43,8 +44,6 @@ run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;giveIte
 run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;`);const fab=run('(()=>{const f=[...terrain.values()].find(t=>t.type==="fabricator");return {x:f.x,y:f.y,iron:f.materials.iron||0};})()');
 run(`spawnItem("iron",V(${fab.x+.5},${fab.y+1}),V(0,0),8);`);step(60);assert.equal(run(`terrainAt({x:${fab.x},y:${fab.y}}).materials.iron||0`),fab.iron,'thrown iron not taken in');
 run(`activeFab=terrainAt({x:${fab.x},y:${fab.y}});giveItem("ladder",3);transferMaterial("ladder");`);assert.equal(run(`terrainAt({x:${fab.x},y:${fab.y}}).materials.ladder||0`),0,'a finished item is refused');
-// Recycler sitting on blocks keeps its support.
-assert.equal(run(`machineOnTop({x:${rc.x+1},y:${rc.y+4}})?.type??null`),'recycler');
 
 // ---- Spawn points: a guest joining appears at a guest spawn point; crew/captain points don't catch guests.
 run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;`);const sp=spot('spawn');assert.ok(sp);run(`addTerrain("spawn",${sp.x},${sp.y},0)`);
