@@ -48,7 +48,7 @@ const PUSHER_SPEED=10,PUSHER_ACCEL=60,BEAM_PASSES=['walkway','walkway_wedge','gl
 function pusherDirection(t){const a=(t.rotation||0)*Math.PI/2;return V(Math.round(Math.cos(a)),Math.round(Math.sin(a)));}
 // Push or pull (right-click), with the same item filter as hatches. The pusher block itself is solid; its beam is
 // cast from its centre, ignoring its own shape. Pulled cargo stops a tile short of the pusher instead of grinding into it.
-function pusherTarget(body){const item=items.find(i=>i.body===body);if(item)return {kind:'item',type:item.type};if(boxes.some(b=>b.body===body))return {kind:'box'};return {kind:'crew'};}
+function pusherTarget(body){const item=items.find(i=>i.body===body);if(item)return {kind:'item',type:item.type};if(boxes.some(b=>b.body===body))return {kind:'box'};for(const t of terrain.values())if(t.body===body)return {kind:'machine'};return {kind:'crew'};}
 function pusherAllows(t,body){if((t.filterMode||'all')==='off')return false;const target=pusherTarget(body);if(target.kind==='item')return hatchAllows(t,target.type);return (t.filterMode||'all')!=='whitelist';}
 // Does this interior fixture let a beam through? Walkways (category 4) and nets (16) are recognised by their
 // collision category; glass shares the solid category, so the tile just past the hit point is looked up.
@@ -81,6 +81,7 @@ function loaderInputCells(t,c){const {d}=loaderEnds(t),cells=[c];let q=c;for(let
 const LOADER_HOTBOX={near:.4,far:1.8,half:.8};
 function inLoaderHotbox(t,p){const d=pusherDirection(t),rx=p.x-t.x,ry=p.y-t.y,back=-(rx*d.x+ry*d.y),side=Math.abs(rx*d.y-ry*d.x);return back>LOADER_HOTBOX.near&&back<LOADER_HOTBOX.far&&side<LOADER_HOTBOX.half;}
 function loaderTake(t,c){
+ const src=terrainAt(c);if(src?.type==='recycler'&&src.output?.length){const st=src.output.find(x=>hatchAllows(t,x.type));if(st){src.output.splice(src.output.indexOf(st),1);return {type:st.type,count:st.count};}}
  const cells=loaderInputCells(t,c),near=(p,q)=>{const walk=LOADER_REACHES_THROUGH.includes(terrainAt(q)?.type);return Math.abs(p.x-q.x)<.6&&p.y-q.y<.6&&q.y-p.y<(walk?1.1:.6);};
  const pool=loaderItemGrid?nearbyItems(t,cells):items;
  const item=pool.find(i=>{const p=i.body.getPosition();return (inLoaderHotbox(t,p)||cells.some(q=>near(p,q)))&&i.intakeFrom!==key(t.x,t.y)&&hatchAllows(t,i.type)&&!cargoWakeLocks.get(i.body)?.size;});
@@ -90,9 +91,9 @@ function loaderTake(t,c){
 function loaderGive(t,c,stack,d){
  // A loader facing into a recycler feeds it one stack per cycle (while it isn't busy). Anything it can't recycle
  // stays in the loader, the same way a fabricator refuses finished items.
- const rec=[...terrain.values()].find(f=>f.type==='recycler'&&terrainCells(f).some(q=>q.x===c.x&&q.y===c.y));
+ const hit=terrainAt(c),rec=hit?.type==='recycler'?hit:null;
  if(rec)return startRecycle(rec,stack.type,stack.count)?stack.count:0;
- const fab=[...terrain.values()].find(f=>f.type==='fabricator'&&terrainCells(f).some(q=>q.x===c.x&&q.y===c.y));
+ const fab=hit?.type==='fabricator'?hit:null;
  if(fab){if(!fabIngredients(fab).has(stack.type)||!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
  const box=boxAt(V(c.x,c.y));if(box){const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
  const m=mountHit(c);
@@ -112,14 +113,20 @@ function fabIngredients(f){const set=new Set();for(const r of FABRICATORS[fabKin
 let loaderItemGrid=null;
 function nearbyItems(t,cells){const out=new Set(),add=(x,y)=>{for(let gx=Math.floor((x-2.5)/2);gx<=Math.floor((x+2.5)/2);gx++)for(let gy=Math.floor((y-2.5)/2);gy<=Math.floor((y+2.5)/2);gy++)for(const i of loaderItemGrid.get(gx+','+gy)||[])out.add(i);};add(t.x,t.y);for(const c of cells)add(c.x,c.y);return [...out].filter(i=>!i.taken);}
 function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=Math.floor(p.x/2)+','+Math.floor(p.y/2);let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
-function tickLoadersNow(dt){for(const t of terrain.values()){if(t.type!=='loader')continue;t.phase=Math.min(1,(t.phase||0)+dt/LOADER_CYCLE);t.cooldown=Math.max(0,(t.cooldown??0)-dt);if(t.filterMode==='off')continue;
- const {d,input,output}=loaderEnds(t);t.cargo??=[];
- // An empty loader grabs from its hotbox every tick, so thrown or falling items are caught as they pass; delivery
- // still happens once per cycle.
- if(!t.cargo.length){const got=loaderTake(t,input);if(got){t.cargo.push(got);t.phase=0;}}
- if(t.cooldown>0)continue;
- if(t.cargo.length){const stack=t.cargo[0],n=loaderGive(t,output,stack,d);if(n>0){stack.count-=n;if(stack.count<=0)t.cargo.shift();t.flash=clock+.25;}}
- t.cooldown=Math.max(t.cooldown,LOADER_CYCLE);}}
+// The loader's swing is its cooldown: the hand grabs a stack on the input side, carries it across (half a cycle),
+// delivers only when it arrives (waiting there if the target is full), then swings back empty (the other half) before
+// it can grab again — so what you see is exactly when it can act. phase: 0 = hand at the input, 1 = at the output.
+// A turret delivery adds the turret's own loading wait (LOADER_TURRET_CYCLE) before the next grab.
+function tickLoadersNow(dt){const half=LOADER_CYCLE/2;for(const t of terrain.values()){if(t.type!=='loader')continue;t.cooldown=Math.max(0,(t.cooldown??0)-dt);t.cargo??=[];t.phase??=0;
+ if(!t.swing)t.swing=t.cargo.length?'carry':(t.phase>0?'return':'idle');
+ if(t.swing==='return'){t.phase=Math.max(0,t.phase-dt/half);if(t.phase===0&&t.cooldown===0)t.swing='idle';else continue;}
+ if(t.filterMode==='off'&&t.swing==='idle')continue;
+ const {d,input,output}=loaderEnds(t);
+ // Idle: the empty hand grabs from its hotbox every tick, so thrown or falling items are caught as they pass.
+ if(t.swing==='idle'){const got=loaderTake(t,input);if(!got)continue;t.cargo.push(got);t.swing='carry';}
+ if(t.swing==='carry'){if(t.phase<1){t.phase=Math.min(1,t.phase+dt/half);if(t.phase<1)continue;}
+  const stack=t.cargo[0];if(!stack){t.swing='return';continue;}const n=loaderGive(t,output,stack,d);if(n>0){stack.count-=n;if(stack.count<=0)t.cargo.shift();t.flash=clock+.25;}
+  if(!t.cargo.length)t.swing='return';}}}
 
 // ---- Recyclers -------------------------------------------------------------------------------------------------------
 // Loaded by clicking it with a stack in hand or by a loader facing into it (never by throwing things in). It works on
@@ -129,8 +136,13 @@ function tickLoadersNow(dt){for(const t of terrain.values()){if(t.type!=='loader
 function recycleYield(type,count){if(RECYCLE_SWAP[type])return {[RECYCLE_SWAP[type]]:count};if(STARTER_ITEMS.includes(type)||type==='fab_starter')return null;if(FREE_RECIPES.includes(type))return {};const need=recipeNeeds(type);if(!need)return null;const per=RECIPE_YIELD[type]||1,out={};for(const [m,n] of Object.entries(need))out[m]=n*count/per*RECYCLE_RETURN;return out;}
 function startRecycle(f,type,count){if(f.job||!recycleYield(type,count))return false;f.job={type,count,left:RECYCLE_SECONDS};f.busy=clock+RECYCLE_SECONDS;f.lastOut='';actionEffect(f.x+1,f.y+1,'red',count+' x '+NAMES[type]);return true;}
 function finishRecycle(f){const {type,count}=f.job;f.job=null;const y=recycleYield(type,count)||{};f.credit=f.credit||{};const out=[];for(const [m,n] of Object.entries(y)){f.credit[m]=(f.credit[m]||0)+n;const whole=Math.floor(f.credit[m]+1e-9);if(whole>0){f.credit[m]-=whole;out.push([m,whole]);}}
- const [w,h]=MACHINE_SIZE.recycler;let n=0;for(const [m,k] of out){let left=k;while(left>0){const c=Math.min(stackLimit(m),left);spawnItem(m,V(f.x+w-1.3+(n%2)*.3,f.y+h-1.5),V(1.2,-.6),c);left-=c;n++;}}
+ // A loader facing out of this recycler takes the resources straight from it; otherwise they are dropped (not
+ // thrown) on the floor beside it, on whichever side is open.
+ const stacks=[];for(const [m,k] of out){let left=k;while(left>0){const c=Math.min(stackLimit(m),left);stacks.push({type:m,count:c});left-=c;}}
+ const unloaded=[...terrain.values()].some(l=>l.type==='loader'&&terrainAt(loaderEnds(l).input)===f);
+ if(unloaded){f.output=(f.output||[]).concat(stacks);while(f.output.length>8)dropRecycled(f,f.output.shift());}else for(const st of stacks)dropRecycled(f,st);
  f.lastOut=out.length?out.map(([m,k])=>k+' '+NAMES[m]).join(', '):'(nothing left)';f.busy=clock+1.5;}
+function dropRecycled(f,st){const [w,h]=MACHINE_SIZE.recycler,y=f.y+h-1,open=x=>interiorCell({x:Math.round(x),y:Math.round(y)})&&!blocks.has(key(Math.round(x),Math.round(y)))&&!(terrainAt({x:Math.round(x),y:Math.round(y)})&&solidCell(Math.round(x),Math.round(y)));const right=f.x+w-.5+.4,left=f.x-.5-.4;spawnItem(st.type,V(open(right)||!open(left)?right:left,y),V(0,0),st.count);}
 function tickRecyclers(dt){for(const f of terrain.values()){if(f.type!=='recycler'||!f.job)continue;f.job.left-=dt;f.busy=clock+Math.max(f.job.left,0)+.05;if(f.job.left<=0)finishRecycle(f);}}
 // Clicking a recycler with an item in hand loads the whole stack.
 function recycleCarried(f){if(P.Vec2.distance(localPlayer(),V(f.x+1,f.y+1.5))>4)return toast('Move closer to the recycler.');const t=slots[selected],n=stackCounts[selected];if(!t||!n)return toast('Click the recycler with the stack you want to recycle in your hand.');if(f.job)return toast('The recycler is still working.');if(!recycleYield(t,n))return toast(NAMES[t]+' can\'t be recycled.');startRecycle(f,t,n);stackCounts[selected]=0;slots[selected]=null;selectSlot(selected);save(true);}

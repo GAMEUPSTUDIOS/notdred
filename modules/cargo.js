@@ -1,5 +1,5 @@
 'use strict';
-function spawnItem(type,p,velocity=V(0,0),count=1){const body=inside.createDynamicBody({position:V(p.x,p.y),bullet:true,angularDamping:3});body.createFixture(P.Box(.32,.32),{density:3,friction:.8,restitution:.08,filterCategoryBits:8,filterMaskBits:1|2|8|16|256});body.setLinearVelocity(velocity);const item={type,body,count:Math.min(stackLimit(type),count)};items.push(item);return item}
+function spawnItem(type,p,velocity=V(0,0),count=1){const body=inside.createDynamicBody({position:V(p.x,p.y),bullet:true,angularDamping:3});body.createFixture(P.Box(.32,.32),{density:3,friction:.8,restitution:.08,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});body.setLinearVelocity(velocity);const item={type,body,count:Math.min(stackLimit(type),count)};items.push(item);return item}
 
 function stackLimit(type){return ['wrench','fabricator','thruster','turret','turret_burst','turret_auto','turret_controller','starter_rc','starter','storage','shredder','pusher','repair','pusher_block','fab_starter','fab_machine','fab_engineering','fab_munitions','loader','recycler','anchor','comms','spawn'].includes(type)?1:16}
 
@@ -25,9 +25,9 @@ function touching(a,b){for(let e=a.getContactList();e;e=e.next)if(e.other===b&&e
 
 function boxSpace(p,size,ignore=null){const h=size/2;if(p.x-h<bounds.l+.5||p.x+h>bounds.r-.5||p.y-h<bounds.t+.5||p.y+h>bounds.b-.5)return false;if(player&&Math.abs(localPlayer().x-p.x)<h+.24&&Math.abs(localPlayer().y-p.y)<h+.63)return false;return ![...blocks.values(),...[...terrain.values()].filter(t=>['wedge','glass','net'].includes(t.type))].some(t=>Math.abs(t.x-p.x)<h+.49&&Math.abs(t.y-p.y)<h+.49)&&!boxes.some(b=>b!==ignore&&Math.abs(b.body.getPosition().x-p.x)<(b.size+size)/2&&Math.abs(b.body.getPosition().y-p.y)<(b.size+size)/2)}
 
-function spawnBox(p,materials={}){const count=Object.values(materials).reduce((a,b)=>a+b,0),size=2+Math.floor(count/64)*.25;const body=inside.createDynamicBody({position:p,angularDamping:5,linearDamping:.1,bullet:true});const box={body,size,materials:{...materials}};box.fixture=body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256});boxes.push(box);return box}
+function spawnBox(p,materials={}){const count=Object.values(materials).reduce((a,b)=>a+b,0),size=2+Math.floor(count/64)*.25;const body=inside.createDynamicBody({position:p,angularDamping:5,linearDamping:.1,bullet:true});const box={body,size,materials:{...materials}};box.fixture=body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});boxes.push(box);return box}
 
-function resizeBox(box){const total=Object.values(box.materials).reduce((a,b)=>a+b,0),size=2+Math.floor(total/64)*.25;if(size>box.size&&!boxSpace(box.body.getPosition(),size,box))return false;box.body.destroyFixture(box.fixture);box.size=size;box.fixture=box.body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256});box.body.setAwake(true);return true}
+function resizeBox(box){const total=Object.values(box.materials).reduce((a,b)=>a+b,0),size=2+Math.floor(total/64)*.25;if(size>box.size&&!boxSpace(box.body.getPosition(),size,box))return false;box.body.destroyFixture(box.fixture);box.size=size;box.fixture=box.body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});box.body.setAwake(true);return true}
 
 function boxAt(p){return boxes.find(b=>{const q=b.body.getLocalPoint(p);return Math.abs(q.x)<b.size/2&&Math.abs(q.y)<b.size/2})}
 
@@ -35,7 +35,7 @@ function useBox(p){const b=boxAt(p);if(!b)return false;if(piloting||P.Vec2.dista
 
 function wakeCargo(body){if(body?.getType()==='dynamic')body.setAwake(true);}
 
-function wakeCargoNear(p,radius){for(const i of [...items,...boxes])if(P.Vec2.distance(i.body.getPosition(),p)<radius+(i.size||0)/2)wakeCargo(i.body);}
+function wakeCargoNear(p,radius){for(const t of terrain.values())if(t.body&&P.Vec2.distance(t.body.getPosition(),p)<radius+2)wakeCargo(t.body);for(const i of [...items,...boxes])if(P.Vec2.distance(i.body.getPosition(),p)<radius+(i.size||0)/2)wakeCargo(i.body);}
 
 function holdCargoAwake(body,owner){let locks=cargoWakeLocks.get(body);if(!locks){locks=new Set();cargoWakeLocks.set(body,locks);}const token={owner};locks.add(token);body.setSleepingAllowed(false);wakeCargo(body);let released=false;return ()=>{if(released)return;released=true;locks.delete(token);if(!locks.size){body.setSleepingAllowed(true);wakeCargo(body);}};}
 

@@ -221,8 +221,11 @@ const FREE_RECIPES = ['trash'];
 // Footprints in ship tiles [width, height], top-left cell first. Recycler 3×4, anchor 3×3, comms station 1×2 and
 // spawn point 1×1 use the game's own sprites (recycler.png, anchor.png, comms_station.png, spawn.png, 40 px a tile).
 const MACHINE_SIZE = {fabricator: [2, 3], storage: [2, 2], turret_controller: [1, 3], door: [1, 2], recycler: [3, 4], anchor: [3, 3], comms: [1, 2], spawn: [1, 1]};
-// Standing machines placed like a fabricator (clear area, supported along the bottom), walked through, not solid.
-const STANDING_MACHINES = ['recycler', 'anchor', 'comms', 'spawn'];
+// Standing machines placed on the grid (clear area, supported along the bottom), walked through, not solid.
+const STANDING_MACHINES = ['anchor', 'spawn'];
+// Machines that are physics objects, like expando boxes: placed anywhere (not snapped to the grid), they fall, slide,
+// collide and can be pushed. Loaders still feed whichever one covers the tile they face.
+const PHYSICS_MACHINES = ['fabricator', 'recycler', 'comms'];
 // Recycler (wiki: "converts items back to the materials it was made out of with a small loss"; 16 metal, 20 s).
 // Returns half of what the item cost, rounded down — this build's rule (drednot's ℵ25 recycler gave back 80%).
 // ℵ30: recycling a handheld pusher gives a stationary pusher. Starter items, trash and raw resources don't recycle.
@@ -298,4 +301,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};

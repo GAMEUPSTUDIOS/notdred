@@ -36,6 +36,7 @@ function tickSafeguards(dt){
  const sp=ship.getPosition();if(!finiteVec(sp)||!finiteVec(ship.getLinearVelocity())){ship.setTransform(lastGoodShip||V(0,0),0);ship.setLinearVelocity(V(0,0));}else lastGoodShip=sp.clone();
  for(const i of items){if(!finiteVec(i.body.getPosition())||!finiteVec(i.body.getLinearVelocity()))rescueBody(i.body);else clampSpeed(i.body,SAFETY.maxCargoSpeed);}
  for(const b of boxes){if(!finiteVec(b.body.getPosition())||!finiteVec(b.body.getLinearVelocity()))rescueBody(b.body);else clampSpeed(b.body,SAFETY.maxCargoSpeed);}
+ for(const t of terrain.values())if(t.body){if(!finiteVec(t.body.getPosition())||!finiteVec(t.body.getLinearVelocity()))rescueBody(t.body);else clampSpeed(t.body,SAFETY.maxCargoSpeed);}
  if(player&&!piloting){if(!finiteVec(player.getPosition())||!finiteVec(player.getLinearVelocity()))recover();else clampSpeed(player,SAFETY.maxCrewSpeed);}
  safetyTimer+=dt;if(safetyTimer<SAFETY.checkInterval)return;const step=safetyTimer;safetyTimer=0;
  // Items wedged inside solid tiles (squeezed by pushers, built over, etc.) are moved to open space.

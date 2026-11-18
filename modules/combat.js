@@ -163,7 +163,7 @@ function breakShipTile(tile,kind){
  const emit=(type,count)=>{if(count>0){const item=addWorldLoot(type,drop,count,V(v.x+out.x*3,v.y+out.y*3));item.grace=2;}};
  if(kind==='hull'){brokenHull.add(key(tile.x,tile.y));delete hullHP[key(tile.x,tile.y)];emit('block',1);rebuildShell();}
  else if(kind==='mount'){emit(mountItem(tile),1);emit(tile.ammoType||'ammo',tile.ammo||0);emit('fuel',tile.fuelItems||0);emit('explosives',tile.explosiveItems||0);ship.destroyFixture(tile.f);mounts.splice(mounts.indexOf(tile),1);}
- else {if(tile.f)interior.destroyFixture(tile.f);blocks.delete(key(tile.x,tile.y));terrain.delete(key(tile.x,tile.y));emit(tile.type==='fabricator'?FABRICATORS[fabKind(tile)].item:tile.type||'block',1);for(const [type,count]of Object.entries(tile.materials||{}))emit(type,count);for(const item of tile.cargo||[])emit(item.type,item.count);if(tile.job)for(const [type,count] of Object.entries(recipeNeeds(tile.job.type)||{}))emit(type,count);}
+ else {if(tile.f)interior.destroyFixture(tile.f);if(tile.body)inside.destroyBody(tile.body);blocks.delete(key(tile.x,tile.y));terrain.delete(tile.key||key(tile.x,tile.y));emit(tile.type==='fabricator'?FABRICATORS[fabKind(tile)].item:tile.type||'block',1);for(const [type,count]of Object.entries(tile.materials||{}))emit(type,count);for(const item of tile.cargo||[])emit(item.type,item.count);if(tile.job)for(const [type,count] of Object.entries(recipeNeeds(tile.job.type)||{}))emit(type,count);}
  wakeCargoNear(local,4);actionEffect(local.x,local.y,'red','Broken');
 }
 // A hit on this ship. With shields up the shot stops at the hull and drains shields. Once critical, shots phase

@@ -32,6 +32,7 @@ function receiveSnapshot(s,tick){if(tick<netTick)return;netTick=tick;/* tiles ar
  for(const b of s.blocks){const t=blocks.get(key(b.x,b.y));if(t)t.hp=b.hp;}
  for(const value of s.terrain){const t=terrain.get(key(value.x,value.y));if(t)Object.assign(t,value);}s.mounts.forEach((m,i)=>{if(mounts[i])Object.assign(mounts[i],m);});
  while(items.length>s.items.length)inside.destroyBody(items.pop().body);s.items.forEach((i,n)=>{if(!items[n])spawnItem(i.type,V(i.x,i.y),V(0,0),i.count);const t=items[n];t.type=i.type;t.count=i.count;t.body.setTransform(V(i.x,i.y),i.angle||0);t.body.setLinearVelocity(V(i.v?.x||0,i.v?.y||0));});
+ /* physics machines: by id */{const seen=new Set();for(const m of s.machines||[]){seen.add(m.id);let t=terrain.get(m.id);const {type,id,x,y,vx,vy,...f}=m;if(!t||!t.body)t=spawnMachine(type,V(x,y),{},id);Object.assign(t,f);t.body.setTransform(V(x,y),0);t.body.setLinearVelocity(V(vx||0,vy||0));}for(const t of [...terrain.values()])if(t.body&&!seen.has(t.id)){inside.destroyBody(t.body);terrain.delete(t.key);}syncMachines();}
  while(boxes.length>s.boxes.length)inside.destroyBody(boxes.pop().body);s.boxes.forEach((b,n)=>{if(!boxes[n])spawnBox(V(b.x,b.y),b.materials);boxes[n].materials=b.materials;boxes[n].body.setTransform(V(b.x,b.y),b.angle||0);});
  if(s.minedReset){const mined=new Set(netMined);for(const id of [...rocks.keys()])if(mined.has(id))removeRock(id,false);}else for(const id of s.minedAdd||[])removeRock(id,false);rebuildDirtyRockChunks();for(const [id,hp,max] of s.rockHp||[]){const r=rocks.get(id);if(r){r.hp=hp;r.maxhp=max;}}
  for(const b of s.zoneData[s.zone]?.boulders||[]){const o=boulders.find(x=>x.id===b.id);if(b.gone){if(o){world.destroyBody(o.body);boulders.splice(boulders.indexOf(o),1);}continue;}if(o)o.body.setTransform(V(b.x,b.y),b.a||0);else if(typeof addBoulder==='function')addBoulder(b.id,V(b.x,b.y),b.a||0,b.r||0);}
@@ -113,7 +114,8 @@ function drawOtherShips(){if(!netActive||!netOthers.size)return;const saved={bou
   doorCrewOverride=o.crew.map(c=>({p:{x:c.x,y:c.y},rank:c.r||'guest'}));
   ctx.save();ctx.translate(snapX(x),snapY(y));
   drawShipFloor(b);for(let xx=b.l;xx<=b.r;xx++){if(!brokenHull.has(key(xx,b.t)))boundary(xx,b.t);if(!brokenHull.has(key(xx,b.b)))boundary(xx,b.b);}for(let yy=b.t+1;yy<b.b;yy++){if(!brokenHull.has(key(b.l,yy)))boundary(b.l,yy);if(!brokenHull.has(key(b.r,yy)))boundary(b.r,yy);}
-  for(const [bx,by,r] of L.blocks)block(bx,by,r);for(const [type,tx,ty,r] of L.terrain)drawTerrain(type,tx,ty,r);drawHelm();for(const m of ms)drawMount(m);
+  for(const [bx,by,r] of L.blocks)block(bx,by,r);for(const [type,tx,ty,r] of L.terrain)drawTerrain(type,tx,ty,r,terrain.get(key(tx,ty)));
+  for(const [type,mx,my,f] of o.machines||[]){const rec={type,x:mx,y:my,rotation:0,...f};for(const k of ['busy','sent'])if(f[k])rec[k]=clock+f[k];drawTerrain(type,mx,my,0,rec);}drawHelm();for(const m of ms)drawMount(m);
   for(const [bx,by,ba,size,materials] of live?.b||[]){const p={x:bx,y:by};drawBox({size,materials,body:{getPosition:()=>p,getAngle:()=>ba}});}
   for(const [type,count,ix,iy,ia] of live?.i||[]){const p={x:ix,y:iy};ctx.save();ctx.translate(ix,iy);ctx.rotate(ia);drawSprite(type,-.36,-.36,.72,.72);ctx.restore();if(count>1)text(count,p.x,p.y-.45,.24,'#fff');}
   for(const c of o.crew){const p={x:c.x,y:c.y},v={x:c.vx||0,y:0};player={getPosition:()=>p,getLinearVelocity:()=>v};facing=c.f||1;piloting=c.p;climbing=c.c;tool=c.t;slots=[c.h];selected=0;localName=c.n;if(!c.p)drawPlayer();}
