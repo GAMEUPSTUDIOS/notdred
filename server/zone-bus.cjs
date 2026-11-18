@@ -1,5 +1,5 @@
 'use strict';
-const LIVE_RANGE=Number(process.env.LIVE_RANGE||160);
+const LIVE_RANGE=Number(process.env.LIVE_RANGE||240);
 // Shared zones. Each zone has ONE shared world (server/zone-sim.cjs): its rock, boulders, bots, loot, projectiles
 // and the hull of every ship in it. Each ship's room keeps its interior and crew, sends thrust and shots to its zone,
 // and takes back its position, damage and loot. The bus also keeps, per combat zone:

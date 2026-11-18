@@ -42,7 +42,7 @@ function receiveSnapshot(s,tick){if(tick<netTick)return;netTick=tick;/* tiles ar
  netRank=s.self.rank||netRank;const crewKey=JSON.stringify(s.crew.map(c=>[c.id,c.name,c.rank]))+netCaptain;if(crewKey!==netCrewKey){netCrewKey=crewKey;el('netbadge').innerHTML='';const head=document.createElement('div');head.textContent=`Online · ${s.crew.length}/8 crew · you are ${netRank}`;el('netbadge').appendChild(head);for(const c of s.crew){const row=document.createElement('div');row.className='crewrow';const tag=document.createElement('span');tag.className='rank rank-'+(c.rank||'guest');tag.textContent=(c.rank||'guest').toUpperCase();row.append(tag,' '+(c.id===netID?'▸ ':'')+c.name);
   // Captains set each member's rank (captain, crew or guest) or kick them.
   if(netCaptain&&c.id!==netID){const sel=document.createElement('select');sel.innerHTML='<option value="captain">captain</option><option value="crew">crew</option><option value="guest">guest</option>';sel.value=['captain','crew'].includes(c.rank)?c.rank:'guest';sel.onchange=()=>networkSend({type:'rank',crew:c.id,rank:sel.value});const k=document.createElement('button');k.textContent='kick';k.onclick=()=>networkSend({type:'kick',crew:c.id});row.append(' ',sel,' ',k);}el('netbadge').appendChild(row);}}
- const seenShips=new Set();for(const o of s.others||[]){seenShips.add(o.id);const rec=netOthers.get(o.id)||{};const now=performance.now();Object.assign(rec,o,{layout:o.layout||rec.layout,live:o.live||(now-(rec.liveAt||0)<350?rec.live:null),liveAt:o.live?now:rec.liveAt,at:now});netOthers.set(o.id,rec);}for(const k of [...netOthers.keys()])if(!seenShips.has(k))netOthers.delete(k);
+ const seenShips=new Set();for(const o of s.others||[]){seenShips.add(o.id);const rec=netOthers.get(o.id)||{};const now=performance.now();Object.assign(rec,o,{layout:o.layout||rec.layout,live:o.live||(now-(rec.liveAt||0)<350?rec.live:null),liveAt:o.live?now:rec.liveAt,at:now});if(o.live)mergeLiveItems(rec,o.live,now);else if(!rec.live)rec.items=null;netOthers.set(o.id,rec);}for(const k of [...netOthers.keys()])if(!seenShips.has(k))netOthers.delete(k);
 }
 let netFrameAt=0;
 function networkFrame(){if(!netState)return;const now=performance.now(),dt=Math.min((now-netFrameAt)/1000||1/60,.1);netFrameAt=now;clock+=dt;const alpha=1-Math.exp(-dt*22),self=netState.crew.find(c=>c.id===netID);const age=netAge(),lead=Math.min(age+netRTT/2+1/60,.4);
@@ -104,21 +104,29 @@ el('reset').remove();
 // ships nearby, their live state with every snapshot — turret aim and recoil, thruster flames, ammo, doors opening for
 // their crew, fabricators working, loaders, pushers, recyclers, loose items and expando boxes, crew walking.
 let doorCrewOverride=null;
-function drawOtherShips(){if(!netActive||!netOthers.size)return;const saved={bounds,helm,terrain,brokenHull,piloting,player,facing,climbing,tool,slots,selected,localName,mounts};
+// Loose items aboard another ship arrive as a full list once a second and, in between, only the ones that moved,
+// changed or appeared (plus the ids that went away); they're kept here by id. Each is drawn moved along its velocity
+// since its last update, so items, boxes, crew and turrets glide between the 20-a-second snapshots instead of stepping.
+function mergeLiveItems(rec,live,now){if(live.full||!rec.items)rec.items=new Map();for(const id of live.gone||[])rec.items.delete(id);
+ for(const [id,type,count,x,y,a,vx,vy] of live.i||[])rec.items.set(id,{type,count,x,y,a,vx,vy,at:now});}
+const glide=(v,vel,at,now)=>v+(vel||0)*Math.min((now-at)/1000,.15);
+function smoothAim(o,i,aim){if(aim==null)return aim;o.aims=o.aims||[];const cur=o.aims[i];if(cur==null||!Number.isFinite(cur)){o.aims[i]=aim;return aim;}let d=aim-cur;d=Math.atan2(Math.sin(d),Math.cos(d));o.aims[i]=cur+d*Math.min(1,frameDt*18);return o.aims[i];}
+let frameDt=1/60,lastOthersDraw=0;
+function drawOtherShips(){if(!netActive||!netOthers.size)return;{const n=performance.now();frameDt=lastOthersDraw?Math.min(.1,(n-lastOthersDraw)/1000):1/60;lastOthersDraw=n;}const nowMs=performance.now();const saved={bounds,helm,terrain,brokenHull,piloting,player,facing,climbing,tool,slots,selected,localName,mounts};
  try{for(const o of netOthers.values()){const L=o.layout;if(!L)continue;const t=Math.min((performance.now()-o.at)/1000,.25),x=o.x+o.vx*t,y=o.y+o.vy*t,live=o.live;
   bounds=L.bounds;helm=L.helm;brokenHull=new Set(L.brokenHull);piloting=o.crew.some(c=>c.p);const b=bounds;
   // Live machine state goes into a terrain map so drawTerrain sees it exactly as it does for your own ship.
   /* kept per ship (until its layout changes) so door slides and other smoothing carry on between frames */if(o.terrKey!==o.layoutKey||!o.terr){o.terrKey=o.layoutKey;o.terr=new TerrainMap();for(const [type,tx,ty,r,extra] of L.terrain)o.terr.set(key(tx,ty),{type,x:tx,y:ty,rotation:r,...(extra||{})});}terrain=o.terr;
   const since=(performance.now()-(o.liveAt||o.at))/1000;for(const [tx,ty,f] of live?.t||[]){const rec=terrain.get(key(tx,ty));if(!rec)continue;Object.assign(rec,f);for(const k of ['busy','sent','flash','chewing'])if(f[k])rec[k]=clock+f[k]-since;}
-  const ms=L.mounts.map((m,i)=>{const v=live?.m?.[i];if(!v)return m;const [aim,recoil,active,ammo,dir]=v;return {...m,aim,recoilUntil:clock+recoil-since,active:!!active,ammo,...(dir?{thrustDirection:V(dir[0],dir[1])}:{})};});mounts=ms;
+  const ms=L.mounts.map((m,i)=>{const v=live?.m?.[i];if(!v)return m;const [aim,recoil,active,ammo,dir]=v;return {...m,aim:smoothAim(o,i,aim),recoilUntil:clock+recoil-since,active:!!active,ammo,...(dir?{thrustDirection:V(dir[0],dir[1])}:{})};});mounts=ms;
   doorCrewOverride=o.crew.map(c=>({p:{x:c.x,y:c.y},rank:c.r||'guest'}));
   ctx.save();ctx.translate(snapX(x),snapY(y));
   drawShipFloor(b);for(let xx=b.l;xx<=b.r;xx++){if(!brokenHull.has(key(xx,b.t)))boundary(xx,b.t);if(!brokenHull.has(key(xx,b.b)))boundary(xx,b.b);}for(let yy=b.t+1;yy<b.b;yy++){if(!brokenHull.has(key(b.l,yy)))boundary(b.l,yy);if(!brokenHull.has(key(b.r,yy)))boundary(b.r,yy);}
   for(const [bx,by,r] of L.blocks)block(bx,by,r);for(const [type,tx,ty,r] of L.terrain)drawTerrain(type,tx,ty,r,terrain.get(key(tx,ty)));
   for(const [type,mx,my,f] of o.machines||[]){const rec={type,x:mx,y:my,rotation:0,...f};for(const k of ['busy','sent'])if(f[k])rec[k]=clock+f[k];drawTerrain(type,mx,my,0,rec);}drawHelm();for(const m of ms)drawMount(m);
-  for(const [bx,by,ba,size,materials] of live?.b||[]){const p={x:bx,y:by};drawBox({size,materials,body:{getPosition:()=>p,getAngle:()=>ba}});}
-  for(const [type,count,ix,iy,ia] of live?.i||[]){const p={x:ix,y:iy};ctx.save();ctx.translate(ix,iy);ctx.rotate(ia);drawSprite(type,-.36,-.36,.72,.72);ctx.restore();if(count>1)text(count,p.x,p.y-.45,.24,'#fff');}
-  for(const c of o.crew){const p={x:c.x,y:c.y},v={x:c.vx||0,y:0};player={getPosition:()=>p,getLinearVelocity:()=>v};facing=c.f||1;piloting=c.p;climbing=c.c;tool=c.t;slots=[c.h];selected=0;localName=c.n;localRank=c.r||'guest';if(!c.p)drawPlayer();}localRank=null;
+  for(const [bx0,by0,ba,size,materials,bvx,bvy] of live?.b||[]){const p={x:glide(bx0,bvx,o.liveAt,nowMs),y:glide(by0,bvy,o.liveAt,nowMs)};drawBox({size,materials,body:{getPosition:()=>p,getAngle:()=>ba}});}
+  for(const it of o.items?.values()||[]){const {type,count,a:ia}=it,ix=glide(it.x,it.vx,it.at,nowMs),iy=glide(it.y,it.vy,it.at,nowMs),p={x:ix,y:iy};ctx.save();ctx.translate(ix,iy);ctx.rotate(ia);drawSprite(type,-.36,-.36,.72,.72);ctx.restore();if(count>1)text(count,p.x,p.y-.45,.24,'#fff');}
+  for(const c of o.crew){const p={x:glide(c.x,c.vx,o.at,nowMs),y:glide(c.y,c.vy,o.at,nowMs)},v={x:c.vx||0,y:0};player={getPosition:()=>p,getLinearVelocity:()=>v};facing=c.f||1;piloting=c.p;climbing=c.c;tool=c.t;slots=[c.h];selected=0;localName=c.n;localRank=c.r||'guest';if(!c.p)drawPlayer();}localRank=null;
   flushLateLabels();drawHealthBar((b.l+b.r)/2,b.t-1.35,b.r-b.l,o.hp/(o.maxHp||SHIELDS.base),o.name+' · '+(o.hp>0?'Shields '+o.hp+' / '+(o.maxHp||SHIELDS.base):'CRITICAL'));if(o.booster)drawBoosterBar((b.l+b.r)/2,b.t-.88,b.r-b.l,Math.max(0,o.booster[0]-(performance.now()-o.at)/1000),o.booster[1]);ctx.restore();}}
  finally{doorCrewOverride=null;({bounds,helm,terrain,brokenHull,piloting,player,facing,climbing,tool,slots,selected,localName,mounts}=saved);}}
 function drawOtherShipMarkers(cx,cy,s){if(!netActive)return;ctx.save();ctx.font='bold 9px Arial';for(const o of netOthers.values()){const px=cx+o.x*s,py=cy+o.y*s;ctx.fillStyle='#ffb347';ctx.fillRect(px-2,py-2,4,4);ctx.fillText(o.name.slice(0,12),px+4,py-3);}ctx.restore();}

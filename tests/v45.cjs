@@ -82,7 +82,12 @@ for(const [a,b] of [[A,E],[A,F],[E,F],[D,E],[D,F],[Z,E],[Z,F]])assert.ok(!ov(a,b
 
 // ---- Other ships' live state.
 E.run('spawnItem("ammo",V(0,1),V(0,0),4);mounts[0].aim=1.2;mounts[0].recoilUntil=clock+.2;');const live=E.game.zone.exteriorLive();
-assert.ok(live.i.some(i=>i[0]==='ammo'&&i[1]===4)&&live.m[0][0]===1.2&&live.m[0][1]>0,'items, turret aim and recoil');
+assert.ok(live.i.some(i=>i[1]==='ammo'&&i[2]===4&&i.length===8)&&live.m[0][0]===1.2&&live.m[0][1]>0,'items, turret aim and recoil');
+// Between full lists only moving/changed/new items are sent, with the ids that went away; resting items cost nothing.
+for(let k=0;k<240;k++)E.game.tick(1/60);E.run('for(const i of items)i.body.setAwake(false);');const quiet=E.game.zone.exteriorLive(false);assert.equal(quiet.i.length,0,'resting items not resent');assert.equal(quiet.full,0);
+E.run('items[0].body.setAwake(true);items[0].body.setLinearVelocity(V(3,0));');assert.equal(E.game.zone.exteriorLive(false).i.length,1,'a moving item is sent (with its velocity)');
+const goneId=E.run('(()=>{const i=items[items.length-1],id=i.nid;inside.destroyBody(i.body);items.pop();return id;})()');{const g=E.game.zone.exteriorLive(false).gone;assert.ok(g.length===1&&g[0]==goneId,'removed items are listed '+JSON.stringify([g,goneId]));}
+assert.equal(E.game.zone.exteriorLive(true).i.length,E.run('items.length'),'full list once a second');
 E.game.zone.exterior();for(const r of rooms){r.layoutCache={key:'k',layout:r.game.zone.exteriorLayout()};r.liveCache=r.game.zone.exteriorLive();}
 assert.ok(bus.others(F,new Map()).find(o=>o.id==='E')?.live,'nearby ship gets the live state');
 
