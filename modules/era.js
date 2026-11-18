@@ -225,8 +225,8 @@ const FREE_RECIPES = ['trash'];
 const MACHINE_SIZE = {fabricator: [2, 3], storage: [2, 2], turret_controller: [1, 3], door: [1, 2], recycler: [3, 4], anchor: [3, 3], comms: [1, 2], spawn: [1, 1]};
 // Standing machines placed on the grid (clear area, supported along the bottom), walked through, not solid.
 const STANDING_MACHINES = ['anchor', 'spawn'];
-// Machines that are physics objects, like expando boxes: placed anywhere (not snapped to the grid), they fall, slide,
-// collide and can be pushed. Loaders still feed whichever one covers the tile they face.
+// Machines placed freely (not snapped to the grid) on a surface, then fixed in place; crew and items pass through them.
+// Loaders feed whichever one covers the tile they face.
 const PHYSICS_MACHINES = ['fabricator', 'recycler', 'comms'];
 // Recycler (wiki: "converts items back to the materials it was made out of with a small loss"; 16 metal, 20 s).
 // Returns half of what the item cost, rounded down — this build's rule (drednot's ℵ25 recycler gave back 80%).
