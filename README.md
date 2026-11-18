@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v50 (ℵ30 build)
+**Current version:** notdred.io — v51 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -121,6 +121,12 @@ Each ship's room (`server/room.cjs`) still simulates its interior and crew. Ever
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
 
+## Free placement, booster charge, original art (v51)
+
+- **Expando boxes, fabricators, recyclers and comms stations are placed freely:** exactly where you aim horizontally (no grid), resting on the first surface below the aim (the floor, a block, walkway, glass, paint, loader, pusher, hatch or door). With nothing to stand on they can't be placed. A preview outline shows where it will land (green: OK, red: not).
+- **Shield boosters charge before they heal:** using one (2 s) spends it and starts a 6-second charge. A blue bar under the shield bar fills up, and the ship heals when it completes. One booster charges at a time; other ships see the bar too.
+- **Original art first:** the original asset pack's item icons are used wherever the pack has one, and drednot's fetched icons only fill the gaps. Turret icons are built from the pack's turret pieces. The image fetch script never replaces existing images (it had overwritten 41 sprites with today's versions).
+
 ## Pusher settings, captains, turrets (v50)
 
 - **Pusher settings window** (right-click a pusher), laid out like drednot's configuration panel:
@@ -136,7 +142,7 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 
 ## Physics machines and loader swing (v49)
 
-- **Fabricators, recyclers and comms stations are physics objects**, like expando boxes. They're placed where you aim (not snapped to the grid), fall, slide, can be pushed by pushers and other objects, and stand on walkways (loose items still fall through walkways). Loaders still feed whichever machine covers the tile they face.
+- **Fabricators, recyclers and comms stations are physics objects**, like expando boxes. They're placed where you aim (not snapped to the grid), fall, slide, can be pushed by pushers and other objects, and stand on walkways (loose items still fall through walkways). Crew walk straight through them; expando boxes stay solid. Loaders still feed whichever machine covers the tile they face.
 - A **loader facing out of a recycler** takes the finished resources straight from it. With no loader there, the recycler drops them beside itself.
 - **A loader's swing is its cooldown.** The hand grabs a stack, carries it across in half a cycle and delivers only when it arrives (waiting there if the target is full), then swings back before it can grab again. A turret delivery adds the turret's loading wait.
 - **Fixed:** pusher beams and loader swings now show for every player (they weren't in the snapshot, so beams never drew).

@@ -32,5 +32,16 @@ assert.equal(r2.game.run('[...terrain.values()].filter(t=>t.body).length'),4,'ma
 run(`addTerrain("pusher_block",${lx-3},${fy-2},2);`);step(3);const snap=r.game.snapshot('cap');
 assert.ok(snap.terrain.some(t=>t.type==='pusher_block'&&t.beam>0),'beam length in snapshots');assert.ok(snap.terrain.some(t=>t.type==='loader'&&t.phase!=null),'loader swing in snapshots');
 assert.ok(snap.machines.length===4&&snap.machines.every(m=>m.id&&Number.isFinite(m.x)),'machines in snapshots');
-console.log('PASS: physics machines — placed off-grid, fall, pushed by pushers, fed by loaders, saved and reloaded; loader swing is the cooldown (deliver on arrival, no grab while returning); beams and swings reach clients.');
+// Free placement: an expando box and a fabricator go exactly where aimed horizontally and rest on the surface below;
+// with nothing to stand on (aiming into a solid column of blocks' gap above the hull top) placement is refused.
+run('for(const t of [...terrain.values()])if(t.body){inside.destroyBody(t.body);terrain.delete(t.key);}for(const b of [...boxes])inside.destroyBody(b.body);boxes.length=0;');
+run(`bindCrew("cap");player.setTransform(V(-11,${fy}),0);mouse={x:0,y:0,active:false};placingAim=V(-4.37,${fy-3.2});storeCrew();`);
+const bp=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"storage"))`);assert.ok(Math.abs(bp.x+4.37)<1e-6,'box x where aimed ('+bp.x+')');assert.ok(Math.abs(bp.y+1-(fy+.5))<.05,'box rests on the floor');
+const fp=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"fab_munitions"))`);assert.ok(Math.abs(fp.x+4.37)<1e-6&&Math.abs(fp.y+1.5-(fy+.5))<.05,'fabricator x where aimed, resting on the floor');
+run(`for(let x=-6;x<=-2;x++)addBlock(x,${fy-2},0);placingAim=V(-4.37,${fy-3});`);const onBlocks=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"storage"))`);assert.ok(Math.abs(onBlocks.y+1-(fy-2.5))<.05,'rests on the blocks below the aim');run(`placingAim=V(-4.37,${fy-.8});`);assert.ok(Math.abs(run(`placementPoint({x:-4,y:${fy-2}},"storage").y`)+1-(fy+.5))<.05,'aimed below the blocks: rests on the floor');
+run(`placingAim=V(-4.37,${fy-3.2});giveItem("storage",1);selectSlot(slots.indexOf("storage"));commitBuild({x:-4,y:${fy-3}},"storage",0);placingAim=null;`);assert.ok(Math.abs(run('boxes[boxes.length-1].body.getPosition().x')+4.37)<1e-6,'built where aimed, not snapped');
+// Crew walk straight through physics machines (they're background machines); expando boxes stay solid to crew.
+{const m=run('(()=>{const f=spawnMachine("fabricator",V(0,0)).body.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()'),pl=run('(()=>{bindCrew("cap");const f=player.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()');
+ assert.ok(!(m.mask&2)&&!(pl.mask&m.cat),'crew pass through machines');const bx=run('(()=>{const f=spawnBox(V(5,0)).body.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()');assert.ok((bx.mask&2)&&(pl.mask&bx.cat),'but not expando boxes');}
+console.log('PASS: physics machines (crew walk through them) — placed off-grid (boxes too, resting on the surface below), fall, pushed by pushers, fed by loaders, saved and reloaded; loader swing is the cooldown (deliver on arrival, no grab while returning); beams and swings reach clients.');
 process.exit(0);

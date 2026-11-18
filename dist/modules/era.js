@@ -151,7 +151,9 @@ function turretCapacity(m) { return turretDef(m).capacity || 16; }
 function isAmmo(type) { return Object.hasOwn(AMMO, type); }
 // Ship shields (ℵ30): base + 100 per ship expansion; constant passive regeneration (ℵ10+), much faster in
 // safe zones. Shield booster: 2-second use (ℵ25), restores 500 (wiki). base/regen/delay are PLACEHOLDERS.
-const SHIELDS = {base: 1000, perExpansion: 100, regenPerSecond: 15, regenDelay: 4, safeZoneMultiplier: 12, boosterAmount: 500, boosterUseSeconds: 2};
+// Shield boosters charge after use: the booster is spent at once and heals boosterAmount when its charge completes
+// (boosterChargeSeconds, a bar under the shield bar shows it); one can charge at a time. Charge time is a PLACEHOLDER.
+const SHIELDS = {base: 1000, perExpansion: 100, regenPerSecond: 15, regenDelay: 4, safeZoneMultiplier: 12, boosterAmount: 500, boosterUseSeconds: 2, boosterChargeSeconds: 6};
 // With shields down, hits damage tiles (100 HP each) by this fraction of the projectile's damage.
 const TILE_DAMAGE_FACTOR = .24;
 // Critical ships (shields at 0):
