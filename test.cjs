@@ -25,7 +25,7 @@ clearScene();for(let r=0;r<4;r++){run(`addTerrain("wedge",0,0,${r})`);assert.equ
 run('initialize();piloting=true;player.setActive(false);keys={d:true};step(1/60)');assert.ok(run('mounts.filter(m=>m.type==="starter").every(m=>m.thrustDirection.x>0.9)'),'engine nozzle follows actual thrust');assert.equal(run('ship.getAngle()'),0);
 console.log('PASS: standing/jumping on cargo, contact-only stack merges, stack cap, falling/saved expando boxes, four wedge collision orientations and directional nozzle thrust.');
 clearScene();run('const emptyBox=spawnBox(V(0,0));');assert.equal(run('emptyBox.size'),2);assert.equal(run('emptyBox.body.getType()'),'dynamic');
-clearScene();run('addTerrain("shredder",0,0);spawnItem("iron",V(0,0),V(0,0),16);tickShredders()');assert.equal(run('items.length'),0);
+clearScene();run('addTerrain("shredder",0,0);spawnItem("iron",V(0,0),V(0,0),16);tickShredders()');assert.equal(run('items.length'),1,'nothing but loaders and pushers takes loose items');
 clearScene();run('addTerrain("walkway_wedge",0,0);');assert.equal(run('terrain.get("0,0").f.getShape().m_vertices.length'),3);assert.equal(run('terrain.get("0,0").f.getFilterMaskBits()'),2);
 run('initialize();activeFab=[...terrain.values()].find(t=>t.type==="fabricator");craft("ammo");tickFabricators(3)');assert.ok(run('items.some(i=>i.type==="ammo")'));assert.equal(run('activeFab.materials.explosives'),15);
 clearScene();run('player.setTransform(V(-3,1),0);slots=["embiggener",null,null,null,null];stackCounts=[2,0,0,0,0];addBlock(2,1);buildRotation=0;resizeCut({x:0,y:0},true)');assert.equal(run('bounds.r'),6);assert.ok(run('blocks.has("3,1")'));assert.equal(run('inventory.embiggener'),1);assert.equal(run('mounts.filter(m=>m.type==="starter").length'),2);

@@ -15,7 +15,9 @@ function loadThruster(c,type){if(piloting)return toast('Leave the helm to load a
 
 function burn(m,dt,power){if(m.type==='starter')return 900;if((m.burnRemaining||0)<=0){if(m.fuelItems>0){m.fuelItems--;m.burnKind='fuel';m.burnRemaining=120}else if(m.explosiveItems>0){m.explosiveItems--;m.burnKind='explosives';m.burnRemaining=60}else return 0}const used=Math.min(m.burnRemaining,dt*power);m.burnRemaining-=used;return (m.burnKind==='fuel'?1600:1100)*(used/(dt*power));}
 
-function tickShredders(){for(const t of terrain.values()){if(t.type!=='shredder')continue;for(const i of [...items]){const q=i.body.getPosition();if(Math.abs(q.x-t.x)<.49&&Math.abs(q.y-t.y)<.49){inside.destroyBody(i.body);items.splice(items.indexOf(i),1);t.chewing=clock+.5;actionEffect(t.x,t.y,'red',i.count+' x '+NAMES[i.type],V(t.x,t.y));}}}}
+// Placed shredder tiles (pre-v13 saves; they become shredder items on load) no longer eat loose items: nothing takes
+// loose items by itself except loaders and pushers.
+function tickShredders(){}
 
 function hatchOutput(t){const a=(t.rotation||0)*Math.PI/2;return V(t.x-Math.sin(a)*.95,t.y+Math.cos(a)*.95);}
 
