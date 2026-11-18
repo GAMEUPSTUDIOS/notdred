@@ -163,6 +163,7 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
   - Finding which machine occupies a tile is now an indexed lookup (it scanned every machine).
   - Loaders only look at items near them.
   - An 80×80 battleship with 160 loaders, 75 RC turrets and 300 loose stacks dropped from about 280 ms to under 10 ms a tick.
+  - Server CPU (v53): the per-tick and per-snapshot calls go straight to the game's functions (each `vm.runInContext` with a timeout started a watchdog); each ship's snapshot is built and encoded once per pass and shared by everyone aboard, with only each player's own part added; the native physics bridge sends only bodies the game changed (fixtures only when they change) and the solver returns only bodies that moved. A 12-player, 6-ship Freeport went from 3.9 to 1.1 ms per tick; the battleship with 8 crew from 8.4 to 2.2 ms.
   - Snapshots resend a ship's tiles only when they change, and a big ship's machines and turrets as changes only. That ship's snapshot went from 64 KB to about 14 KB.
   - Other ships' live view goes out 10 times a second.
 - **Item logic** (gates, sorters, counters, trading rigs built from loaders, pushers, glass and item physics):

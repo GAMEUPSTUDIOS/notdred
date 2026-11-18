@@ -105,14 +105,36 @@ function serverRegenerate(seed){zonePlaced=true;snapshotZone();const old=zoneDat
 function missionNotice(text){toastAll(text);}
 function setRegenTimer(t,reset){const st=zoneData[zone];if(!st)return;st.regenIn=t??undefined;st.resetIn=reset??undefined;}
 const DELTA_MIN=40;
-function snapshot(id){storeCrew();const m=crew.get(id);if(!m)return null;bindCrew(id);const data=state();data.inventory={};data.clock=clock;data.crew=[...crew.values()].map(c=>({id:c.id,name:c.name,rank:c.rank||'guest',p:c.player.getPosition(),v:c.player.getLinearVelocity(),facing:c.facing,piloting:c.piloting,tool:c.tool,climbing:c.climbing,selected:c.selected,held:c.slots[c.selected],beam:handBeam(c.id===id?pusherVisual:c.pusherVisual)}));data.self={id,selected,tool,piloting,facing,climbing,rotation:buildRotation,pusherPull,buildJob,manning,rank:m.rank||'guest'};data.velocity=ship.getLinearVelocity();data.mission=currentMission();data.criticalFor=+criticalFor.toFixed(2);data.effects=effects;data.zoneData={[zone]:data.zoneData[zone]};if(attachedToZone){const z=zoneLink.snapshot();data.bots=z?.bots||[];data.rockHp=z?.rockHp||[];data.projectiles=z?.projectiles||[];data.zoneLoot=z?.loot||[];data.zoneBoulders=z?.boulders||[];}else{data.bots=allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:b.body.getPosition(),v:b.body.getLinearVelocity()}));data.projectiles=[...shots.map(s=>({...s,owner:undefined})),...enemyShots.map(s=>({...s,owner:undefined}))];}data.items=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity(),o={type:i.type,count:i.count,x:p.x,y:p.y,angle:i.body.getAngle()};if(Math.abs(v.x)>.005||Math.abs(v.y)>.005)o.v=v;return o;});data.mounts=mounts.map(({f,...m})=>m);data.notices=(m.notices||[]).splice(0);const zd=data.zoneData[zone]={...data.zoneData[zone]},minedList=zd.mined||[],sent=m.minedSent;if(sent&&sent.zone===zone&&sent.seed===(zd.seed||0)&&sent.count<=minedList.length){data.minedAdd=minedList.slice(sent.count);delete zd.mined;}else data.minedReset=true;m.minedSent={zone,seed:zd.seed||0,count:minedList.length};zd.loot=(data.zoneLoot||zd.loot||[]).map(({type,count,x,y,vx,vy})=>({type,count,x,y,vx,vy}));if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;
+// Snapshots are built in two parts: what every crew member of this ship sees (built and encoded once per pass for
+// the whole ship), and each member's own part (their slots, notices, mined-tile catch-up, and the tile/machine lists
+// or deltas they haven't seen yet). Own fields come after the shared ones in the message, so they win.
+const OWN_FIELDS=['stacks','slots','inventory','blocks','terrain','mounts','zoneData'];
+function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k of OWN_FIELDS)delete data[k];data.clock=clock;
+ data.crew=[...crew.values()].map(c=>({id:c.id,name:c.name,rank:c.rank||'guest',p:c.player.getPosition(),v:c.player.getLinearVelocity(),facing:c.facing,piloting:c.piloting,tool:c.tool,climbing:c.climbing,selected:c.selected,held:c.slots[c.selected],beam:handBeam(c.pusherVisual)}));
+ data.velocity=ship.getLinearVelocity();data.mission=currentMission();data.criticalFor=+criticalFor.toFixed(2);data.effects=effects;
+ if(attachedToZone){const z=zoneLink.snapshot();data.bots=z?.bots||[];data.rockHp=z?.rockHp||[];data.projectiles=z?.projectiles||[];data.zoneLoot=z?.loot||[];data.zoneBoulders=z?.boulders||[];}else{data.bots=allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:b.body.getPosition(),v:b.body.getLinearVelocity()}));data.projectiles=[...shots.map(s=>({...s,owner:undefined})),...enemyShots.map(s=>({...s,owner:undefined}))];}
+ data.items=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity(),o={type:i.type,count:i.count,x:p.x,y:p.y,angle:i.body.getAngle()};if(Math.abs(v.x)>.005||Math.abs(v.y)>.005)o.v=v;return o;});
+ // The zone record (without its mined list, which each member catches up on separately).
+ const zone0=snapshotZone()[zone]||{},zd={...zone0};delete zd.mined;zd.loot=(data.zoneLoot||zd.loot||[]).map(({type,count,x,y,vx,vy})=>({type,count,x,y,vx,vy}));if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;
+ const json=JSON.stringify(data,roundReplacer);
+ // Tiles, machines and turrets: encoded once here; each member gets the whole list or only what changed for them.
+ const round=v=>JSON.parse(JSON.stringify(v,roundReplacer)),blocks=round(st.blocks),lists={};
+ for(const [field,keyOf] of [['terrain',t=>t.type+':'+t.x+','+t.y+':'+(t.rotation||0)],['mounts',t=>t.type+':'+t.side+':'+t.at]]){const list=round(field==='mounts'?mounts.map(({f,...m})=>m):st[field]);lists[field]={list,keys:list.length<DELTA_MIN?null:list.map(keyOf).join('|'),json:list.length<DELTA_MIN?null:list.map(t=>JSON.stringify(t))};}
+ return {json,zone:zd,mined:zone0.mined||[],seed:zone0.seed||0,blocks,blocksJSON:JSON.stringify(blocks),lists};}
+function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
+ const own={zone,stacks:slots.map((type,i)=>type?{type,count:stackCounts[i]}:null),slots:[...slots],inventory:{},self:{id,selected,tool,piloting,facing,climbing,rotation:buildRotation,pusherPull,buildJob,manning,rank:m.rank||'guest'},notices:(m.notices||[]).splice(0)};
+ const zd={...sh.zone},sent=m.minedSent;if(sent&&sent.zone===zone&&sent.seed===sh.seed&&sent.count<=sh.mined.length)own.minedAdd=sh.mined.slice(sent.count);else{own.minedReset=true;zd.mined=sh.mined;}m.minedSent={zone,seed:sh.seed,count:sh.mined.length};own.zoneData={[zone]:zd};
  // The ship's tiles go to each crew member only when they change (built, removed, damaged, repaired): an 80×80
  // battleship has thousands of them, which would otherwise be resent 20 times a second. null = "same as before".
- {const bs=JSON.stringify(data.blocks);if(m.blocksSent===bs)data.blocks=null;else m.blocksSent=bs;}
+ if(m.blocksSent===sh.blocksJSON)own.blocks=null;else{m.blocksSent=sh.blocksJSON;own.blocks=sh.blocks;}
  // Big ships: machine and turret records go out only when they change ([index, record] pairs), as long as the
  // set of machines is the same as last time; otherwise the whole list is sent again.
- for(const [field,keyOf] of [['terrain',t=>t.type+':'+t.x+','+t.y+':'+(t.rotation||0)],['mounts',t=>t.type+':'+t.side+':'+t.at]]){const list=data[field];if(list.length<DELTA_MIN){m[field+'Sent']=null;continue;}const keys=list.map(keyOf).join('|'),json=list.map(t=>JSON.stringify(t,roundReplacer)),sent=m[field+'Sent'];if(sent&&sent.keys===keys){const d=[];json.forEach((j,i)=>{if(sent.json[i]!==j)d.push([i,list[i]]);});data[field]=null;data[field+'Delta']=d;}m[field+'Sent']={keys,json};}
- return JSON.parse(JSON.stringify(data,roundReplacer));}
+ for(const field of ['terrain','mounts']){const L=sh.lists[field];own[field]=L.list;if(!L.keys){m[field+'Sent']=null;continue;}const sent=m[field+'Sent'];if(sent&&sent.keys===L.keys){const d=[];L.json.forEach((j,i)=>{if(sent.json[i]!==j)d.push([i,L.list[i]]);});own[field]=null;own[field+'Delta']=d;}m[field+'Sent']={keys:L.keys,json:L.json};}
+ return JSON.parse(JSON.stringify(own,roundReplacer));}
+// One member's whole snapshot (tests, tools). The server uses snapshotPass, which shares the common part.
+function snapshot(id){if(!crew.has(id))return null;const sh=snapshotShared(),own=snapshotOwn(id,sh);return Object.assign(JSON.parse(sh.json),own);}
+// Every listed member's snapshot for one pass: the shared part as encoded text, plus each member's own part.
+function snapshotPass(ids){const sh=snapshotShared();return {shared:sh.json,own:ids.map(id=>snapshotOwn(id,sh))};}
 function durableState(){storeCrew();const s=JSON.parse(JSON.stringify(state()));s.stacks=[null,null,null,null,null];s.inventory={};s.slots=[null,null,null,null,null];for(const m of crew.values())for(let i=0;i<5;i++)if(m.slots[i]&&m.slots[i]!=='wrench')s.items.push({type:m.slots[i],count:m.stackCounts[i],...m.player.getPosition()});return s;}
 
 // ---- Shared zone link ----------------------------------------------------------------------------------------

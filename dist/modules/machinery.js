@@ -135,8 +135,10 @@ function fabIngredients(f){const set=new Set();for(const r of FABRICATORS[fabKin
 // Loose items bucketed by 2×2-tile cell once per tick, so each loader only looks at items near its input instead of
 // every item aboard (hundreds of loaders × hundreds of items was most of a big ship's tick).
 let loaderItemGrid=null;
-function nearbyItems(t,cells){const out=new Set(),add=(x,y)=>{for(let gx=Math.floor((x-2.5)/2);gx<=Math.floor((x+2.5)/2);gx++)for(let gy=Math.floor((y-2.5)/2);gy<=Math.floor((y+2.5)/2);gy++)for(const i of loaderItemGrid.get(gx+','+gy)||[])out.add(i);};add(t.x,t.y);for(const c of cells)add(c.x,c.y);return [...out].filter(i=>!i.taken);}
-function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=Math.floor(p.x/2)+','+Math.floor(p.y/2);let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
+const gridKey=(gx,gy)=>(gx+32768)*65536+(gy+32768);
+function nearbyItems(t,cells){let out=null;const add=(x,y)=>{const x0=Math.floor((x-2.5)/2),x1=Math.floor((x+2.5)/2),y0=Math.floor((y-2.5)/2),y1=Math.floor((y+2.5)/2);for(let gx=x0;gx<=x1;gx++)for(let gy=y0;gy<=y1;gy++){const b=loaderItemGrid.get(gridKey(gx,gy));if(b)for(const i of b)(out??=new Set()).add(i);}};
+ add(t.x,t.y);for(const c of cells)add(c.x,c.y);if(!out)return [];const r=[];for(const i of out)if(!i.taken)r.push(i);return r;}
+function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=gridKey(Math.floor(p.x/2),Math.floor(p.y/2));let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
 // The loader's swing is its cooldown: the hand grabs a stack on the input side, carries it across (half a cycle),
 // delivers only when it arrives (waiting there if the target is full), then swings back empty (the other half) before
 // it can grab again — so what you see is exactly when it can act. phase: 0 = hand at the input, 1 = at the output.

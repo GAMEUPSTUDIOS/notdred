@@ -7,7 +7,8 @@
 #include <memory>
 #include <cmath>
 using J=nlohmann::json;
-struct Body {b2Body* p;std::string fixtures;};
+// fixtures: the last fixture list's signature; awake: awake after the last step; touched: sent this step.
+struct Body {b2Body* p;std::string fixtures;bool awake=true;bool touched=false;};
 struct World {b2World physics{{0,20}};std::unordered_map<int,Body> bodies;};
 static std::unordered_map<int,std::unique_ptr<World>> worlds;
 static b2Vec2 vec(const J& a){return {a[0].get<float>(),a[1].get<float>()};}
@@ -20,7 +21,9 @@ static J call(const J& in){
  for(auto& j:in.at("bodies")){
   int n=j.at("id");seen.insert(n);b2Body* b;
   if(!w.bodies.count(n)){b2BodyDef d;d.type=(b2BodyType)j.at("type").get<int>();d.position=vec(j.at("p"));b=w.physics.CreateBody(&d);w.bodies[n]={b,""};}else b=w.bodies[n].p;
-  auto& record=w.bodies[n];std::string signature=j.at("fixtures").dump();
+  auto& record=w.bodies[n];record.touched=true;
+  // Fixtures come only when they change (and always for a new body).
+  std::string signature=j.contains("fixtures")?j.at("fixtures").dump():record.fixtures;
   if(record.fixtures!=signature){while(b->GetFixtureList())b->DestroyFixture(b->GetFixtureList());for(auto& f:j.at("fixtures")){
    b2FixtureDef fd;fd.density=f.value("density",0.f);fd.friction=f.value("friction",.2f);fd.restitution=f.value("restitution",0.f);fd.isSensor=f.value("sensor",false);fd.filter.categoryBits=f.value("category",1);fd.filter.maskBits=f.value("mask",65535);fd.filter.groupIndex=f.value("group",0);
    b2PolygonShape poly;b2CircleShape circle;
@@ -38,7 +41,9 @@ static J call(const J& in){
  float dt=in.at("dt");if(!std::isfinite(dt)||dt<0||dt>1.f/15)throw std::runtime_error("Invalid timestep");
  // Two substeps reduce high-speed tunnelling and make stacks less jittery.
  w.physics.SetAutoClearForces(false);for(int i=0;i<2;i++)w.physics.Step(dt*.5f,8,3);w.physics.ClearForces();
- J out=J::array();for(auto& [n,r]:w.bodies){auto b=r.p;if(b->GetType()==b2_staticBody)continue;auto p=b->GetPosition(),v=b->GetLinearVelocity();out.push_back({{"id",n},{"p",{p.x,p.y}},{"v",{v.x,v.y}},{"angle",b->GetAngle()},{"spin",b->GetAngularVelocity()},{"awake",b->IsAwake()}});}return out;
+ // Only bodies that moved are returned: awake ones, ones that just fell asleep (their resting pose), and ones the
+ // game sent this step. Resting cargo isn't reported again until something wakes it.
+ J out=J::array();for(auto& [n,r]:w.bodies){auto b=r.p;bool awake=b->IsAwake(),report=awake||r.awake||r.touched;r.awake=awake;r.touched=false;if(b->GetType()==b2_staticBody||!report)continue;auto p=b->GetPosition(),v=b->GetLinearVelocity();out.push_back({{"id",n},{"p",{p.x,p.y}},{"v",{v.x,v.y}},{"angle",b->GetAngle()},{"spin",b->GetAngularVelocity()},{"awake",awake}});}return out;
 }
 static napi_value step(napi_env env,napi_callback_info info){
  try{size_t argc=1;napi_value argv[1];napi_get_cb_info(env,info,&argc,argv,nullptr,nullptr);size_t len=0;napi_get_value_string_utf8(env,argv[0],nullptr,0,&len);if(len>16*1024*1024)throw std::runtime_error("World too large");std::string input(len+1,'\0');napi_get_value_string_utf8(env,argv[0],input.data(),input.size(),&len);input.resize(len);std::string out=call(J::parse(input)).dump();napi_value result;napi_create_string_utf8(env,out.c_str(),out.size(),&result);return result;}catch(const std::exception& e){napi_throw_error(env,nullptr,e.what());return nullptr;}
