@@ -22,7 +22,12 @@ function info(r){try{if(r.game){const i=r.game.info();r.name=i.name||r.name;r.sc
 // Leaderboard (press "/"): every stored ship by score.
 function leaderboard(){return [...rooms.values()].map(r=>{const i=info(r);return {id:r.private?'p'+crypto.createHash('sha1').update(r.id).digest('hex').slice(0,8):r.id,name:r.private?'(private ship)':i.name,score:i.score||0,zone:era.ZONES[zoneOf(r)]?.name||'',crew:r.members.size};}).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name)).slice(0,25);}
 // Ranks: the owner is captain; everyone else is whatever the captain set for them (stored by account), guest by default.
-function rankOf(r,ws){return r.owner===ws.owner?'captain':(r.ranks?.[ws.owner]==='crew'?'crew':'guest');}
+function rankOf(r,ws){return r.owner===ws.owner?'captain':(['captain','crew'].includes(r.ranks?.[ws.owner])?r.ranks[ws.owner]:'guest');}
+// Captains (the ship's owner and anyone a captain promoted) share every captain power. The owner alone can delete the
+// ship and can't be demoted, kicked or banned; only the owner can demote, kick or ban another captain.
+const isCap=(r,ws)=>!!ws&&rankOf(r,ws)==='captain';
+const rankOfOwner=(r,owner)=>r.owner===owner?'captain':(['captain','crew'].includes(r.ranks?.[owner])?r.ranks[owner]:'guest');
+function mayManage(r,ws,owner){if(owner===r.owner)return false;if(rankOfOwner(r,owner)==='captain')return r.owner===ws.owner;return true;}
 // ---- Crew control & ship log ("Manage Ship") -----------------------------------------------------------------------
 // Every account that has been aboard is remembered per ship (name, short id, play time); the log keeps the last
 // LOG_MAX events (joins, leaves, loads, saves, helm, zone changes, rank changes, kicks), saved with the ship.
@@ -32,7 +37,7 @@ const LOG_MAX=300;
 const MOTD_MAX=1000;
 function cleanMotd(t){return String(t||'').replace(/\r\n?/g,'\n').replace(/[\x00-\x09\x0b-\x1f\x7f]/g,'').replace(/\n{4,}/g,'\n\n\n').slice(0,MOTD_MAX).trim();}
 const shortId=owner=>'#'+Buffer.from(String(owner).slice(0,12),'hex').toString('base64').replace(/[+/=]/g,'').slice(0,6);
-const rankFor=(r,owner)=>r.owner===owner?'captain':(r.ranks?.[owner]==='crew'?'crew':'guest');
+const rankFor=(r,owner)=>r.owner===owner?'captain':(['captain','crew'].includes(r.ranks?.[owner])?r.ranks[owner]:'guest');
 function person(r,ws){r.people??={};const p=r.people[ws.owner]??={short:shortId(ws.owner),name:ws.name,playtime:0,first:Date.now()};p.name=ws.name;p.last=Date.now();return p;}
 function logEvent(r,ws,text,kind='event'){r.log??=[];r.log.push({t:Date.now(),kind,who:ws?{name:ws.name,short:shortId(ws.owner),rank:rankOf(r,ws)}:null,text});if(r.log.length>LOG_MAX)r.log.splice(0,r.log.length-LOG_MAX);}
 // Bans (captain): the account can never join again until unbanned; anyone aboard is removed at once.
@@ -47,7 +52,7 @@ function crewReport(r,ws){const online=new Map([...r.members].map(m=>[m.owner,m]
  for(const [owner,p] of Object.entries(r.people||{})){const m=online.get(owner);let inventory=[];if(m&&r.game){try{inventory=(r.game.snapshot(m.uid)?.stacks||[]).filter(Boolean).map(x=>({type:x.type,count:x.count}));}catch{}}
   rows.push({short:p.short,name:m?.name||p.name,online:!!m,uid:m?.uid||null,owner:owner===r.owner,rank:rankFor(r,owner),playtime:Math.round((p.playtime||0)+(m?.joinedAt?(Date.now()-m.joinedAt)/1000:0)),last:p.last||0,inventory,you:owner===ws.owner});}
  for(const row of rows){const o=Object.keys(r.people).find(k=>r.people[k].short===row.short);row.banned=!!r.bans?.[o];const v=row.uid&&r.votes?.[o];row.votes=v?[...v.voters].length:0;row.voted=!!(v&&v.voters.has(ws.owner));}
- rows.sort((a,b)=>(b.online-a.online)||(b.owner-a.owner)||(b.playtime-a.playtime));return {type:'crew',ship:info(r).name,captain:r.owner===ws.owner,rank:rankOf(r,ws),votesNeeded:votesNeeded(r),log:(r.log||[]).slice(-200),crew:rows};}
+ rows.sort((a,b)=>(b.online-a.online)||(b.owner-a.owner)||(b.playtime-a.playtime));return {type:'crew',ship:info(r).name,captain:isCap(r,ws),rank:rankOf(r,ws),votesNeeded:votesNeeded(r),log:(r.log||[]).slice(-200),crew:rows};}
 // Chat: everyone in the same zone (all ships there) plus your own crew wherever they are. Rate-limited, plain text.
 // Chat stays aboard your own ship; a comms station (ℵ14, "communication with other ships") reaches every ship in the zone.
 function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
@@ -56,7 +61,7 @@ function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a shi
  for(const c of clients)if(c.room&&(c.room===r||comms&&zoneOf(c.room)===z))send(c,msg);}
 // Private ships (captain's choice): hidden from other players' ship lists and joinable only with the invite link
 // (?ship=<id>&key=<invite>). The captain, and people the captain made crew, can always see and rejoin them.
-const insider=(r,ws)=>!!ws&&(r.owner===ws.owner||r.ranks?.[ws.owner]==='crew');
+const insider=(r,ws)=>!!ws&&(r.owner===ws.owner||['captain','crew'].includes(r.ranks?.[ws.owner]));
 const mayJoin=(r,ws,key)=>!r.private||insider(r,ws)||ws.admin||(typeof key==='string'&&key===r.invite);
 function list(ws){return [...rooms.values()].filter(r=>!r.private||insider(r,ws)).map(r=>({private:!!r.private,id:r.id,name:info(r).name,players:r.members.size,maxPlayers:MAX_CREW,zone:zoneOf(r),mine:!!ws&&r.owner===ws.owner,returnIn:r.members.size||r.returned?0:Math.max(0,Math.ceil((RETURN_MS-(Date.now()-r.emptySince))/1000))}));}
 for(const file of fs.readdirSync(dataDir).filter(f=>/^[a-f0-9]+\.json$/.test(f))){try{const d=JSON.parse(fs.readFileSync(path.join(dataDir,file)));{const r=record(d.name,d.owner,codec.decode(d.ship),d.id);r.ranks=d.ranks&&typeof d.ranks==='object'?d.ranks:{};r.log=Array.isArray(d.log)?d.log.slice(-LOG_MAX):[];r.bans=d.bans&&typeof d.bans==='object'?d.bans:{};r.private=d.private===true;if(typeof d.invite==='string'&&/^[a-f0-9]{18}$/.test(d.invite))r.invite=d.invite;r.motd=typeof d.motd==='string'?cleanMotd(d.motd):'';r.people=d.people&&typeof d.people==='object'?d.people:{};r.emptySince=0;}}catch(e){console.error('Skipped invalid save',file,e.message);}}
@@ -79,7 +84,7 @@ server.on('upgrade',(req,socket,head)=>{const origin=req.headers.origin,allowed=
 // ---- Crew sessions ---------------------------------------------------------------------------------------
 function send(ws,o){if(ws.readyState===WebSocket.OPEN&&ws.bufferedAmount<2*1024*1024)ws.send(JSON.stringify(o));}
 function leave(ws,save=true){const r=ws.room;if(!r)return;ws.room=null;r.members.delete(ws);{const p=person(r,ws);if(ws.joinedAt)p.playtime=(p.playtime||0)+(Date.now()-ws.joinedAt)/1000;ws.joinedAt=0;ws.wasPiloting=false;}logEvent(r,ws,'left the ship.','leave');if(!r.members.size)logEvent(r,null,'saved the ship.','save');try{r.game?.leave(ws.uid);}catch(e){console.error('Leave failed',r.id,e.message);}if(save)persist(r);if(!r.members.size)r.emptySince=Date.now();}
-function join(ws,r,key){if(!mayJoin(r,ws,key))throw Error('This ship is private. Ask its captain for the invite link.');if(r.owner!==ws.owner&&r.bans?.[ws.owner])throw Error('You are banned from this ship.');{const until=r.tempBans?.[ws.owner];if(until&&until>Date.now())throw Error('You were vote-kicked from this ship. Try again in '+Math.ceil((until-Date.now())/60000)+' min.');}if(r.members.size>=MAX_CREW)throw Error('Ship full');leave(ws);if(!r.game)r.loader=ws;load(r);r.game.join(ws.uid,ws.name,ws.admin,rankOf(r,ws));r.members.add(ws);ws.room=r;r.returned=false;ws.joinedAt=Date.now();person(r,ws);logEvent(r,null,'','time');logEvent(r,ws,'joined the ship.','join');ws.layoutSeen=new Map();send(ws,{type:'joined',room:r.id,name:r.name,self:ws.uid,admin:ws.admin,captain:r.owner===ws.owner});send(ws,{type:'snapshot',tick:r.tick,state:{...r.game.snapshot(ws.uid),others:bus.others(r,ws.layoutSeen)}});send(ws,{type:'motd',text:r.motd||''});}
+function join(ws,r,key){if(!mayJoin(r,ws,key))throw Error('This ship is private. Ask its captain for the invite link.');if(r.owner!==ws.owner&&r.bans?.[ws.owner])throw Error('You are banned from this ship.');{const until=r.tempBans?.[ws.owner];if(until&&until>Date.now())throw Error('You were vote-kicked from this ship. Try again in '+Math.ceil((until-Date.now())/60000)+' min.');}if(r.members.size>=MAX_CREW)throw Error('Ship full');leave(ws);if(!r.game)r.loader=ws;load(r);r.game.join(ws.uid,ws.name,ws.admin,rankOf(r,ws));r.members.add(ws);ws.room=r;r.returned=false;ws.joinedAt=Date.now();person(r,ws);logEvent(r,null,'','time');logEvent(r,ws,'joined the ship.','join');ws.layoutSeen=new Map();send(ws,{type:'joined',room:r.id,name:r.name,self:ws.uid,admin:ws.admin,captain:isCap(r,ws)});send(ws,{type:'snapshot',tick:r.tick,state:{...r.game.snapshot(ws.uid),others:bus.others(r,ws.layoutSeen)}});send(ws,{type:'motd',text:r.motd||''});}
 const owned=ws=>[...rooms.values()].filter(r=>r.owner===ws.owner).length;
 // One handler for every client: real WebSockets, and classic-mode sessions (server/classic.cjs) that use a stand-in socket.
 function onConnection(ws){clients.add(ws);ws.uid=id();ws.name='Crew';ws.actions=0;ws.window=Date.now();ws.seq=-1;ws.alive=true;ws.on('pong',()=>ws.alive=true);ws.on('message',raw=>{try{
@@ -100,18 +105,18 @@ function onConnection(ws){clients.add(ws);ws.uid=id();ws.name='Crew';ws.actions=
  if(m.type==='comms')return chat(ws,m.text,true);
  if(m.type==='crew')return send(ws,crewReport(ws.room,ws));
  // Ship settings: privacy and the invite link (the link's key only goes to the captain and crew).
- if(m.type==='shipsettings'){const r=ws.room;return send(ws,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,ws)?r.invite:null,captain:r.owner===ws.owner});}
- if(m.type==='privacy'||m.type==='newinvite'){const r=ws.room;if(r.owner!==ws.owner)throw Error('Only the captain can change who can join');
+ if(m.type==='shipsettings'){const r=ws.room;return send(ws,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,ws)?r.invite:null,captain:isCap(r,ws)});}
+ if(m.type==='privacy'||m.type==='newinvite'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can change who can join');
   if(m.type==='privacy'){r.private=!!m.private;logEvent(r,ws,'made the ship '+(r.private?'private (invite link only).':'public.'),'privacy');}
   else{r.invite=crypto.randomBytes(9).toString('hex');logEvent(r,ws,'made a new invite link (the old one no longer works).','privacy');}
-  persist(r);for(const c of r.members)send(c,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,c)?r.invite:null,captain:r.owner===c.owner});return;}
- if(m.type==='motd'){const r=ws.room;if(r.owner!==ws.owner)throw Error('Only the captain can edit the MOTD');r.motd=cleanMotd(m.text);logEvent(r,ws,r.motd?'updated the MOTD.':'cleared the MOTD.','motd');persist(r);for(const c of r.members)send(c,{type:'motd',text:r.motd,changed:true,by:ws.name});return;}
- if(m.type==='rank'){const r=ws.room;if(r.owner!==ws.owner)throw Error('Only the captain can set ranks');if(!['crew','guest'].includes(m.rank))throw Error('Unknown rank');
+  persist(r);for(const c of r.members)send(c,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,c)?r.invite:null,captain:isCap(r,c)});return;}
+ if(m.type==='motd'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can edit the MOTD');r.motd=cleanMotd(m.text);logEvent(r,ws,r.motd?'updated the MOTD.':'cleared the MOTD.','motd');persist(r);for(const c of r.members)send(c,{type:'motd',text:r.motd,changed:true,by:ws.name});return;}
+ if(m.type==='rank'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can set ranks');if(!['captain','crew','guest'].includes(m.rank))throw Error('Unknown rank');
   // By crew id (online) or by short account id from the crew list (offline too).
   const target=[...r.members].find(x=>x.uid===m.crew||(m.account&&shortId(x.owner)===m.account));const owner=target?.owner||Object.keys(r.people||{}).find(o=>m.account&&r.people[o].short===m.account);
-  if(!owner||owner===ws.owner)throw Error('Crew member not found');r.ranks??={};r.ranks[owner]=m.rank;if(target){r.game.setRank(target.uid,m.rank);send(target,{type:'error',message:'The captain made you '+m.rank+'.'});}
+  if(!owner||owner===ws.owner)throw Error('Crew member not found');if(!mayManage(r,ws,owner))throw Error(owner===r.owner?'The ship\'s owner is always captain.':'Only the ship\'s owner can change another captain\'s rank.');r.ranks??={};r.ranks[owner]=m.rank;if(target){r.game.setRank(target.uid,m.rank);send(target,{type:'error',message:'The captain made you '+m.rank+'.'});}
   logEvent(r,ws,'set '+(r.people?.[owner]?.short||'')+' ('+(r.people?.[owner]?.name||'?')+') to '+m.rank+'.','rank');persist(r);if(m.report)send(ws,crewReport(r,ws));return;}
- if(m.type==='ban'){const r=ws.room;if(r.owner!==ws.owner)throw Error('Only the captain can ban');const owner=Object.keys(r.people||{}).find(o=>r.people[o].short===m.account);if(!owner||owner===ws.owner)throw Error('Crew member not found');
+ if(m.type==='ban'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can ban');const owner=Object.keys(r.people||{}).find(o=>r.people[o].short===m.account);if(!owner||owner===ws.owner)throw Error('Crew member not found');if(!mayManage(r,ws,owner))throw Error('You cannot ban the ship\'s owner or another captain.');
   r.bans??={};const p=r.people[owner];if(m.banned===false){delete r.bans[owner];logEvent(r,ws,'unbanned '+p.short+' ('+p.name+').','ban');}
   else{r.bans[owner]=true;logEvent(r,ws,'banned '+p.short+' ('+p.name+').','ban');const target=[...r.members].find(x=>x.owner===owner);if(target)removeFromShip(r,target,'You were banned from the ship by the captain.');notice(r,p.name+' was banned from the ship.');}
   persist(r);if(m.report)send(ws,crewReport(r,ws));return;}
@@ -123,7 +128,7 @@ function onConnection(ws){clients.add(ws);ws.uid=id();ws.name='Crew';ws.actions=
   logEvent(r,ws,'voted to kick '+shortId(target.owner)+' ('+target.name+') — '+v.voters.size+'/'+need+'.','vote');notice(r,ws.name+' voted to kick '+target.name+' ('+v.voters.size+'/'+need+').');
   if(v.voters.size>=need){delete r.votes[target.owner];r.tempBans??={};r.tempBans[target.owner]=now+VOTEKICK_BAN_MS;logEvent(r,null,shortId(target.owner)+' ('+target.name+') was vote-kicked.','kick');removeFromShip(r,target,'You were vote-kicked from the ship by its crew.');notice(r,target.name+' was vote-kicked.');}
   if(m.report)send(ws,crewReport(r,ws));return;}
- if(m.type==='kick'){const r=ws.room;if(r.owner!==ws.owner)throw Error('Only the captain can kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');logEvent(r,ws,'kicked '+shortId(target.owner)+' ('+target.name+').','kick');leave(target);send(target,{type:'error',message:'You were removed from the ship by the captain.'});send(target,{type:'rooms',rooms:list(target)});if(m.report)send(ws,crewReport(r,ws));return;}
+ if(m.type==='kick'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');if(!mayManage(r,ws,target.owner))throw Error('You cannot kick the ship\'s owner or another captain.');logEvent(r,ws,'kicked '+shortId(target.owner)+' ('+target.name+').','kick');leave(target);send(target,{type:'error',message:'You were removed from the ship by the captain.'});send(target,{type:'rooms',rooms:list(target)});if(m.report)send(ws,crewReport(r,ws));return;}
  if(m.type==='export'){return send(ws,{type:'export',data:codec.encode(ws.room.game.run('durableState()'))});}
  if(m.type==='action'){if(!Number.isSafeInteger(m.seq)||m.seq<=ws.seq)return;ws.seq=m.seq;ws.room.game.command(ws.uid,m);}
  }catch(e){send(ws,{type:'error',message:String(e.message).slice(0,180)});}});

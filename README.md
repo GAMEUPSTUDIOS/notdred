@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v49 (ℵ30 build)
+**Current version:** notdred.io — v50 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -120,6 +120,19 @@ Ships collide with each other and shove each other, push the same boulders, figh
 Each ship's room (`server/room.cjs`) still simulates its interior and crew. Every tick it sends its zone its thrust, knockbacks and shots, and gets back its position, damage (shields, or tiles once critical), loot taken in by its hatches, and score for its kills and mining.
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
+
+## Pusher settings, captains, turrets (v50)
+
+- **Pusher settings window** (right-click a pusher), laid out like drednot's configuration panel:
+  - **Max. Beam Length** and **Target Speed**, set with ◀ ▶ buttons or typed.
+  - **Default Mode** and **Filtered Mode** (push, pull or off).
+  - **Filter by Inventory**: also match expando boxes, machines and crew carrying a filtered item.
+  - **Three item filter slots**: click one to pick an item, Clear to empty it.
+  - The first object in the beam uses the filtered mode when it matches a filter, and the default mode otherwise. Old pushers convert automatically.
+- **Several captains:** captains can promote players to captain, and every captain has captain powers (MOTD, ranks, kick, ban, doors, spawn points). The ship's owner can't be demoted, kicked or banned, and only the owner can demote or remove another captain.
+- **Name tags** take the player's rank colour: captain blue, crew yellow, guest grey.
+- **Silver bots fire scattershot** (each shot is the 5-pellet spread).
+- **Turrets:** mounted turrets are drawn at each official sprite's own proportions (the auto turret's action and the starter RC were squashed). Turret item icons are put together from the game's own barrel and action pieces until drednot's own item icons are fetched.
 
 ## Physics machines and loader swing (v49)
 

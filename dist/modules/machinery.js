@@ -49,22 +49,38 @@ function pusherDirection(t){const a=(t.rotation||0)*Math.PI/2;return V(Math.roun
 // Push or pull (right-click), with the same item filter as hatches. The pusher block itself is solid; its beam is
 // cast from its centre, ignoring its own shape. Pulled cargo stops a tile short of the pusher instead of grinding into it.
 function pusherTarget(body){const item=items.find(i=>i.body===body);if(item)return {kind:'item',type:item.type};if(boxes.some(b=>b.body===body))return {kind:'box'};for(const t of terrain.values())if(t.body===body)return {kind:'machine'};return {kind:'crew'};}
-function pusherAllows(t,body){if((t.filterMode||'all')==='off')return false;const target=pusherTarget(body);if(target.kind==='item')return hatchAllows(t,target.type);return (t.filterMode||'all')!=='whitelist';}
+// Pusher settings (the configuration window): max beam length (tiles), target speed, a default mode and a filtered
+// mode (push / pull / off), up to three item filters, and "filter by inventory". The first object in the beam uses the
+// filtered mode when it matches a filter — a loose stack of that item, or, with filter-by-inventory, an expando box,
+// machine or crew member carrying one — and the default mode otherwise. Old pushers (pull flag, hatch-style filters)
+// are converted the first time they're read.
+const PUSHER_MODES=['push','pull','off'],PUSHER_FILTERS=3,PUSHER_MAX_BEAM=1000,PUSHER_MAX_SPEED=60;
+function pusherSettings(t){if(t.mode)return t;const base=t.filterMode==='off'?'off':t.pull?'pull':'push',list=(t.filterItems||[]).slice(0,PUSHER_FILTERS);
+ t.maxBeam=PUSHER_MAX_BEAM;t.speed=PUSHER_SPEED;t.filterInv=false;t.filters=[...list,null,null,null].slice(0,PUSHER_FILTERS);
+ if(t.filterMode==='whitelist'){t.mode='off';t.filteredMode=base==='off'?'push':base;}else if(t.filterMode==='blacklist'){t.mode=base;t.filteredMode='off';}else{t.mode=base;t.filteredMode=base;}return t;}
+function objectInventory(body){for(const b of boxes)if(b.body===body)return Object.keys(b.materials).filter(k=>b.materials[k]>0);for(const t of terrain.values())if(t.body===body)return Object.keys(t.materials||{}).filter(k=>t.materials[k]>0);if(typeof crew!=='undefined')for(const c of crew.values())if(c.player===body)return (c.slots||[]).filter(Boolean);if(player===body)return slots.filter(Boolean);return [];}
+function pusherModeFor(t,body){pusherSettings(t);const set=(t.filters||[]).filter(Boolean);if(!set.length)return t.mode;const target=pusherTarget(body);let match=false;
+ if(target.kind==='item')match=set.includes(target.type);else if(t.filterInv)match=objectInventory(body).some(k=>set.includes(k));return match?t.filteredMode:t.mode;}
+function pusherAllows(t,body){return pusherModeFor(t,body)!=='off';}
+function configurePusher(c,o){const t=terrainAt(c);if(!t||t.type!=='pusher_block'||piloting||P.Vec2.distance(localPlayer(),V(t.x,t.y))>8)return false;pusherSettings(t);
+ const num=(v,lo,hi,d)=>Number.isFinite(+v)?Math.min(hi,Math.max(lo,Math.round(+v))):d;
+ t.maxBeam=num(o.maxBeam,1,PUSHER_MAX_BEAM,t.maxBeam);t.speed=num(o.speed,1,PUSHER_MAX_SPEED,t.speed);if(PUSHER_MODES.includes(o.mode))t.mode=o.mode;if(PUSHER_MODES.includes(o.filteredMode))t.filteredMode=o.filteredMode;t.filterInv=!!o.filterInv;
+ if(Array.isArray(o.filters))t.filters=Array.from({length:PUSHER_FILTERS},(_,k)=>TYPES.includes(o.filters[k])?o.filters[k]:null);t.pull=t.mode==='pull';save(true);return true;}
 // Does this interior fixture let a beam through? Walkways (category 4) and nets (16) are recognised by their
 // collision category; glass shares the solid category, so the tile just past the hit point is looked up.
 function beamPasses(f,pt,d){const cat=f.getFilterCategoryBits();if(cat===4||cat===16)return true;const c={x:Math.round(pt.x+d.x*.05),y:Math.round(pt.y+d.y*.05)};if(blocks.has(key(c.x,c.y)))return false;const t=terrainAt(c);return !!t&&BEAM_PASSES.includes(t.type);}
 // The beam is blocked by the first thing in its path, solid tile or object (item stack, expando box, crew), and acts
 // only on that object: whatever sits in a beam shields everything behind it, which is what item-logic builds rely on.
-function pusherBeam(t){const d=pusherDirection(t),reach=Math.max(bounds.r-bounds.l,bounds.b-bounds.t)+2,from=V(t.x,t.y),to=V(t.x+d.x*reach,t.y+d.y*reach);let wall=1,first=null,firstFrac=1;
+function pusherBeam(t){pusherSettings(t);const d=pusherDirection(t),reach=Math.min(t.maxBeam||PUSHER_MAX_BEAM,Math.max(bounds.r-bounds.l,bounds.b-bounds.t)+2),from=V(t.x,t.y),to=V(t.x+d.x*reach,t.y+d.y*reach);let wall=1,first=null,firstFrac=1;
  inside.rayCast(from,to,(f,pt,n,frac)=>{if(f===t.f||f.isSensor())return -1;const body=f.getBody();
   if(body===interior){if(beamPasses(f,pt,d))return -1;if(frac<wall)wall=frac;return frac;}
   if(body.getType()==='dynamic'){if(frac<firstFrac){firstFrac=frac;first=body;}return frac;}return -1;});
  if(first&&firstFrac<wall)return {d,length:firstFrac*reach,bodies:[first]};
  return {d,length:wall*reach,bodies:[]};}
-function tickPushers(dt){for(const t of terrain.values()){if(t.type!=='pusher_block')continue;const {d,length,bodies}=pusherBeam(t);t.beam=length;const sign=t.pull?-1:1;
- for(const hit of bodies){if(!pusherAllows(t,hit))continue;const p=hit.getPosition();
-  if(t.pull&&Math.abs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){const v=hit.getLinearVelocity(),along=v.x*d.x+v.y*d.y;if(along<0)hit.setLinearVelocity(V(v.x-along*d.x,v.y-along*d.y));continue;}
-  const v=hit.getLinearVelocity(),along=(v.x*d.x+v.y*d.y)*sign;if(along>=PUSHER_SPEED)continue;wakeCargo(hit);const m=hit.getMass()*Math.min(PUSHER_SPEED-along,PUSHER_ACCEL*dt)*sign;hit.applyLinearImpulse(V(d.x*m,d.y*m),hit.getWorldCenter(),true);}}}
+function tickPushers(dt){for(const t of terrain.values()){if(t.type!=='pusher_block')continue;const {d,length,bodies}=pusherBeam(t);t.beam=length;const hit=bodies[0],mode=hit?pusherModeFor(t,hit):t.mode;t.beamMode=mode;if(!hit||mode==='off')continue;
+ const sign=mode==='pull'?-1:1,target=t.speed||PUSHER_SPEED,p=hit.getPosition();
+ if(mode==='pull'&&Math.abs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){const v=hit.getLinearVelocity(),along=v.x*d.x+v.y*d.y;if(along<0)hit.setLinearVelocity(V(v.x-along*d.x,v.y-along*d.y));continue;}
+ const v=hit.getLinearVelocity(),along=(v.x*d.x+v.y*d.y)*sign;if(along>=target)continue;wakeCargo(hit);const m=hit.getMass()*Math.min(target-along,PUSHER_ACCEL*dt)*sign;hit.applyLinearImpulse(V(d.x*m,d.y*m),hit.getWorldCenter(),true);}}
 // Item loader (ℵ33, Oct 2019 — "load/unload items from machines and boxes", "same filters as cargo hatches",
 // "will fill turrets more slowly"). A 1×1 background machine: each cycle it takes one stack from the tile
 // behind it and delivers it to the tile in front (R rotates; 0 = moving right). Sources: loose items, expando
