@@ -121,6 +121,13 @@ Each ship's room (`server/room.cjs`) still simulates its interior and crew. Ever
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
 
+## Private ships, rock health, fixes (v43–v44)
+- **Public / private ships.** Manage Ship → Ship Settings → *Who can join*. Private ships are hidden from other players' ship lists (and shown as "(private ship)" on the leaderboard); joining needs the **invite link** shown there (`?ship=…&key=…`, copy button). The captain and anyone the captain made crew can always rejoin. *New link* makes a new key and the old link stops working. Opening an invite link joins the ship automatically (classic mode too).
+- **World tiles use drednot's HP scale.** Rock, iron, turret ore and flux tiles have 1000 HP; ammo hits world tiles for 2.25× its damage, so standard ammo (225) takes **5 hits** to break a rock tile. Source: the official changelog (ℵ35 cut world tile health by 30% and then 100 HP, leaving 600; standard ammo did 225). Breaker ammo still breaks a tile in one hit (ℵ25).
+- **Damaged rock and ore show a health bar** (same style as ship tiles), for every ship in the zone.
+- **Shield booster** uses its own item art (the teal octagon with a lightning bolt).
+- **Lobby:** the Delete button is a small tab under your ship's card (it used to cover the whole card, so clicking to join deleted the ship).
+
 ## Team MOTD (v41)
 - Each ship has a message of the day: plain text, up to 1000 characters, saved with the ship.
 - It shows in a **Team MOTD** panel in the top-right corner (as in drednot): the title, a **Hide** button, and the message. The captain also gets an **Edit** button that turns the message into a text box with Save / Cancel. Other ranks only read it.

@@ -123,6 +123,13 @@ const TURRETS = {turret: {name: 'RC turret', reload: .4, capacity: 16}, starter_
 const TURRET_CONTROLLER = {reach: 2.8, turrets: 4};
 // Diamond-tile turret ore (2019): one of these, with equal odds.
 const TURRET_ORE_DROPS = ['turret', 'turret_burst', 'turret_auto'];
+// World tiles (rock, iron, turret ore, flux) use drednot's HP scale. The changelog says ℵ35 (27 Nov 2019) cut
+// world tile health by 30% and then by another 100 HP, leaving the 600 HP it kept until 2024, so ℵ30 tiles had
+// about 1000. Ammo hits world tiles for 2.25× its listed damage: standard (100 here) does 225, the figure drednot
+// used for standard ammo, so a rock tile takes 5 standard rounds. Breaker ammo still breaks a tile in one hit (ℵ25).
+// Treasure keeps the 4× ratio it had here before. PLACEHOLDER: the exact ℵ30 numbers aren't published.
+const WORLD_TILE_HP = {rock: 1000, iron: 1000, ore: 1000, flux: 1000, treasure: 4000};
+const WORLD_DAMAGE_SCALE = 2.25;
 const AMMO_RELOAD = {ammo: 1, scatter: 1.6, flak: 1.4, sniper: 2.2, punch: 1.2, yank: 1.2, breaker: 2, trash: .8};
 function turretDef(m) { return TURRETS[m?.starterRC ? 'starter_rc' : m?.kind || 'turret'] || TURRETS.turret; }
 function turretReload(m) { return turretDef(m).reload * (AMMO_RELOAD[m?.ammoType] || 1); }
@@ -248,4 +255,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
