@@ -29,6 +29,14 @@ assert.ok(/pusher:\['item-pusher_hand'/.test(require('node:fs').readFileSync('di
  assert.equal(run2('items.filter(i=>i.type==="pusher_block").length'),1,'the handheld pusher came out as a stationary pusher');
  run2('bindCrew("c");giveItem("wrench",1);storeCrew();');g.command('c',{action:'select',slot:run2('(bindCrew("c"),slots.indexOf("wrench"))'),aim});g.command('c',{action:'input',keys:{shift:true},held:false,aim});g.command('c',{action:'remove',aim});
  assert.ok(run2('![...terrain.values()].some(t=>t.type==="recycler")'),'Shift + right click with the wrench dismantles the recycler');}
+// A loader drops what the object it faces will never take; it waits (holding it) when the object only can't take it yet.
+{const g=createRoom(null,{});g.join('c','C',true,'captain');const run3=g.run,st=n=>{for(let i=0;i<n;i++)g.tick(1/60);};
+ run3('bounds={l:-14,r:14,t:-6,b:5};rebuildShell();rebuildMounts();for(const i of [...items])inside.destroyBody(i.body);items.length=0;for(const t of [...terrain.values()])if(t.body){inside.destroyBody(t.body);terrain.delete(t.key);}');const fy3=run3('bounds.b-1');
+ run3(`globalThis.f3=spawnMachine("fabricator",V(3,${fy3-1}));f3.kind="munitions";f3.materials={};addTerrain("loader",2,${fy3},0);spawnItem("wrench",V(1,${fy3}),V(0,0),1);player.setTransform(V(-10,${fy3}),0);`);st(150);
+ assert.equal(run3(`terrain.get(key(2,${fy3})).cargo.length`),0,'the wrench is not kept');assert.ok(run3(`items.some(i=>i.type==="wrench"&&i.body.getPosition().x>2.5)`),'dropped on the fabricator side');assert.ok(!run3('f3.materials.wrench'));assert.equal(run3(`terrainAt({x:3,y:${fy3}})===f3`),true,'the loader faces the fabricator');run3('for(const i of [...items])inside.destroyBody(i.body);items.length=0;');
+ run3(`f3.materials={iron:64};spawnItem("iron",V(1,${fy3}),V(0,0),8);`);st(150);assert.equal(run3(`terrain.get(key(2,${fy3})).cargo[0]?.type`),'iron','a full fabricator: the loader waits with the iron');
+ run3('f3.materials={};');st(30);assert.equal(run3('f3.materials.iron'),8,'and delivers once there is room '+run3(`JSON.stringify([f3.materials,terrain.get(key(2,${fy3})).cargo,terrain.get(key(2,${fy3})).swing,terrainAt({x:2,y:${fy3}})?.type])`));}
+console.log('PASS: loaders drop what the object they face will never take, and wait when it is only full or busy.');
 console.log('PASS: right click on a recycler recycles what you hold (wrench, shredder, handheld pusher); Shift + right click with the wrench dismantles it.');
 console.log('PASS: handheld pusher pushes, its beam reaches every client, own icon.');
 console.log('PASS: turrets, turret controllers and thrusters can\'t be rotated (placing, R, old saves).');

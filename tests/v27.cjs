@@ -101,7 +101,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  assert.ok(run('(i=>i&&Math.abs(i.body.getPosition().x-1)<.5&&i.body.getLinearVelocity().length()<.5)(items.find(i=>i.type==="iron"))'),'dropped on the facing tile');
  // Fabricators accept only their recipes' ingredients from a loader.
  run(clr+'const f=addTerrain("fabricator",1,0);f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("wrench",V(-1,2),V(0,0),1)');ticks(120);
- assert.equal(run('terrainAt({x:1,y:0}).materials.wrench'),undefined,'a wrench is not loaded into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo[0]?.type'),'wrench','the loader holds it instead');
+ assert.equal(run('terrainAt({x:1,y:0}).materials.wrench'),undefined,'a wrench is not loaded into a fabricator');assert.equal(run('terrain.get(key(0,2)).cargo.length'),0,'the loader does not keep it');assert.ok(run('items.some(i=>i.type==="wrench"&&Math.abs(i.body.getPosition().x-1)<.6)'),'it drops it on the tile it faces');
  run(clr+'const f=addTerrain("fabricator",1,0);f.kind="munitions";f.materials={};addTerrain("loader",0,2,0);spawnItem("explosives",V(-1,2),V(0,0),8)');ticks(120);assert.equal(run('terrainAt({x:1,y:0}).materials.explosives'),8,'ingredients go in');
  // Only ammo goes into a turret.
  run('initialize();const rc=mounts.find(m=>m.side==="right"&&m.type==="turret");rc.ammo=0;const lt={type:"loader",x:bounds.r-2,y:mountPoint(rc).y,rotation:0,cargo:[]};globalThis.n1=loaderGive(lt,{x:bounds.r,y:mountPoint(rc).y},{type:"iron",count:16},V(1,0));globalThis.n2=loaderGive(lt,{x:bounds.r,y:mountPoint(rc).y},{type:"ammo",count:16},V(1,0))');

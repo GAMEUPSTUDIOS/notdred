@@ -20,10 +20,10 @@ assert.equal(sum('ammo',-99,99),0,'all ammo went in through the feed loader');
 assert.equal(run('box.materials.iron||0'),6,'output loader unloaded the iron into the expando box');assert.equal(run('box.materials.explosives||0'),6,'…and the explosives');
 assert.equal(run(`items.filter(i=>i.body.getPosition().x>${rx-.5}&&i.body.getPosition().x<${rx+2.5}).length`),0,'nothing left inside the recycler');
 
-// The feed loader holds what can't be recycled (iron) instead of dumping it inside.
+// What can't be recycled (iron) isn't kept by the feed loader: it drops it where its hand is, inside the recycler's tiles.
 run(`spawnItem("iron",V(${rx-2},${fy}),V(0,0),10)`);step(200);
-assert.equal(run(`terrainAt({x:${rx-1},y:${fy}}).cargo?.[0]?.type`),'iron','iron held in the feed loader');
-run(`terrainAt({x:${rx-1},y:${fy}}).cargo=[];`);
+assert.equal(run(`terrainAt({x:${rx-1},y:${fy}}).cargo.length`),0,'not held in the feed loader');assert.ok(run(`items.some(i=>i.type==="iron"&&i.count===10&&i.body.getPosition().x>${rx-.6})`)||run('box.materials.iron')===16,'dropped (and the unloader may carry it to the box)');
+run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;');
 
 // A stationary pusher it makes (from a handheld pusher) is unloaded, not recycled again.
 run(`spawnItem("pusher",V(${rx-2},${fy}),V(0,0),1)`);step(400);
@@ -36,5 +36,5 @@ step(300);assert.equal(sum('ammo',-99,99),16,'pushed against it, not recycled');
 run('globalThis.__th={type:"thruster"};globalThis.__mh=mountHit;mountHit=()=>__th;');
 assert.equal(run('loaderGive({},{x:99,y:99},{type:"fuel",count:12},V(1,0))'),12);assert.equal(run('loaderGive({},{x:99,y:99},{type:"fuel",count:12},V(1,0))'),4,'tank tops out at 16');
 assert.equal(run('loaderGive({},{x:99,y:99},{type:"iron",count:5},V(1,0))'),0,'not iron');run('mountHit=__mh;');
-console.log('PASS: automated recycling — feed loader into a recycler (holds what can\'t be recycled), unload loader for its output into an expando box, pushers can\'t load it (solid); loaders fill thruster tanks.');
+console.log('PASS: automated recycling — feed loader into a recycler (drops what can\'t be recycled), unload loader for its output into an expando box, pushers can\'t load it (solid); loaders fill thruster tanks.');
 process.exit(0);
