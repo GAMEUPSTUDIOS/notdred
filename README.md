@@ -369,22 +369,20 @@ Push this repo to GitHub, a private repo works. Then:
 
 1. Open the repo and choose **Code → Codespaces → Create codespace on main**.
 2. The first start builds everything, which takes a few minutes.
-3. The terminal then prints a temporary link like `https://<name>-8080.app.github.dev` and your dev-menu token. Share the link with testers.
+3. The terminal then prints a temporary Cloudflare link like `https://random-words.trycloudflare.com` (plus the GitHub Pages link for it, GitHub's own `https://<name>-8080.app.github.dev` address and your dev-menu token). Share the Cloudflare link with testers.
 
-The link lives while the codespace runs and stops after GitHub's idle timeout (30 minutes by default; adjustable in your Codespaces settings). If the link asks testers to sign in to GitHub, set port 8080 to **Public** in the **PORTS** tab. The server log is at `/tmp/freeport.log`.
+`scripts/codespace-start.sh` opens the Cloudflare quick tunnel automatically: it installs `cloudflared` the first time (`scripts/cloudflared.sh`, into `~/.local/bin`), opens the tunnel, and starts the server set to accept players arriving through it. No account is needed. The address changes every time the script runs; if Cloudflare can't be reached, the script falls back to GitHub's address. `NO_TUNNEL=1 bash scripts/codespace-start.sh` skips the tunnel.
+
+The links live while the codespace runs and stop after GitHub's idle timeout (30 minutes by default; adjustable in your Codespaces settings). If GitHub's address asks testers to sign in to GitHub, set port 8080 to **Public** in the **PORTS** tab. Logs: `/tmp/freeport.log` (server), `/tmp/freeport-tunnel.log` (tunnel).
 
 ## Temporary public test link
 
 To host on your own machine with a throwaway public address:
 
-1. Install `cloudflared`:
-   - macOS: `brew install cloudflared`
-   - Windows: `winget install --id Cloudflare.cloudflared`
-   - Linux: download it from Cloudflare's releases page.
-2. Run `npm ci`, then `npm run build:native`.
-3. Run `npm run host`.
+1. Run `npm ci`, then `npm run build:native`.
+2. Run `npm run host`.
 
-It starts the server, opens a Cloudflare quick tunnel, and prints a link like `https://random-words.trycloudflare.com`. Testers open the link and choose **Connect**; the server address fills in automatically.
+On Linux and macOS it installs `cloudflared` itself the first time (Windows: `winget install --id Cloudflare.cloudflared` first). It opens a Cloudflare quick tunnel, starts the server set to accept players arriving through it (and from the GitHub Pages site, whose link it also prints), and prints a link like `https://random-words.trycloudflare.com`. Testers open the link and choose **Connect**; the server address fills in automatically.
 
 The link changes every run and stops when you press Ctrl+C. Anyone with the link can play, so share it only with testers. The dev-menu token printed alongside it is for you.
 
