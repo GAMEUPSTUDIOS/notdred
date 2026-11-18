@@ -14,6 +14,6 @@ r.game.command('cap',{action:'edit',aim:{x:0,y:0}});step(10);assert.equal(run('i
 const sv=codec.decode(codec.encode(JSON.parse(JSON.stringify(run('state()')))));assert.ok(sv.boosterLeft>0,'saved with the ship');
 step(Math.ceil(60*T));assert.equal(run('boosterLeft'),0);assert.ok(run('shipHP')>=100+era.SHIELDS.boosterAmount,'heals when the charge completes');
 const game=fs.readFileSync('dist/game.js','utf8');assert.ok(/function drawBoosterBar/.test(game)&&/if\(boosterLeft>0\)drawBoosterBar/.test(game),'bar drawn under the shield bar');
-assert.ok(/turret:\['official-turret_action_rc'\]/.test(game)&&!/item-turret_rc'/.test(game),'RC turret icon from the pack pieces');
+assert.ok(/turret:\['item-turret_rc'\]/.test(game)&&/starter_rc:\['item-turret_rc_starter'\]/.test(game),'packaged turret icons');
 console.log('PASS: shield boosters charge for '+T+' s before healing (bar shown, one at a time, saved); turret icons from the original pack pieces.');
 process.exit(0);

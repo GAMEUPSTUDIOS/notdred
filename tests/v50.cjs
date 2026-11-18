@@ -30,7 +30,7 @@ assert.ok(['push','pull','off'].includes(run(`${P}.beamMode`)));
 // Silver bots fire scattershot: each volley shot is the 5-pellet spread.
 assert.equal(era.BOT_TYPES.silver.shotType,'scatter');const combat=fs.readFileSync('dist/modules/combat.js','utf8');assert.ok(/am=AMMO\[def\.shotType\],n=am\?\.pellets\|\|1/.test(combat));
 // Turret icons and rank-coloured name tags.
-const game=fs.readFileSync('dist/game.js','utf8');assert.ok(/TURRET_ICON_PARTS=\{turret:\['official-turret_barrel_rc','official-turret_action_rc'\]/.test(game)&&!/'turret-placed'\]/.test(game),'turret icons from the turret pieces');
+const game=fs.readFileSync('dist/game.js','utf8');assert.ok(/turret:\['item-turret_rc'\]/.test(game)&&/TURRET_ICON_PARTS=\{\}/.test(game),'turret icons are the packaged items');
 assert.ok(/RANK_NAME_COLOR=\{captain:'#5fc4ff',crew:'#ffd34a',guest:'#cfd8dc'\}/.test(game)&&/RANK_NAME_COLOR\[nameRank\(\)\]/.test(game),'name tags take the rank colour');
 for(const f of ['turret_barrel_rc','turret_action_rc','turret_barrel_burst','turret_action_burst','turret_action_auto','turret_barrel','turret_controller','turret_barrel_rc_starter','turret_action_rc_starter'])assert.ok(fs.existsSync('dist/sprites/official-'+f+'.png'),f);
 console.log('PASS: pusher settings (beam length, target speed, default/filtered push·pull·off, item filters, filter by inventory, clamped, saved); silver bots fire scattershot; turret icons from turret pieces; rank-coloured name tags.');

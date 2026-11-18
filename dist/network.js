@@ -118,7 +118,7 @@ function drawOtherShips(){if(!netActive||!netOthers.size)return;{const n=perform
   // Live machine state goes into a terrain map so drawTerrain sees it exactly as it does for your own ship.
   /* kept per ship (until its layout changes) so door slides and other smoothing carry on between frames */if(o.terrKey!==o.layoutKey||!o.terr){o.terrKey=o.layoutKey;o.terr=new TerrainMap();for(const [type,tx,ty,r,extra] of L.terrain)o.terr.set(key(tx,ty),{type,x:tx,y:ty,rotation:r,...(extra||{})});}terrain=o.terr;
   const since=(performance.now()-(o.liveAt||o.at))/1000;for(const [tx,ty,f] of live?.t||[]){const rec=terrain.get(key(tx,ty));if(!rec)continue;Object.assign(rec,f);for(const k of ['busy','sent','flash','chewing'])if(f[k])rec[k]=clock+f[k]-since;}
-  const ms=L.mounts.map((m,i)=>{const v=live?.m?.[i];if(!v)return m;const [aim,recoil,active,ammo,dir]=v;return {...m,aim:smoothAim(o,i,aim),recoilUntil:clock+recoil-since,active:!!active,ammo,...(dir?{thrustDirection:V(dir[0],dir[1])}:{})};});mounts=ms;
+  const ms=L.mounts.map((m,i)=>{const v=live?.m?.[i];if(!v)return m;const [aim,recoil,active,ammo,dir,ammoType]=v;return {...m,ammoType:ammoType||'ammo',aim:smoothAim(o,i,aim),recoilUntil:clock+recoil-since,active:!!active,ammo,...(dir?{thrustDirection:V(dir[0],dir[1])}:{})};});mounts=ms;
   doorCrewOverride=o.crew.map(c=>({p:{x:c.x,y:c.y},rank:c.r||'guest'}));
   ctx.save();ctx.translate(snapX(x),snapY(y));
   drawShipFloor(b);for(let xx=b.l;xx<=b.r;xx++){if(!brokenHull.has(key(xx,b.t)))boundary(xx,b.t);if(!brokenHull.has(key(xx,b.b)))boundary(xx,b.b);}for(let yy=b.t+1;yy<b.b;yy++){if(!brokenHull.has(key(b.l,yy)))boundary(b.l,yy);if(!brokenHull.has(key(b.r,yy)))boundary(b.r,yy);}
