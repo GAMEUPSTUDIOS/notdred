@@ -33,7 +33,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  // Sniper ricochets off rock instead of stopping.
  run(zoneSetup+firstRock+'shots.push({type:"sniper",p:V(r.x-3.5,r.y),v:V(140,0),life:2,maxLife:2,bounces:2});for(let k=0;k<4;k++)tickShots(1/60)');assert.ok(run('shots.length===1&&shots[0].v.x<0&&shots[0].bounces===1'),'sniper bounced');
  // Trash decays: a late hit deals far less than a fresh one.
- assert.ok(run('shotDamage({type:"trash",life:.1,maxLife:1.2})')<run('shotDamage({type:"trash",life:1.2,maxLife:1.2})')*.3,'trash decays');
+ assert.equal(run('shotDamage({type:"trash",life:.1,maxLife:1.2})'),run('shotDamage({type:"ammo",life:2,maxLife:2})'),'ℵ10: trash hits as hard as standard');run('items.length=0;spawnItem("trash",V(0,1),V(0,0),16);for(let k=0;k<60*120;k++)tickTrashDecay(1/60)');assert.ok(run('(items.find(i=>i.type==="trash")?.count||0)')<16,'ℵ23: trash items decay');
  // Yank pulls a bot toward the shooter; punch pushes it away.
  for(const [type,sign] of [['yank',-1],['punch',1]]){run(zoneSetup+`const b=findBot("red",0);b.body.setTransform(V(30,0),0);b.body.setLinearVelocity(V(0,0));shots.push({type:"${type}",p:V(25,0),v:V(90,0),life:2,maxLife:2});for(let k=0;k<6;k++)tickShots(1/60)`);assert.ok(run('findBot("red",0).body.getLinearVelocity().x')*sign>0,type+' impulse direction');}
  // Saves keep every ammo type in a turret.

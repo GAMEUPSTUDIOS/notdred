@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v42 (ℵ30 build)
+**Current version:** notdred.io — v45 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -120,6 +120,21 @@ Ships collide with each other and shove each other, push the same boulders, figh
 Each ship's room (`server/room.cjs`) still simulates its interior and crew. Every tick it sends its zone its thrust, knockbacks and shots, and gets back its position, damage (shields, or tiles once critical), loot taken in by its hatches, and score for its kills and mining.
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
+
+## Machines, ammo balance, live ships (v45)
+
+- **Recycler** (3×4, Machine fabricator, 16 iron): drop a stack in (or click it with the stack in hand) and it gives back half of what the item cost, from its bottom-right corner. A handheld pusher comes back as a stationary pusher (ℵ30). Raw resources and starter items are left alone; trash is eaten. Drednot's own recycler returned 80% at ℵ25: change `RECYCLE_RETURN` in `era.js` for that.
+- **Comms station** (1×2, Machine fabricator, 8 iron): click it to talk to every ship in the zone. Ordinary chat now stays aboard your own ship (ℵ14). Classic mode: start a chat line with `;` while standing at one.
+- **Freeport anchor** (3×3, Engineering fabricator): while one is aboard in a Freeport, the ship can't leave through a portal (ℵ34).
+- **Spawn point** (1×1, Engineering fabricator, 8 iron): click it to choose captain, crew or guests. A player joining appears at a random spawn point set to their rank, otherwise at the helm (ℵ14). Crew and the captain can change it (ℵ15).
+- **Ammo** follows the ℵ30 changelog: standard reloads twice as fast as every other type (ℵ10); punch, yank and trash hit as hard as standard (ℵ7/ℵ10); scatter and flak are 5 pellets each, and scatter is strongest up close; loose trash ammo slowly decays (ℵ23). Every round hits rock for 2.25× its damage: standard and punch/yank take 5 hits to break a rock tile, sniper 3, breaker 1.
+- **Stacks merge** whenever two stacks of the same item touch (the server's contact mirror only found new contacts when something spawned).
+- **Freeport docks**: every edge wall of a Freeport (floor, ceiling and both sides) docks ships, not just the central dock.
+- **Other ships are drawn live**: turret aim and recoil, thruster flames, ammo, doors, fabricators, loaders, pushers, recyclers, loose items and expando boxes, for ships within about 160 world units (`LIVE_RANGE`).
+- New or reloaded ships never appear inside another ship (a second new ship used to land on top of the first).
+- Green bots drop a handheld pusher. Blue rammers are faster and shove ships back when they hit. Canary iron tiles drop 64 iron.
+- The server prints the **dev token** every time it starts. Without `DEV_TOKEN` it makes one on first run and keeps it in `data/dev-token.txt`.
+- Hull and rock tiles are cut out of their texture atlas once, fixing thin lines along tile edges in Safari.
 
 ## Private ships, rock health, fixes (v43–v44)
 - **Public / private ships.** Manage Ship → Ship Settings → *Who can join*. Private ships are hidden from other players' ship lists (and shown as "(private ship)" on the leaderboard); joining needs the **invite link** shown there (`?ship=…&key=…`, copy button). The captain and anyone the captain made crew can always rejoin. *New link* makes a new key and the old link stops working. Opening an invite link joins the ship automatically (classic mode too).

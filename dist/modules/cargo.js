@@ -1,7 +1,7 @@
 'use strict';
 function spawnItem(type,p,velocity=V(0,0),count=1){const body=inside.createDynamicBody({position:V(p.x,p.y),bullet:true,angularDamping:3});body.createFixture(P.Box(.32,.32),{density:3,friction:.8,restitution:.08,filterCategoryBits:8,filterMaskBits:1|2|8|16|256});body.setLinearVelocity(velocity);const item={type,body,count:Math.min(stackLimit(type),count)};items.push(item);return item}
 
-function stackLimit(type){return ['wrench','fabricator','thruster','turret','turret_burst','turret_auto','turret_controller','starter_rc','starter','storage','shredder','pusher','repair','pusher_block','fab_starter','fab_machine','fab_engineering','fab_munitions','loader'].includes(type)?1:16}
+function stackLimit(type){return ['wrench','fabricator','thruster','turret','turret_burst','turret_auto','turret_controller','starter_rc','starter','storage','shredder','pusher','repair','pusher_block','fab_starter','fab_machine','fab_engineering','fab_munitions','loader','recycler','anchor','comms','spawn'].includes(type)?1:16}
 
 function makeInventory(){return new Proxy(Object.fromEntries(TYPES.map(t=>[t,0])),{get(o,t){return TYPES.includes(t)?carried(t):o[t]},set(o,t,value){if(!TYPES.includes(t)){o[t]=value;return true}const delta=value-carried(t);if(delta>0)giveItem(t,delta);else if(delta<0)takeItem(t,-delta);return true},ownKeys(){return TYPES},getOwnPropertyDescriptor(){return {enumerable:true,configurable:true}}})}
 
@@ -39,7 +39,11 @@ function wakeCargoNear(p,radius){for(const i of [...items,...boxes])if(P.Vec2.di
 
 function holdCargoAwake(body,owner){let locks=cargoWakeLocks.get(body);if(!locks){locks=new Set();cargoWakeLocks.set(body,locks);}const token={owner};locks.add(token);body.setSleepingAllowed(false);wakeCargo(body);let released=false;return ()=>{if(released)return;released=true;locks.delete(token);if(!locks.size){body.setSleepingAllowed(true);wakeCargo(body);}};}
 
-function mergeTouchingCargo(list,physics){const byBody=new Map(list.map(i=>[i.body,i])),removed=new Set();for(const x of list){if(removed.has(x))continue;for(let e=x.body.getContactList();e;e=e.next){const y=byBody.get(e.other);if(!y||y===x||removed.has(y)||!e.contact.isTouching()||x.type!==y.type||x.count+y.count>stackLimit(x.type))continue;
+// Resting stacks often sit a hair apart (the physics engine keeps a tiny gap), so 'touching' also means face to face
+// within a few hundredths of a tile — otherwise two piles side by side, or one dropped on another, never merged.
+function cargoHalf(b){const v=b.getFixtureList()?.getShape()?.m_vertices;return v?Math.abs(v[0].x):.32;}
+function cargoNear(a,b){const p=a.getPosition(),q=b.getPosition();return Math.hypot(p.x-q.x,p.y-q.y)<(cargoHalf(a)+cargoHalf(b))*1.15;}
+function mergeTouchingCargo(list,physics){const byBody=new Map(list.map(i=>[i.body,i])),removed=new Set();for(const x of list){if(removed.has(x))continue;for(let e=x.body.getContactList();e;e=e.next){const y=byBody.get(e.other);if(!y||y===x||removed.has(y)||x.type!==y.type||x.count+y.count>stackLimit(x.type)||!(e.contact.isTouching()||cargoNear(x.body,y.body)))continue;
 // An active logic owner can keep an item's identity stable while manipulating it.
 if(cargoWakeLocks.get(x.body)?.size||cargoWakeLocks.get(y.body)?.size)continue;
 const vx=x.body.getLinearVelocity(),vy=y.body.getLinearVelocity(),total=x.count+y.count;x.body.setLinearVelocity(V((vx.x*x.count+vy.x*y.count)/total,(vx.y*x.count+vy.y*y.count)/total));x.count=total;x.grace=Math.max(x.grace||0,y.grace||0);wakeCargo(x.body);removed.add(y);}}

@@ -1,6 +1,9 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
 const root=path.resolve(__dirname,'..'),dataDir=path.resolve(process.env.DATA_DIR||path.join(root,'data'));fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
+// The dev menu token. Set DEV_TOKEN to choose one; otherwise one is made on first run and kept in data/dev-token.txt
+// so it stays the same across restarts. It is printed every time the server starts.
+if(!process.env.DEV_TOKEN){const f=path.join(dataDir,'dev-token.txt');let t='';try{t=fs.readFileSync(f,'utf8').trim();}catch{}if(!/^[\w-]{8,}$/.test(t)){t=crypto.randomBytes(9).toString('hex');try{fs.writeFileSync(f,t+'\n',{mode:0o600});}catch{}}process.env.DEV_TOKEN=t;}
 const cliPort=process.argv.indexOf('--port');const port=Number(process.env.PORT||(cliPort>=0?process.argv[cliPort+1]:8080));
 // Limits. Stored ships are cheap (a file); loaded ships each run two physics worlds and cost CPU.
 const MAX_LOADED=Number(process.env.MAX_LOADED_SHIPS||16),MAX_STORED=500,MAX_OWNED=4,MAX_CREW=8,IDLE_UNLOAD_MS=Number(process.env.IDLE_UNLOAD_MS||60000),SAVE_INTERVAL_MS=Number(process.env.SAVE_INTERVAL_MS||10000),RETURN_MS=Number(process.env.SHIP_RETURN_MS||era.RETURN_SECONDS*1000);
@@ -46,9 +49,11 @@ function crewReport(r,ws){const online=new Map([...r.members].map(m=>[m.owner,m]
  for(const row of rows){const o=Object.keys(r.people).find(k=>r.people[k].short===row.short);row.banned=!!r.bans?.[o];const v=row.uid&&r.votes?.[o];row.votes=v?[...v.voters].length:0;row.voted=!!(v&&v.voters.has(ws.owner));}
  rows.sort((a,b)=>(b.online-a.online)||(b.owner-a.owner)||(b.playtime-a.playtime));return {type:'crew',ship:info(r).name,captain:r.owner===ws.owner,rank:rankOf(r,ws),votesNeeded:votesNeeded(r),log:(r.log||[]).slice(-200),crew:rows};}
 // Chat: everyone in the same zone (all ships there) plus your own crew wherever they are. Rate-limited, plain text.
-function chat(ws,text){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
- const z=zoneOf(r),msg={type:'chat',from:ws.name,ship:info(r).name,rank:rankOf(r,ws),zone:era.ZONES[z]?.name||z,text,t:now};
- for(const c of clients)if(c.room&&(c.room===r||zoneOf(c.room)===z))send(c,msg);}
+// Chat stays aboard your own ship; a comms station (ℵ14, "communication with other ships") reaches every ship in the zone.
+function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
+ if(comms&&!r.game.run(`commsCheck(${JSON.stringify(ws.uid)})`)){ws.lastChat=0;throw Error('Stand at a comms station to talk to other ships.');}
+ const z=zoneOf(r),msg={type:'chat',from:ws.name,ship:info(r).name,rank:rankOf(r,ws),zone:era.ZONES[z]?.name||z,text,t:now,...(comms?{comms:true}:{})};
+ for(const c of clients)if(c.room&&(c.room===r||comms&&zoneOf(c.room)===z))send(c,msg);}
 // Private ships (captain's choice): hidden from other players' ship lists and joinable only with the invite link
 // (?ship=<id>&key=<invite>). The captain, and people the captain made crew, can always see and rejoin them.
 const insider=(r,ws)=>!!ws&&(r.owner===ws.owner||r.ranks?.[ws.owner]==='crew');
@@ -92,6 +97,7 @@ function onConnection(ws){clients.add(ws);ws.uid=id();ws.name='Crew';ws.actions=
  if(m.type==='delete'){const r=rooms.get(m.room);if(!r)throw Error('Ship not found');if(r.owner!==ws.owner)throw Error('Only the captain can delete this ship');if(r.members.size)throw Error('Everyone must leave the ship first');if(r.game){try{r.game.dispose();}catch{}r.game=null;}rooms.delete(r.id);fs.rmSync(path.join(dataDir,r.id+'.json'),{force:true});return send(ws,{type:'rooms',rooms:list(ws)});}
  if(!ws.room)throw Error('Join a ship first');
  if(m.type==='chat')return chat(ws,m.text);
+ if(m.type==='comms')return chat(ws,m.text,true);
  if(m.type==='crew')return send(ws,crewReport(ws.room,ws));
  // Ship settings: privacy and the invite link (the link's key only goes to the captain and crew).
  if(m.type==='shipsettings'){const r=ws.room;return send(ws,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,ws)?r.invite:null,captain:r.owner===ws.owner});}
@@ -138,7 +144,7 @@ const timer=setInterval(()=>{const now=performance.now();acc+=Math.min((now-prev
  if(frames>=3){frames=0;const live=[...rooms.values()].filter(r=>r.game&&r.members.size);
   // Pass 1: every ship's exterior (layout hash changes only when the ship is rebuilt), so pass 2 never
   // lists a ship to others before its hull is known.
-  for(const r of live){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();}catch(e){recover(r,e);}}
+  for(const r of live){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();r.liveCache=r.game.zone.exteriorLive();}catch(e){recover(r,e);}}
   for(const r of live){if(!r.game)continue;try{for(const ws of r.members){const st=r.game.snapshot(ws.uid);
     // Log: helm use, and zone changes (credited to whoever is at the helm).
     const pil=!!st?.self?.piloting;if(pil&&!ws.wasPiloting)logEvent(r,ws,'started using helm.','helm');ws.wasPiloting=pil;
@@ -155,4 +161,4 @@ function returnEmptyShips(){const now=Date.now();for(const r of rooms.values()){
 const returns=setInterval(returnEmptyShips,Math.min(1000,RETURN_MS/4));
 const heartbeat=setInterval(()=>{for(const ws of clients){if(!ws.alive)ws.terminate();else{ws.alive=false;ws.ping();}}},15000);
 function shutdown(){clearInterval(timer);try{classic.dispose();}catch{}clearInterval(returns);clearInterval(saves);clearInterval(heartbeat);for(const ws of clients)leave(ws);for(const r of rooms.values())persist(r);try{bus.save();}catch{}wss.close();server.close(()=>process.exit(0));for(const ws of clients)ws.close();setTimeout(()=>process.exit(0),1000).unref();}process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
-server.listen(port,process.env.HOST||'127.0.0.1',()=>console.log('notdred.io server listening on '+(process.env.HOST||'127.0.0.1')+':'+port));
+server.listen(port,process.env.HOST||'127.0.0.1',()=>{console.log('notdred.io server listening on '+(process.env.HOST||'127.0.0.1')+':'+port);console.log('Dev token (paste it into the Token box on the main menu for the dev menu): '+process.env.DEV_TOKEN);});

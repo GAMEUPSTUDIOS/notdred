@@ -103,3 +103,28 @@ function tickLoaders(dt){for(const t of terrain.values()){if(t.type!=='loader')c
  if(t.cooldown>0)continue;
  if(t.cargo.length){const stack=t.cargo[0],n=loaderGive(t,output,stack,d);if(n>0){stack.count-=n;if(stack.count<=0)t.cargo.shift();t.flash=clock+.25;}}
  t.cooldown=Math.max(t.cooldown,LOADER_CYCLE);}}
+
+// ---- Recyclers -------------------------------------------------------------------------------------------------------
+// A loose stack that falls into a recycler's 3×4 frame is broken back down into half of what it cost (RECYCLE_RETURN),
+// one stack a second; fractions carry over per recycler so small stacks of ammo still add up. Out comes the
+// resources at the bottom-right corner (the arrow on the sprite). Starter items, raw resources and anything without
+// a recipe are left alone; trash ammo is simply eaten.
+function recycleYield(type,count){if(RECYCLE_SWAP[type])return {[RECYCLE_SWAP[type]]:count};if(STARTER_ITEMS.includes(type)||type==='fab_starter')return null;if(FREE_RECIPES.includes(type))return {};const need=recipeNeeds(type);if(!need)return null;const per=RECIPE_YIELD[type]||1,out={};for(const [m,n] of Object.entries(need))out[m]=n*count/per*RECYCLE_RETURN;return out;}
+function inRecycler(f,p){const [w,h]=MACHINE_SIZE.recycler;return p.x>f.x-.5&&p.x<f.x+w-.5&&p.y>f.y-.5&&p.y<f.y+h-.5;}
+function recycleStack(f,type,count){const y=recycleYield(type,count);if(!y)return false;f.credit=f.credit||{};const out=[];for(const [m,n] of Object.entries(y)){f.credit[m]=(f.credit[m]||0)+n;const whole=Math.floor(f.credit[m]+1e-9);if(whole>0){f.credit[m]-=whole;out.push([m,whole]);}}
+ const [w,h]=MACHINE_SIZE.recycler;let n=0;for(const [m,k] of out){let left=k;while(left>0){const c=Math.min(stackLimit(m),left);const it=spawnItem(m,V(f.x+w-1.2+(n%2)*.2,f.y+h-1.6),V(1.5,-1),c);it.recycled=true;left-=c;n++;}}
+ f.busy=clock+1;f.lastOut=out.length?out.map(([m,k])=>k+' '+NAMES[m]).join(', '):'(nothing left)';actionEffect(f.x+1,f.y+1,'red',count+' x '+NAMES[type]);return true;}
+function tickRecyclers(dt){const list=[...terrain.values()].filter(t=>t.type==='recycler');if(!list.length)return;for(const f of list)f.cool=Math.max(0,(f.cool||0)-dt);for(const i of [...items]){const p=i.body.getPosition(),f=list.find(f=>inRecycler(f,p));if(!f){i.recycled=false;continue;}if(i.recycled||f.cool>0)continue;if(!recycleStack(f,i.type,i.count)){i.recycled=true;continue;}inside.destroyBody(i.body);items.splice(items.indexOf(i),1);f.cool=1;}}
+// Clicking a recycler with an item in hand feeds it the whole stack.
+function recycleCarried(f){if(P.Vec2.distance(localPlayer(),V(f.x+1,f.y+1.5))>4)return toast('Move closer to the recycler.');const t=slots[selected],n=stackCounts[selected];if(!t||!n)return toast('Hold an item to recycle, or drop it into the recycler.');if((f.cool||0)>0)return toast('The recycler is still working.');if(!recycleStack(f,t,n))return toast(NAMES[t]+' can\'t be recycled.');stackCounts[selected]=0;slots[selected]=null;f.cool=1;selectSlot(selected);save(true);}
+
+// ---- Trash ammo decays (ℵ23: "It will decay in item form and in expando-boxes") ------------------------------------
+function tickTrashDecay(dt){const life=AMMO.trash.itemDecay||45;for(const i of [...items])if(i.type==='trash'&&Math.random()<dt/life){i.count--;if(i.count<=0){inside.destroyBody(i.body);items.splice(items.indexOf(i),1);}}for(const b of boxes)if(b.materials.trash>0&&Math.random()<dt*Math.min(16,b.materials.trash)/life/4)b.materials.trash--;}
+
+// ---- Comms stations and spawn points ----------------------------------------------------------------------------------
+function nearComms(p=localPlayer()){return [...terrain.values()].find(t=>t.type==='comms'&&P.Vec2.distance(p,V(t.x,t.y+.5))<COMMS_RANGE);}
+// ℵ14: a joining player appears at a random spawn point set exactly to their rank.
+function spawnPointFor(rank){const list=[...terrain.values()].filter(t=>t.type==='spawn'&&(t.access||'crew')===rank);return list.length?list[Math.floor(Math.random()*list.length)]:null;}
+function setSpawnRank(t,rank){if(!t||t.type!=='spawn'||!SPAWN_RANKS.includes(rank))return false;t.access=rank;return true;}
+// ℵ34 Freeport anchor: while one is aboard, the ship can't leave a safe zone through a portal.
+function anchored(){return zoneDef().kind==='safe'&&[...terrain.values()].some(t=>t.type==='anchor');}

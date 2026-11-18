@@ -58,7 +58,7 @@ function createClassic({onConnection,root}){
     const t=Date.now();const wait=()=>{if(s.welcome)return js(res,{session:s.id,token:s.welcome.token,admin:!!s.welcome.admin,rooms:s.welcome.rooms});if(Date.now()-t>6000)return js(res,{error:'The server did not answer.'});setTimeout(wait,20);};return wait();}
    const s=sessions.get(q.get('s')||'');if(!s)return op==='frame'?reply(res,410,'Session ended'):js(res,{error:'Your classic session has ended. Reload the page.',ended:true});s.last=Date.now();
    if(op==='send'){let m;try{m=JSON.parse(q.get('m')||'');}catch{return js(res,{error:'Bad message'});}
-    if(!m||typeof m!=='object'||!['create','join','leave','list','chat','leaderboard','rename','delete','motd'].includes(m.type))return js(res,{error:'Not allowed'});s.toServer(m);return js(res,{ok:true});}
+    if(!m||typeof m!=='object'||!['create','join','leave','list','chat','comms','leaderboard','rename','delete','motd'].includes(m.type))return js(res,{error:'Not allowed'});s.toServer(m);return js(res,{ok:true});}
    if(op==='key'){s.post({t:'key',type:q.get('d')==='1'?'keydown':'keyup',key:String(q.get('k')||'').slice(0,12),shift:q.get('sh')==='1',repeat:q.get('r')==='1'});return js(res,{ok:true});}
    if(op==='click'){const w=num(q.get('w'),160,1280,640),h=num(q.get('h'),120,960,400);s.post({t:'mouse',x:num(q.get('x'),0,w,0),y:num(q.get('y'),0,h,0),button:q.get('b')==='2'?2:0,w,h});return js(res,{ok:true});}
    if(op==='craft'){s.post({t:'craft',item:String(q.get('item')||''),n:num(q.get('n'),1,8,1)});return js(res,{ok:true});}

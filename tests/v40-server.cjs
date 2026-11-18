@@ -25,10 +25,10 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!(awai
  await api('/classic/key?s='+S+'&k=2&d=1');await api('/classic/key?s='+S+'&k=2&d=0');await until(async()=>(await api('/classic/poll?s='+S)).status?.selected===1,3000,'slot 2');
  await api('/classic/key?s='+S+'&k=1&d=1');await api('/classic/key?s='+S+'&k=1&d=0');await api('/classic/key?s='+S+'&k=e&d=1');await api('/classic/key?s='+S+'&k=e&d=0');
  await until(async()=>(await api('/classic/poll?s='+S)).status?.piloting,3000,'took the helm with E');
- // Other players see the classic ship and hear its chat.
+ // Other players see the classic ship, and a modern player aboard it hears the classic player's chat.
  const ws=new WebSocket(`ws://127.0.0.1:${PORT}/play`,{headers:{origin:`http://127.0.0.1:${PORT}`}});const heard=[];let rooms=null;
- ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name:'Modern'}));if(m.type==='welcome'){rooms=m.rooms;ws.send(JSON.stringify({type:'create',name:'Neighbour'}));}if(m.type==='chat')heard.push(m);});
- await until(()=>rooms,3000,'modern client');assert.ok(rooms.some(r=>r.name==='Win2000 Express'&&r.players===1),'classic ship listed for modern players');await sleep(600);
+ ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name:'Modern'}));if(m.type==='welcome'){rooms=m.rooms;}if(m.type==='chat')heard.push(m);});
+ await until(()=>rooms,3000,'modern client');assert.ok(rooms.some(r=>r.name==='Win2000 Express'&&r.players===1),'classic ship listed for modern players');ws.send(JSON.stringify({type:'join',room:rooms.find(r=>r.name==='Win2000 Express').id}));await sleep(600);
  await api('/classic/send?s='+S+'&m='+encodeURIComponent(JSON.stringify({type:'chat',text:'hello from 2000'})));await until(()=>heard.some(m=>m.text==='hello from 2000'&&m.from==='Old Timer'),3000,'chat');
  // Classic sessions can only send lobby/chat messages directly; game actions go through the headless client.
  assert.ok((await api('/classic/send?s='+S+'&m='+encodeURIComponent(JSON.stringify({type:'action',action:'dev',op:'finch'})))).error,'raw actions refused');

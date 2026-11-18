@@ -11,7 +11,10 @@ function step(world,dt){
  for(const r of result){const b=map.get(r.id);b.setTransform({x:r.p[0],y:r.p[1]},r.angle);b.setLinearVelocity({x:r.v[0],y:r.v[1]});b.setAngularVelocity(r.spin);b.setAwake(r.awake);}
  world.clearForces();
  // Keep the read-only Planck broadphase/contact mirror in sync for gameplay queries.
- world.step(0);return result;
+ // Bodies moved by setTransform only update the broadphase; Planck looks for new pairs during step() only when
+ // m_newFixture is set, so without this, contacts appeared only after something was spawned (stacks that slid
+ // together never 'touched' and so never merged).
+ world.m_newFixture=true;world.step(0);return result;
 }
 function destroy(world){if(world?.__nativeID){native.step(JSON.stringify({id:world.__nativeID,destroy:true}));delete world.__nativeID;}}
 module.exports={step,destroy};

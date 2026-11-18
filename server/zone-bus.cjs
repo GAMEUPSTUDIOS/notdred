@@ -1,4 +1,5 @@
 'use strict';
+const LIVE_RANGE=Number(process.env.LIVE_RANGE||160);
 // Shared zones. Each zone has ONE shared world (server/zone-sim.cjs): its rock, boulders, bots, loot, projectiles
 // and the hull of every ship in it. Each ship's room keeps its interior and crew, sends thrust and shots to its zone,
 // and takes back its position, damage and loot. The bus also keeps, per combat zone:
@@ -42,6 +43,9 @@ class ZoneBus{
   this.lastExteriors=ext;
   // 2. Shared worlds: each ship's hull joins its zone's world (leaving the one it was in) and hands over its thrust.
   for(const sim of this.sims.values())for(const id of sim.ships()){const r=rooms.find(x=>x.id===id),x=r&&ext.get(r);if(!x||x.zone!==sim.id)sim.api.zsRemoveShip(id);}
+  // A ship arriving in a world (new, reloaded, or after a restart) never appears inside another ship: new ships all
+  // start at 0,0, so a second one used to land in the first and the two were shoved apart as one tangled lump.
+  for(const [r,x] of ext){const s0=this.sims.get(x.zone);if(s0&&s0.api.fleet.has(r.id))continue;try{if(r.game.run('clearSpawnSpot()'))ext.set(r,{...r.game.zone.exterior(),id:r.id,name:r.name});}catch{}}
   for(const [r,x] of ext){const sim=this.sim(x.zone),info={x:x.x,y:x.y,vx:x.vx,vy:x.vy,ext:x.ext,size:x.size,mass:x.mass,damping:x.damping,docked:x.docked,name:r.name};
    if(!sim.api.fleet.has(r.id))sim.api.zsAddShip(r.id,info);else{sim.api.zsUpdateShip(r.id,info);if(x.placed)sim.api.zsPlaceShip(r.id,info);}
    const f=r.game.zone.takeForces();sim.api.zsForces(r.id,f.forces,f.impulses);sim.emptySince=Date.now();}
@@ -82,6 +86,8 @@ class ZoneBus{
  others(room,seen){const me=this.lastExteriors.get(room);if(!me)return [];const out=[];
   for(const [r,x] of this.lastExteriors){if(r===room||x.zone!==me.zone||!r.layoutCache)continue;
    const layout=r.layoutCache?.layout;const o={id:r.id,name:r.name,x:+x.x.toFixed(3),y:+x.y.toFixed(3),vx:+x.vx.toFixed(3),vy:+x.vy.toFixed(3),hp:Math.ceil(x.hp),maxHp:x.maxHp,size:x.size,crew:r.crewCache||[],layoutKey:r.layoutCache?.key};
+   // Everything happening aboard, for ships close enough to see it (within ~160 world units, about two screens).
+   if(r.liveCache&&Math.hypot(x.x-me.x,x.y-me.y)<LIVE_RANGE)o.live=r.liveCache;
    if(layout&&seen.get(r.id)!==o.layoutKey){o.layout=layout;seen.set(r.id,o.layoutKey);}out.push(o);}
   // A ship that left this player's view is forgotten, so its layout is sent again when it comes back.
   const visible=new Set(out.map(o=>o.id));for(const k of [...seen.keys()])if(!visible.has(k))seen.delete(k);

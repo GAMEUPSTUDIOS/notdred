@@ -25,11 +25,15 @@ const originalInteract=interact;interact=function(){if(!piloting&&nearHelm()&&[.
 // pilot and use every machine; guests can walk around, chat, pick up and drop items, but cannot build, remove,
 // rotate, pilot, man turrets, craft, configure machines or use portals.
 // All ranks build and dismantle (v39). Guests still cannot fly, use machines or travel. Doors are set by the captain.
-const RANKS=['captain','crew','guest'],GUEST_BLOCKED=['helm','interact','craft','material','clearQueue','repeat','hatch','portal','rename'];
+const RANKS=['captain','crew','guest'],GUEST_BLOCKED=['helm','interact','craft','material','clearQueue','repeat','hatch','portal','rename','spawnrank'];
 // Spawn kit: only the captain spawns with a wrench (crew and guests start empty-handed). The wrench goes with the
 // captain when they leave instead of being dropped, so wrenches never pile up aboard.
 function spawnKit(id){if(!bindCrew(id))return;const cap=currentCrew.rank==='captain';for(let i=0;i<5;i++)if(slots[i]==='wrench'&&!cap){slots[i]=null;stackCounts[i]=0;}
- if(cap&&!slots.includes('wrench')){const i=slots.indexOf(null);if(i>=0){slots[i]='wrench';stackCounts[i]=1;}}selectSlot(Math.max(0,slots.indexOf('wrench')));storeCrew();}
+ if(cap&&!slots.includes('wrench')){const i=slots.indexOf(null);if(i>=0){slots[i]='wrench';stackCounts[i]=1;}}selectSlot(Math.max(0,slots.indexOf('wrench')));
+ // ℵ14 spawn logic: a random spawn point set exactly to this player's rank, else the helm.
+ const sp=spawnPointFor(currentCrew.rank||'guest');if(sp&&!piloting){climbing=false;player.setTransform(V(sp.x,sp.y-.13),0);player.setLinearVelocity(V(0,0));}storeCrew();}
+// Comms: may this player talk to the zone right now (standing at a comms station, on foot)?
+function commsCheck(id){if(!bindCrew(id))return false;const t=!piloting&&nearComms();if(t)t.sent=clock+3;storeCrew();return !!t;}
 function mayBuildDoor(){return (currentCrew?.rank||'guest')==='captain';}
 function setCrewRank(id,rank){const c=crew.get(id);if(!c||!RANKS.includes(rank))return false;c.rank=rank;c.captain=rank==='captain';storeCrew();playerFilter(c.player,rank);return true;}
 function allowed(m,a){const rank=m.rank||'guest';if(rank==='captain'||a==='dev')return true;if(a==='rename'||a==='door')return false;if(rank==='crew')return true;if(GUEST_BLOCKED.includes(a))return false;return true;}
@@ -46,6 +50,7 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  else if(a==='clearQueue'){activeFab=nearFab();if(activeFab)clearQueue();}
  else if(a==='repeat'){activeFab=nearFab();if(activeFab)activeFab.repeat=!!msg.value;}
  else if(a==='door'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='door'&&setDoorAccess(t,msg.access))toast('Door: '+({captain:'captain only',crew:'crew and captain',guest:'everyone'})[msg.access]+'.');}
+ else if(a==='spawnrank'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='spawn'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&setSpawnRank(t,msg.rank))toast('Spawn point: '+({captain:'captain',crew:'crew',guest:'guests'})[msg.rank]+' spawn here.');}
  else if(a==='hatch'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y))configureHatch(msg.cell,msg.mode,msg.items,{pull:!!msg.pull,requireOutput:!!msg.requireOutput});
  else if(a==='recover'){recover();}
  else if(a==='rename'){if(!m.captain)toast('Only the captain can rename the ship.');else renameShip(msg.name);}
@@ -57,8 +62,19 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
 let ghosts=new Map();
 let zonePlaced=true;const originalSetupZone=setupZone;setupZone=function(...args){ghosts=new Map();if(attachedToZone&&zoneData[zone])zoneData[zone].loot=[];zonePlaced=true;const r=originalSetupZone(...args);if(attachedToZone){bots=[];enemyShots=[];}return r;};
 function exterior(){const p=ship.getPosition(),v=ship.getLinearVelocity(),placed=zonePlaced;zonePlaced=false;return {zone,x:p.x,y:p.y,vx:v.x,vy:v.y,ext:shipExtents(),size:shipSize(),hp:shipHP,maxHp:shipMaxHP(),docked:!!docked,mass:ship.getMass(),damping:ship.getLinearDamping(),placed};}
-function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},brokenHull:[...brokenHull],blocks:[...blocks.values()].map(b=>[b.x,b.y,b.rotation||0]),terrain:[...terrain.values()].map(t=>[t.type,t.x,t.y,t.rotation||0]),mounts:mounts.map(({type,side,at,rotation=0,starterRC=false,ammo=0})=>({type,side,at,rotation,starterRC,ammo}))};}
-function exteriorCrew(){storeCrew();return [...crew.values()].map(c=>({n:c.name,x:+c.player.getPosition().x.toFixed(2),y:+c.player.getPosition().y.toFixed(2),f:c.facing,p:c.piloting,c:c.climbing,t:c.tool,h:c.slots[c.selected]}));}
+function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},brokenHull:[...brokenHull],blocks:[...blocks.values()].map(b=>[b.x,b.y,b.rotation||0]),terrain:[...terrain.values()].map(t=>[t.type,t.x,t.y,t.rotation||0]),mounts:mounts.map(({type,side,at,rotation=0,starterRC=false,ammo=0,kind})=>({type,side,at,rotation,starterRC,ammo,...(kind?{kind}:{})}))};}
+// What other ships need to draw this one as it is right now (sent to nearby ships with every snapshot, 20 a second): turret aim and
+// recoil, thruster flames and direction, ammo counts, machine states (doors, fabricators, loaders, pushers, recyclers,
+// comms), loose items and expando boxes. Clock-based timers go out as time remaining (each client has its own clock).
+const LIVE_TERRAIN=['door','fabricator','loader','pusher_block','recycler','comms','spawn','ejector','shredder'];
+function exteriorLive(){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100;
+ return {m:mounts.map(m=>[m.aim==null?null:r2(m.aim),left(m.recoilUntil||0),m.active?1:0,m.ammo||0,m.thrustDirection?[r2(m.thrustDirection.x),r2(m.thrustDirection.y)]:0]),
+  t:[...terrain.values()].filter(t=>LIVE_TERRAIN.includes(t.type)).map(t=>{const o={};if(t.access)o.access=t.access;if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='loader'){o.phase=r2(t.phase??1);if(t.cargo?.length)o.cargo=[{type:t.cargo[0].type}];}if(t.type==='pusher_block'){o.beam=r2(t.beam||0);if(t.pull)o.pull=true;}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);if(t.flash)o.flash=left(t.flash);if(t.chewing)o.chewing=left(t.chewing);return [t.x,t.y,o];}),
+  i:items.map(i=>{const p=i.body.getPosition();return [i.type,i.count,r2(p.x),r2(p.y),r2(i.body.getAngle())];}),
+  b:boxes.map(b=>{const p=b.body.getPosition();return [r2(p.x),r2(p.y),r2(b.body.getAngle()),b.size,b.materials];})};}
+// Move this ship to free space if another ship in the zone overlaps it (Freeports: the next free berth).
+function clearSpawnSpot(){const p0=ship.getPosition().clone();if(!shipClashes(p0))return false;let p=null;if(zoneDef().kind==='safe')p=safeArrival();else for(let k=1;k<40&&!p;k++){const a=k*2.4,d=10+k*3,q=V(p0.x+Math.cos(a)*d,p0.y+Math.sin(a)*d),e=shipExtents();if(!shipClashes(q)&&!(typeof zoneSolid==='function'&&[[e.l,e.t],[e.r,e.t],[e.l,e.b],[e.r,e.b],[0,0]].some(([dx,dy])=>zoneSolid(q.x+dx,q.y+dy))))p=q;}if(!p||shipClashes(p))return false;docked=null;ship.setType('dynamic');ship.setFixedRotation(true);ship.setTransform(p,0);ship.setLinearVelocity(V(0,0));zonePlaced=true;return true;}
+function exteriorCrew(){storeCrew();return [...crew.values()].map(c=>({n:c.name,x:+c.player.getPosition().x.toFixed(2),y:+c.player.getPosition().y.toFixed(2),f:c.facing,p:c.piloting,c:c.climbing,t:c.tool,h:c.slots[c.selected],r:c.rank||'guest',vx:+c.player.getLinearVelocity().x.toFixed(1)}));}
 function syncGhosts(list,selfId){const seen=new Set();const me=ship.getPosition(),mine=shipExtents();for(const g of list){const e0=g.ext,ox=Math.min(me.x+mine.r,g.x+e0.r)-Math.max(me.x+mine.l,g.x+e0.l),oy=Math.min(me.y+mine.b,g.y+e0.b)-Math.max(me.y+mine.t,g.y+e0.t);if(ox>.5&&oy>.5&&!docked){const away=V(me.x-g.x,me.y-g.y);if(away.length()<.5)away.set(String(selfId)<String(g.id)?-1:1,0);away.normalize();const v=ship.getLinearVelocity();ship.setLinearVelocity(V(v.x+away.x*Math.min(ox,6)*.4,v.y+away.y*Math.min(oy,6)*.4));}seen.add(g.id);const e=g.ext,k=[e.l,e.r,e.t,e.b].join();let h=ghosts.get(g.id);if(h&&h.k!==k){world.destroyBody(h.body);h=null;}
  if(!h){const body=world.createBody({type:'kinematic',position:V(g.x,g.y),userData:{ghost:g.id}});body.createFixture(P.Box((e.r-e.l)/2,(e.b-e.t)/2,V((e.l+e.r)/2,(e.t+e.b)/2)),{friction:.3,restitution:.1});h={body,k};ghosts.set(g.id,h);}
  h.body.setTransform(V(g.x,g.y),0);h.body.setLinearVelocity(V(g.vx,g.vy));}

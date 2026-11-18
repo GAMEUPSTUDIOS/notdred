@@ -28,7 +28,7 @@ td{vertical-align:top}
  <table><tr><td>Name</td><td><input id="pname" maxlength="24" value="Player"></td></tr>
  <tr><td>Token</td><td><input id="ptoken" type="password" size="24"> <span class="small">(the host's token, optional)</span></td></tr></table>
  <button id="connectbtn" onclick="connectNow()">Connect</button> <span id="connstatus" class="small"></span>
- <p class="small">Classic mode: the server draws the game and sends it to you as pictures, so it works in very old browsers such as Internet Explorer 6. Keys: WASD / arrows move and fly, Space jump/brake, E use, Q drop / portal, R rotate, 1&ndash;5 slots, Enter chat. Click the picture to use or build; right-click to dismantle.</p>
+ <p class="small">Classic mode: the server draws the game and sends it to you as pictures, so it works in very old browsers such as Internet Explorer 6. Keys: WASD / arrows move and fly, Space jump/brake, E use, Q drop / portal, R rotate, 1&ndash;5 slots, Enter chat with your crew (start with ; to send it over a comms station you are standing at, to every ship in the zone). Click the picture to use or build; right-click to dismantle.</p>
 </div>
 
 <div id="lobby" class="box" style="display:none">
@@ -100,8 +100,8 @@ function status(st){var h='',i,s,c;lastStatus=st;piloting=st.piloting?1:0;
   h+=(st.fab.materials.length?'':'nothing')+' &middot; queue '+st.fab.queue+'</span><br><button onclick="req(\'/classic/insert?s=\'+S)">Insert held item</button><br>';
   for(i=0;i<st.fab.recipes.length;i++)h+='<button style="margin:1px" onclick="req(\'/classic/craft?s=\'+S+\'&amp;item='+esc(st.fab.recipes[i].type)+'\')">'+esc(st.fab.recipes[i].name)+'</button> <span class="small">'+esc(st.fab.recipes[i].cost)+'</span><br>';
   $('fab').innerHTML=h;show('fab',1);}else show('fab',0);}
-function chatLine(m){var d=$('chatlog');d.innerHTML+='<span class="'+rankClass(m.rank)+'">'+esc((m.rank||'guest').charAt(0).toUpperCase())+'</span> <b>'+esc(m.from)+'</b> <span class="small">'+esc(m.ship)+'</span>: '+esc(m.text)+'<br>';d.scrollTop=d.scrollHeight;}
-function chatKey(e){e=e||window.event;var c=e.keyCode,t;if(c==13){t=$('chatin').value;$('chatin').value='';if(t)send({type:'chat',text:t});$('chatin').blur();typing=0;return false;}if(c==27){$('chatin').blur();typing=0;return false;}return true;}
+function chatLine(m){var d=$('chatlog');d.innerHTML+='<span class="'+rankClass(m.rank)+'">'+esc((m.rank||'guest').charAt(0).toUpperCase())+'</span> '+(m.comms?'<b style="color:#2e7d4f">[COMMS]</b> ':'')+'<b>'+esc(m.from)+'</b> <span class="small">'+esc(m.ship)+'</span>: '+esc(m.text)+'<br>';d.scrollTop=d.scrollHeight;}
+function chatKey(e){e=e||window.event;var c=e.keyCode,t;if(c==13){t=$('chatin').value;$('chatin').value='';if(t){if(t.charAt(0)==';'){t=t.substring(1);if(t)send({type:'comms',text:t});}else send({type:'chat',text:t});}$('chatin').blur();typing=0;return false;}if(c==27){$('chatin').blur();typing=0;return false;}return true;}
 
 function resize(){var v=$('size').value.split('x');W=+v[0];H=+v[1];$('view').width=W;$('view').height=H;$('view2').width=W;$('view2').height=H;$('viewbox').style.width=W+'px';$('viewbox').style.height=H+'px';}
 function zoomBy(d){if(piloting)flyZ=Math.max(4,Math.min(40,flyZ+d*2));else walkZ=Math.max(8,Math.min(64,walkZ+d*4));}

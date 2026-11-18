@@ -58,12 +58,12 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){
  assert.ok(cap.snaps.at(-1).crew.some(c=>c.rank==='crew'),'everyone sees the new rank');
  // The rank is remembered for that player on that ship.
  mate.send({type:'leave'});await sleep(200);mate.snaps.length=0;mate.send({type:'join',room:cap.room});await until(()=>mate.snaps.length>1);assert.equal(self(mate).rank,'crew','rank kept after rejoining');
- // Chat: everyone in the zone hears it (other ships too); a ship in another zone does not.
+ // Chat stays aboard the ship (other ships hear it only over a comms station — tests/v45-server.cjs).
  far.send({type:'create',name:'Elsewhere'});await until(()=>far.room);far.act('dev',{op:'finch'});await sleep(300);
  const near=await client('Near');near.send({type:'create',name:'Neighbour'});await until(()=>near.room);await sleep(300);
- cap.send({type:'chat',text:'hello <b>zone</b>'});await until(()=>near.chat.length>0,3000,'chat reached another ship in the zone');
- assert.equal(near.chat[0].text,'hello b zone /b','tags stripped');assert.equal(near.chat[0].from,'Cap');assert.equal(near.chat[0].rank,'captain');assert.equal(near.chat[0].ship,'Rank Test');
- assert.ok(mate.chat.length>0,'own crew hear it');await sleep(300);assert.equal(far.chat.length,0,'a ship in another zone does not');
+ cap.send({type:'chat',text:'hello <b>crew</b>'});await until(()=>mate.chat.length>0,3000,'own crew hear it');
+ assert.equal(mate.chat[0].text,'hello b crew /b','tags stripped');assert.equal(mate.chat[0].from,'Cap');assert.equal(mate.chat[0].rank,'captain');assert.equal(mate.chat[0].ship,'Rank Test');
+ await sleep(300);assert.equal(near.chat.length,0,'another ship in the zone does not');assert.equal(far.chat.length,0,'a ship in another zone does not');
  cap.send({type:'chat',text:'spam'});await until(()=>cap.errors.some(e=>/too fast/.test(e)),2000,'rate limit');
- ok=true;console.log('PASS: real server — guests restricted, captain-only ranks, promotion seen by all and remembered, zone chat (other ships yes, other zones no), sanitized and rate-limited.');
+ ok=true;console.log('PASS: real server — guests restricted, captain-only ranks, promotion seen by all and remembered, ship chat (own crew only), sanitized and rate-limited.');
 }catch(e){console.error(e);console.error(log.join(''));}finally{srv.kill();await sleep(400);fs.rmSync(dataDir,{recursive:true,force:true,maxRetries:10,retryDelay:100});process.exit(ok?0:1);}})();
