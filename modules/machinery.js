@@ -105,22 +105,30 @@ function loaderTake(t,c){
  const box=cells.map(q=>boxAt(V(q.x,q.y))).find(Boolean);if(box){const type=TYPES.find(k=>(box.materials[k]||0)>0&&hatchAllows(t,k));if(type){const count=Math.min(stackLimit(type),box.materials[type]);box.materials[type]-=count;resizeBox(box);return {type,count};}}
  return null;}
 function loaderGive(t,c,stack,d){
- // A loader facing into a recycler feeds it one stack per cycle (while it isn't busy). Anything it can't recycle
- // stays in the loader, the same way a fabricator refuses finished items.
+ // A loader facing into a recycler feeds it one stack per cycle (while it isn't busy). Anything the object it faces
+ // can never take (a recycler: what can't be recycled; a fabricator: anything but its ingredients; a turret: anything
+ // but its ammo; a thruster: anything but fuel or explosives) is refused (t.refused) and the loader drops it; when the
+ // object only can't take it yet (busy, full), the loader waits holding it.
+ t.refused=false;const refuse=()=>{t.refused=true;return 0;};
  const hit=terrainAt(c),rec=hit?.type==='recycler'?hit:null;
- if(rec)return startRecycle(rec,stack.type,stack.count)?stack.count:0;
+ if(rec){if(!recycleYield(stack.type,stack.count))return refuse();return startRecycle(rec,stack.type,stack.count)?stack.count:0;}
  const fab=hit?.type==='fabricator'?hit:null;
- if(fab){if(!fabIngredients(fab).has(stack.type)||!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
+ if(fab){if(!fabIngredients(fab).has(stack.type))return refuse();if(!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
  const box=boxAt(V(c.x,c.y));if(box){const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
  const m=mountHit(c);
- if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return 0;const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
+ if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return refuse();const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
  if(m?.type==='ejector')return launchCargo(m,stack.type,stack.count)?stack.count:0;
- if(m?.type==='thruster'){if(!['fuel','explosives'].includes(stack.type))return 0;const tank=stack.type==='fuel'?'fuelItems':'explosiveItems',n=Math.min(stack.count,THRUSTER_TANK-(m[tank]||0));if(n>0)m[tank]=(m[tank]||0)+n;return Math.max(0,n);}
+ if(m?.type==='thruster'){if(!['fuel','explosives'].includes(stack.type))return refuse();const tank=stack.type==='fuel'?'fuelItems':'explosiveItems',n=Math.min(stack.count,THRUSTER_TANK-(m[tank]||0));if(n>0)m[tank]=(m[tank]||0)+n;return Math.max(0,n);}
  // Floor: an open interior cell with no solid tile and no stack already sitting there.
  if(t.requireOutput||!interiorCell(c)||blocks.has(key(c.x,c.y)))return 0;const there=terrainAt(c);if(there&&['wedge','glass','net','fabricator','loader','pusher_block','walkway_wedge'].includes(there.type))return 0;
  if(items.some(i=>{const p=i.body.getPosition();return Math.abs(p.x-c.x)<.7&&Math.abs(p.y-c.y)<.7;}))return 0;
  // Dropped, not thrown: the stack is left resting on the tile the loader faces.
  spawnItem(stack.type,V(c.x,c.y),V(0,0),stack.count).intakeFrom=key(t.x,t.y);return stack.count;}
+// A refused stack is dropped where the hand is: on the tile it faces when that's open (a machine's tiles are — crew
+// and items pass through machines), otherwise back on its input side. Either way this loader won't pick it up again.
+// A loader set to Require output inventory never drops anything: it keeps holding the stack.
+function loaderDrop(t,stack,output,input){const open=c=>interiorCell(c)&&!blocks.has(key(c.x,c.y))&&!mountHit(c)&&!['wedge','glass','net','loader','pusher_block','walkway_wedge','hatch','starter_hatch','door'].includes(terrainAt(c)?.type);
+ const c=open(output)?output:open(input)?input:null;if(!c)return false;spawnItem(stack.type,V(c.x,c.y),V(0,0),stack.count).intakeFrom=key(t.x,t.y);return true;}
 // What a fabricator accepts from a loader: only the ingredients of recipes its kind can make (iron, explosives,
 // flux…), never finished items.
 function fabIngredients(f){const set=new Set();for(const r of FABRICATORS[fabKind(f)].recipes)for(const m of Object.keys(recipeNeeds(r)||{}))set.add(m);return set;}
@@ -142,6 +150,7 @@ function tickLoadersNow(dt){const half=LOADER_CYCLE/2;for(const t of terrain.val
  if(t.swing==='idle'){const got=loaderTake(t,input);if(!got)continue;t.cargo.push(got);t.swing='carry';}
  if(t.swing==='carry'){if(t.phase<1){t.phase=Math.min(1,t.phase+dt/half);if(t.phase<1)continue;}
   const stack=t.cargo[0];if(!stack){t.swing='return';continue;}const n=loaderGive(t,output,stack,d);if(n>0){stack.count-=n;if(stack.count<=0)t.cargo.shift();t.flash=clock+.25;}
+  else if(t.refused&&!t.requireOutput&&loaderDrop(t,stack,output,input))t.cargo.shift();
   if(!t.cargo.length)t.swing='return';}}}
 
 // ---- Recyclers -------------------------------------------------------------------------------------------------------
