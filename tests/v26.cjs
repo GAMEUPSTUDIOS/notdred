@@ -79,12 +79,14 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 
 // --- Pusher beams and loaders --------------------------------------------------------------------------------
 {run(clear+'addTerrain("pusher_block",-4,2,0);addTerrain("glass",-3,2);addTerrain("walkway",-2,2);addTerrain("net",-1,2);globalThis.a=spawnItem("iron",V(0,2),V(0,0),16);globalThis.b=spawnItem("flux",V(3,2),V(0,0),4)');ticks(8);
- assert.ok(run('a.body.getLinearVelocity().x>1&&b.body.getLinearVelocity().x>1'),'beam passes glass, walkway and net and drives every item in it');
- assert.ok(run('terrain.get(key(-4,2)).beam')>run('bounds.r-(-4)')-1,'beam reaches the hull');
+ assert.ok(run('a.body.getLinearVelocity().x>1'),'beam passes glass, walkway and net and drives the first item in it');
+ assert.ok(Math.abs(run('b.body.getLinearVelocity().x'))<.2,'the item behind it is shielded');
+ assert.ok(Math.abs(run('terrain.get(key(-4,2)).beam')-(run('a.body.getPosition().x')-(-4)))<.6,'the beam ends at the first item');
+ run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;');ticks(2);assert.ok(run('terrain.get(key(-4,2)).beam')>run('bounds.r-(-4)')-1,'with nothing in the way it reaches the hull');
  run(clear+'addTerrain("pusher_block",-4,2,0);addBlock(-2,2);globalThis.c=spawnItem("iron",V(0,2),V(0,0),16)');ticks(8);assert.ok(run('Math.abs(c.body.getLinearVelocity().x)<.3'),'a block stops the beam');
  run(clear+'addTerrain("loader",0,2,0);addTerrain("walkway",-1,2);spawnItem("iron",V(-2,2),V(0,0),16)');ticks(150);
  assert.equal(run('items.filter(i=>i.type==="iron"&&Math.abs(i.body.getPosition().x-1)<.8).reduce((n,i)=>n+i.count,0)'),16,'loader reaches through a walkway');
- console.log('PASS: pusher beams have no length limit, pass glass/walkways/nets, push every item in the beam and stop at solid tiles; loaders reach through walkways.');}
+ console.log('PASS: pusher beams have no length limit, pass glass/walkways/nets, stop at the first object (driving only it) or solid tile; loaders reach through walkways.');}
 
 // --- Names and score -----------------------------------------------------------------------------------------
 {run('initialize()');const name=run('shipName');assert.ok(name&&name.split(' ').length===2,'new ships get a random name');

@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v47 (ℵ30 build)
+**Current version:** notdred.io — v48 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -120,6 +120,13 @@ Ships collide with each other and shove each other, push the same boulders, figh
 Each ship's room (`server/room.cjs`) still simulates its interior and crew. Every tick it sends its zone its thrust, knockbacks and shots, and gets back its position, damage (shields, or tiles once critical), loot taken in by its hatches, and score for its kills and mining.
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
+
+## Pusher beams, signs and paint (v48)
+
+- **Pusher beams are blocked by the first thing in their path**, a solid tile or an object (item stack, expando box, crew member), and push or pull only that object. Anything sitting in a beam shields what's behind it, which is what item-logic builds (gates, vending and trading machines) rely on. Beams still pass glass, walkways, item nets and ladders.
+- **Signs** (Engineering fabricator): a tile showing a short text label above it (up to 80 characters). Crew and the captain click one to edit it.
+- **Paint blocks** (Engineering fabricator): solid blocks in any colour. Crew and the captain click one to pick from a basic palette, a colour picker, or any hex code (`#rrggbb`).
+- Both use the game's own sprites (sign, color panel), save with the ship and show on other ships. Recipes (1 iron each) are placeholders.
 
 ## Massive battleships and item logic (v47)
 

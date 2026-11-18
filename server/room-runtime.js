@@ -25,7 +25,7 @@ const originalInteract=interact;interact=function(){if(!piloting&&nearHelm()&&[.
 // pilot and use every machine; guests can walk around, chat, pick up and drop items, but cannot build, remove,
 // rotate, pilot, man turrets, craft, configure machines or use portals.
 // All ranks build and dismantle (v39). Guests still cannot fly, use machines or travel. Doors are set by the captain.
-const RANKS=['captain','crew','guest'],GUEST_BLOCKED=['helm','interact','craft','material','clearQueue','repeat','hatch','portal','rename','spawnrank'];
+const RANKS=['captain','crew','guest'],GUEST_BLOCKED=['helm','interact','craft','material','clearQueue','repeat','hatch','portal','rename','spawnrank','sign','paint'];
 // Spawn kit: only the captain spawns with a wrench (crew and guests start empty-handed). The wrench goes with the
 // captain when they leave instead of being dropped, so wrenches never pile up aboard.
 function spawnKit(id){if(!bindCrew(id))return;const cap=currentCrew.rank==='captain';for(let i=0;i<5;i++)if(slots[i]==='wrench'&&!cap){slots[i]=null;stackCounts[i]=0;}
@@ -51,6 +51,8 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  else if(a==='repeat'){activeFab=nearFab();if(activeFab)activeFab.repeat=!!msg.value;}
  else if(a==='door'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='door'&&setDoorAccess(t,msg.access))toast('Door: '+({captain:'captain only',crew:'crew and captain',guest:'everyone'})[msg.access]+'.');}
  else if(a==='spawnrank'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='spawn'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&setSpawnRank(t,msg.rank))toast('Spawn point: '+({captain:'captain',crew:'crew',guest:'guests'})[msg.rank]+' spawn here.');}
+ else if(a==='sign'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='sign'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8){t.text=cleanSign(msg.text);}}
+ else if(a==='paint'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell),c=cleanColor(msg.color);if(t?.type==='paint'&&c&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8){t.color=c;}}
  else if(a==='hatch'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y))configureHatch(msg.cell,msg.mode,msg.items,{pull:!!msg.pull,requireOutput:!!msg.requireOutput});
  else if(a==='recover'){recover();}
  else if(a==='rename'){if(!m.captain)toast('Only the captain can rename the ship.');else renameShip(msg.name);}
@@ -62,7 +64,7 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
 let ghosts=new Map();
 let zonePlaced=true;const originalSetupZone=setupZone;setupZone=function(...args){ghosts=new Map();if(attachedToZone&&zoneData[zone])zoneData[zone].loot=[];zonePlaced=true;const r=originalSetupZone(...args);if(attachedToZone){bots=[];enemyShots=[];}return r;};
 function exterior(){const p=ship.getPosition(),v=ship.getLinearVelocity(),placed=zonePlaced;zonePlaced=false;return {zone,x:p.x,y:p.y,vx:v.x,vy:v.y,ext:shipExtents(),size:shipSize(),hp:shipHP,maxHp:shipMaxHP(),docked:!!docked,mass:ship.getMass(),damping:ship.getLinearDamping(),placed};}
-function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},brokenHull:[...brokenHull],blocks:[...blocks.values()].map(b=>[b.x,b.y,b.rotation||0]),terrain:[...terrain.values()].map(t=>[t.type,t.x,t.y,t.rotation||0]),mounts:mounts.map(({type,side,at,rotation=0,starterRC=false,ammo=0,kind})=>({type,side,at,rotation,starterRC,ammo,...(kind?{kind}:{})}))};}
+function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},brokenHull:[...brokenHull],blocks:[...blocks.values()].map(b=>[b.x,b.y,b.rotation||0]),terrain:[...terrain.values()].map(t=>t.type==='sign'?[t.type,t.x,t.y,0,{text:t.text||''}]:t.type==='paint'?[t.type,t.x,t.y,0,{color:t.color}]:[t.type,t.x,t.y,t.rotation||0]),mounts:mounts.map(({type,side,at,rotation=0,starterRC=false,ammo=0,kind})=>({type,side,at,rotation,starterRC,ammo,...(kind?{kind}:{})}))};}
 // What other ships need to draw this one as it is right now (sent to nearby ships with every other snapshot, 10 a second): turret aim and
 // recoil, thruster flames and direction, ammo counts, machine states (doors, fabricators, loaders, pushers, recyclers,
 // comms), loose items and expando boxes. Clock-based timers go out as time remaining (each client has its own clock).

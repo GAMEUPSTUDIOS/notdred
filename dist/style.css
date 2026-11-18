@@ -62,3 +62,7 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 .privacyoption{display:block;margin:6px 0;padding:6px 10px;background:#192833;border:2px groove #85959d;font-size:14px}.privacyoption small{display:block;margin:2px 0 0 22px;color:#9aa9ac}.inviterow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#invitelink{flex:1;min-width:220px;padding:5px;font-size:12px;background:#0d151c;color:#eee;border:1px solid #6b7b84}
 #chatinput.comms{border-color:#7fffb0;background:#0f2418ee}
 .commstag{display:inline-block;background:#2e7d4f;color:#dfffe9;font-size:10px;font-weight:bold;padding:0 3px;border-radius:2px}
+
+.paintswatches{display:flex;flex-wrap:wrap;gap:6px;max-width:300px}
+.paintswatches .swatch{width:30px;height:30px;padding:0;border:2px solid #222;border-radius:4px;cursor:pointer}
+.paintswatches .swatch:hover{border-color:#fff}

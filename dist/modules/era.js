@@ -239,11 +239,16 @@ const COMMS_RANGE = 2.5;
 const SPAWN_RANKS = ['captain', 'crew', 'guest'];
 // Ship size, in ship tiles. ℵ10+ (16 Mar 2019): "Ships now have a maximum size of 80x80 blocks". Minimum 6×5.
 const SHIP_LIMITS = {minW: 6, minH: 5, maxW: 80, maxH: 80};
+// Signs: a short text label shown above the sign. Paint blocks: solid blocks in any colour — a basic palette or any
+// hex code. Both from drednot's later builds; recipes PLACEHOLDER (1 iron each, Engineering fabricator).
+const SIGN_MAX = 80;
+const PAINT_COLORS = ['#ffffff', '#9e9e9e', '#3a3a3a', '#000000', '#e53935', '#ff9800', '#fdd835', '#43a047', '#00bcd4', '#1e88e5', '#8e24aa', '#ec407a', '#795548'];
+const PAINT_DEFAULT = '#9e9e9e';
 const FABRICATORS = {
   starter:     {name: 'Starter fabricator',     item: 'fab_starter',     badge: 'official-fab_t_starter',
                 recipes: ['block', 'ladder', 'walkway', 'net', 'wrench', 'door', 'booster', 'ammo', 'fab_machine', 'fab_engineering']},
   engineering: {name: 'Engineering fabricator', item: 'fab_engineering', badge: 'official-fab_t_engineering',
-                recipes: ['wrench', 'shredder', 'repair', 'booster', 'embiggener', 'shrinker', 'block', 'glass', 'wedge', 'ladder', 'walkway', 'walkway_wedge', 'net', 'door', 'storage', 'pusher', 'spawn', 'anchor']},
+                recipes: ['wrench', 'shredder', 'repair', 'booster', 'embiggener', 'shrinker', 'block', 'glass', 'wedge', 'ladder', 'walkway', 'walkway_wedge', 'net', 'door', 'storage', 'pusher', 'spawn', 'anchor', 'sign', 'paint']},
   machine:     {name: 'Machine fabricator',     item: 'fab_machine',     badge: 'official-fab_t_machine',
                 recipes: ['hatch', 'ejector', 'loader', 'pusher_block', 'turret_controller', 'thruster', 'recycler', 'comms', 'fab_machine', 'fab_engineering', 'fab_munitions']},
   munitions:   {name: 'Munitions fabricator',   item: 'fab_munitions',   badge: 'official-fab_t_munitions',
@@ -293,4 +298,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
