@@ -21,7 +21,7 @@ recover=function(){if(netActive)return netAction('recover');return;};
 usePortal=function(){if(netActive)return netAction('portal');return;};
 save=function(silent=false){if(netActive){if(!silent)networkSend({type:'export'});return;}return;};
 leaveShip=function(){if(netActive){networkSend({type:'leave'});netActive=false;inLobby=true;el('lobby').hidden=false;netState=null;keys={};return;}return;};
-devAction=function(op){if(netActive){if(!netAdmin)return toast('Server dev controls require the host’s DEV_TOKEN.');return netAction('dev',{op:op==='seed'?'regen':op,item:el('devitem').value,count:+el('devamount').value,species:el('devbot')?.value,zone:el('devmission')?.value});}return;};
+devAction=function(op){if(netActive){if(!netAdmin)return toast('Server dev controls require the host’s DEV_TOKEN.');return netAction('dev',{op:op==='seed'?'regen':op,item:el('devitem').value,count:+el('devamount').value||stackLimit(el('devitem').value),species:el('devbot')?.value,zone:el('devmission')?.value});}return;};
 // Rebind direct function references installed before the network module.
 el('recover').onclick=()=>recover();el('clearqueue').onclick=()=>clearQueue();el('repeatqueue').onchange=e=>{if(netActive)netAction('repeat',{value:e.target.checked});else if(activeFab){activeFab.repeat=e.target.checked;save(true);}};
 const leaveButton=[...document.querySelectorAll('button')].find(b=>b.textContent==='Leave ship');if(leaveButton)leaveButton.onclick=()=>leaveShip();
