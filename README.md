@@ -269,6 +269,13 @@ The handheld pusher icon is the image you sent.
 
 No generated artwork is used.
 
+## Play page on GitHub Pages
+The game page (everything in `dist/`) can be served from GitHub Pages at `https://<owner>.github.io/<repo>/`, while the game server runs in a Codespace (or any machine). The `gh-pages` branch holds a copy of `dist/`.
+- Share the Pages link with the server in it: `https://<owner>.github.io/<repo>/?server=<codespace>-8080.app.github.dev`. `scripts/codespace-start.sh` prints this exact link and lets the Pages site connect (it adds `https://<owner>.github.io` to `ALLOWED_ORIGINS`).
+- Without `?server=`, the page uses the last server you connected to; the address box accepts a host name, an `https://` link or a `wss://…/play` address.
+- Classic mode is not available from Pages (it needs the server); use the server's own address for it.
+- GitHub Pages only publishes public repositories on a free account.
+
 ## Test server on GitHub (Codespaces)
 
 Push this repo to GitHub, a private repo works. Then:
