@@ -40,7 +40,7 @@ function viewFactory(root){const dist=path.join(root,'dist'),compiled=new Map();
   return {
    receive(str){try{return receive(str);}catch(e){return null;}},
    welcome(m){s.__m=m;run('netID=__m.self;netAdmin=!!__m.admin;');},
-   joined(m,name){s.__m=m;s.__name=name;run('netCaptain=!!__m.captain;netCrewKey="";netOthers=new Map();netActive=true;inLobby=false;localName=__name;');},
+   joined(m,name){s.__m=m;s.__name=name;run('netBlocks=[];netTerrainList=[];netMountList=[];netCaptain=!!__m.captain;netCrewKey="";netOthers=new Map();netActive=true;inLobby=false;localName=__name;');},
    left(){run('netActive=false;inLobby=true;netState=null;keys={};');},
    key(type,key,shift,repeat){s.__key=key;fire('window',type,ev({key,shiftKey:!!shift,repeat:!!repeat}));},
    // The client is laid out at HUD_SCALE× the picture size and scaled down, so the game's fixed-size HUD (minimap,

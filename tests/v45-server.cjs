@@ -4,12 +4,13 @@
 const assert=require('node:assert/strict'),{spawn}=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{WebSocket}=require('ws');
 const era=require('../dist/modules/era.js');
 const root=path.resolve(__dirname,'..');process.chdir(root);
+const fill=(st,prev)=>{if(st.blocks==null)st.blocks=prev?.blocks||[];for(const f of ['terrain','mounts'])if(st[f]==null){st[f]=(prev?.[f]||[]).slice();for(const [i,t] of st[f+'Delta']||[])st[f][i]=t;}return st;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),PORT=29000+Math.floor(Math.random()*900),dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'fp-v45-'));
 const env={...process.env,DATA_DIR:dataDir};delete env.DEV_TOKEN;
 const start=()=>{const p=spawn(process.execPath,['server/server.cjs','--port',String(PORT)],{cwd:root,env});p.out='';p.stdout.on('data',d=>p.out+=d);p.stderr.on('data',d=>log.push(String(d)));return p;};const log=[];let srv=start();
 const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!(await f())){if(Date.now()-t>ms)throw Error('Timed out: '+label);await sleep(40);}};
 function client(name,devToken){return new Promise(res=>{const ws=new WebSocket(`ws://127.0.0.1:${PORT}/play`,{headers:{origin:`http://127.0.0.1:${PORT}`}});const c={name,ws,chat:[],errors:[],snap:null,seq:0};
- ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name,devToken}));if(m.type==='welcome'){c.admin=m.admin;res(c);}if(m.type==='joined')c.room=m.room;if(m.type==='chat')c.chat.push(m);if(m.type==='error')c.errors.push(m.message);if(m.type==='snapshot')c.snap=m.state;});
+ ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name,devToken}));if(m.type==='welcome'){c.admin=m.admin;res(c);}if(m.type==='joined')c.room=m.room;if(m.type==='chat')c.chat.push(m);if(m.type==='error')c.errors.push(m.message);if(m.type==='snapshot')c.snap=fill(m.state,c.snap);});
  c.send=o=>ws.send(JSON.stringify(o));c.act=(action,extra={})=>c.send({type:'action',action,seq:++c.seq,aim:{x:0,y:0},...extra});});}
 (async()=>{let ok=false;try{await until(()=>/Dev token/.test(srv.out),5000,'start-up');
  const token=(srv.out.match(/Dev token[^:]*: (\S+)/)||[])[1];assert.ok(token&&token.length>=8,'dev token printed');assert.equal(fs.readFileSync(path.join(dataDir,'dev-token.txt'),'utf8').trim(),token,'kept in the data folder');

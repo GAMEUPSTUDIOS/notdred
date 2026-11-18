@@ -1,7 +1,7 @@
 # notdred
 a faithful modular, and easily moddable recreation of drednot.io or dredark.
 
-**Current version:** notdred.io — v45 (ℵ30 build)
+**Current version:** notdred.io — v47 (ℵ30 build)
 
 *Formerly "Freeport Shipyard".* An unofficial, fan-made recreation of drednot.io (Deep Space Airships) as it was in 2019; not affiliated with drednot.io.
 
@@ -120,6 +120,23 @@ Ships collide with each other and shove each other, push the same boulders, figh
 Each ship's room (`server/room.cjs`) still simulates its interior and crew. Every tick it sends its zone its thrust, knockbacks and shots, and gets back its position, damage (shields, or tiles once critical), loot taken in by its hatches, and score for its kills and mining.
 
 PvP rules, missions, regeneration and the 3-hour reset work as before, decided once per zone. A zone's world is created when the first ship arrives and dropped 2 minutes (`ZONE_IDLE_MS`) after the last one leaves; its loose loot goes with it.
+
+## Massive battleships and item logic (v47)
+
+- **Ship size up to 80×80 ship tiles**, drednot's own limit (ℵ10+, March 2019: "Ships now have a maximum size of 80x80 blocks"). It was 28×20. `SHIP_LIMITS` in `era.js`.
+- **No cap on loaders or pushers** (it was 48 each). Ring-of-RC-turret battleships fed by loaders work: every RC turret fires from the helm.
+- **Freeports are bigger** (480×300 world units, from 200×112), so several battleships can berth side by side. Arriving ships get a berth sized to them, clear of other ships and the central dock. You can zoom out further (mouse wheel) to see a whole battleship.
+- **The server keeps up with huge ships:**
+  - Finding which machine occupies a tile is now an indexed lookup (it scanned every machine).
+  - Loaders only look at items near them.
+  - An 80×80 battleship with 160 loaders, 75 RC turrets and 300 loose stacks dropped from about 280 ms to under 10 ms a tick.
+  - Snapshots resend a ship's tiles only when they change, and a big ship's machines and turrets as changes only. That ship's snapshot went from 64 KB to about 14 KB.
+  - Other ships' live view goes out 10 times a second.
+- **Item logic** (gates, sorters, counters, trading rigs built from loaders, pushers, glass and item physics):
+  - The server's lag relief no longer merges loose stacks; it only lets resting items sleep, and they wake the moment a pusher or loader acts on them.
+  - The automatic tidy-up merge only happens past 1,200 loose stacks in one ship (it was 220).
+  - Stacks still merge when they touch, as in drednot.
+- **Hosting:** a battleship like this is fine on an ordinary computer or VPS. On Render's free tier (0.1 CPU) one will lag.
 
 ## Machines, ammo balance, live ships (v45)
 

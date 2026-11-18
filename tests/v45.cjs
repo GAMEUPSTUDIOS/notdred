@@ -74,7 +74,7 @@ assert.ok(era.BOT_TYPES.blue.thrust>=2*11&&era.BOT_TYPES.blue.shipKnock>0);
 
 // ---- Freeport docks: every edge wall.
 const D=mk('D');step(30);
-for(const [side,pose,want] of [['floor','V(30,48)',55],['ceiling','V(-40,-52)',-55],['left','V(-95,10)',-99],['right','V(95,-20)',99]]){D.run(`if(docked)releaseDock();undockCooldown=0;ship.setTransform(${pose},0);ship.setLinearVelocity(V(0,0));`);const dir={floor:[0,8],ceiling:[0,-8],left:[-8,0],right:[8,0]}[side];D.run(`ship.setLinearVelocity(V(${dir[0]},${dir[1]}))`);step(60);
+const ZH=D.run('zoneHalf()');for(const [side,pose,want] of [['floor',`V(30,${ZH.h-8})`,ZH.h-1],['ceiling',`V(-40,${-ZH.h+8})`,-ZH.h+1],['left',`V(${-ZH.w+8},10)`,-ZH.w+1],['right',`V(${ZH.w-8},-20)`,ZH.w-1]]){D.run(`if(docked)releaseDock();undockCooldown=0;ship.setTransform(${pose},0);ship.setLinearVelocity(V(0,0));zonePlaced=true;`);step(2);const dir={floor:[0,8],ceiling:[0,-8],left:[-8,0],right:[8,0]}[side];bus.sims.get('freeport').run(`fleet.get('D').body.setLinearVelocity(V(${dir[0]},${dir[1]}))`);step(60);
  assert.equal(D.run('docked?.side'),side,side+' wall docks');const e=D.run('shipExtents()'),p=D.run('ship.getPosition()');const edge=side==='floor'?p.y+e.b:side==='ceiling'?p.y+e.t:side==='left'?p.x+e.l:p.x+e.r;assert.ok(Math.abs(edge-want)<.2,side+' flush against the wall ('+edge.toFixed(2)+')');}
 
 // ---- Two new ships in the same Freeport never overlap.

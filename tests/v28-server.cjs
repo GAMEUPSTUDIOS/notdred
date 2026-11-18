@@ -38,10 +38,11 @@ const {createRoom}=require('../server/room.cjs'),{ZoneBus}=require('../server/zo
  console.log('PASS: shared worlds — both ships in one zone world, one bot list for all, bots target the nearest ship, loot passes between ships, hulls shove each other, kills credited to the shooter.');}
 
 // ---- Real server: ranks and chat -----------------------------------------------------------------------------------------
+const fill=(st,prev)=>{if(st.blocks==null)st.blocks=prev?.blocks||[];for(const f of ['terrain','mounts'])if(st[f]==null){st[f]=(prev?.[f]||[]).slice();for(const [i,t] of st[f+'Delta']||[])st[f][i]=t;}return st;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),PORT=22000+Math.floor(Math.random()*900),DEV='v28-dev',dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'fp-v28-'));
 const srv=spawn(process.execPath,['server/server.cjs','--port',String(PORT)],{cwd:root,env:{...process.env,DATA_DIR:dataDir,DEV_TOKEN:DEV,SAVE_INTERVAL_MS:'400'}});const log=[];srv.stderr.on('data',d=>log.push(String(d)));
 function client(name,admin){return new Promise(res=>{const ws=new WebSocket(`ws://127.0.0.1:${PORT}/play`,{headers:{origin:`http://127.0.0.1:${PORT}`}});const c={ws,seq:0,msgs:[],snaps:[],errors:[],chat:[],notices:[]};
- ws.on('message',raw=>{const m=JSON.parse(raw);c.msgs.push(m);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name,devToken:admin?DEV:undefined,token:c.token}));if(m.type==='welcome'){c.token=m.token;res(c);}if(m.type==='joined')c.room=m.room;if(m.type==='error')c.errors.push(m.message);if(m.type==='chat')c.chat.push(m);if(m.type==='snapshot'){c.snaps.push(m.state);c.notices.push(...(m.state.notices||[]));}});
+ ws.on('message',raw=>{const m=JSON.parse(raw);c.msgs.push(m);if(m.type==='hello')ws.send(JSON.stringify({type:'hello',protocol:1,name,devToken:admin?DEV:undefined,token:c.token}));if(m.type==='welcome'){c.token=m.token;res(c);}if(m.type==='joined')c.room=m.room;if(m.type==='error')c.errors.push(m.message);if(m.type==='chat')c.chat.push(m);if(m.type==='snapshot'){c.snaps.push(fill(m.state,c.snaps.at(-1)));c.notices.push(...(m.state.notices||[]));}});
  c.send=o=>ws.send(JSON.stringify(o));c.act=(action,x={})=>c.send({type:'action',action,seq:++c.seq,aim:{x:0,y:0},...x});});}
 const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){if(Date.now()-t>ms)throw Error('Timed out: '+label);await sleep(25);}};
 (async()=>{let ok=false;try{await sleep(800);

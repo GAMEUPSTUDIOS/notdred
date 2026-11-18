@@ -80,8 +80,9 @@ const LOADER_HOTBOX={near:.4,far:1.8,half:.8};
 function inLoaderHotbox(t,p){const d=pusherDirection(t),rx=p.x-t.x,ry=p.y-t.y,back=-(rx*d.x+ry*d.y),side=Math.abs(rx*d.y-ry*d.x);return back>LOADER_HOTBOX.near&&back<LOADER_HOTBOX.far&&side<LOADER_HOTBOX.half;}
 function loaderTake(t,c){
  const cells=loaderInputCells(t,c),near=(p,q)=>{const walk=LOADER_REACHES_THROUGH.includes(terrainAt(q)?.type);return Math.abs(p.x-q.x)<.6&&p.y-q.y<.6&&q.y-p.y<(walk?1.1:.6);};
- const item=items.find(i=>{const p=i.body.getPosition();return (inLoaderHotbox(t,p)||cells.some(q=>near(p,q)))&&i.intakeFrom!==key(t.x,t.y)&&hatchAllows(t,i.type)&&!cargoWakeLocks.get(i.body)?.size;});
- if(item){inside.destroyBody(item.body);items.splice(items.indexOf(item),1);return {type:item.type,count:item.count};}
+ const pool=loaderItemGrid?nearbyItems(t,cells):items;
+ const item=pool.find(i=>{const p=i.body.getPosition();return (inLoaderHotbox(t,p)||cells.some(q=>near(p,q)))&&i.intakeFrom!==key(t.x,t.y)&&hatchAllows(t,i.type)&&!cargoWakeLocks.get(i.body)?.size;});
+ if(item){item.taken=true;inside.destroyBody(item.body);items.splice(items.indexOf(item),1);return {type:item.type,count:item.count};}
  const box=cells.map(q=>boxAt(V(q.x,q.y))).find(Boolean);if(box){const type=TYPES.find(k=>(box.materials[k]||0)>0&&hatchAllows(t,k));if(type){const count=Math.min(stackLimit(type),box.materials[type]);box.materials[type]-=count;resizeBox(box);return {type,count};}}
  return null;}
 function loaderGive(t,c,stack,d){
@@ -104,7 +105,12 @@ function loaderGive(t,c,stack,d){
 // What a fabricator accepts from a loader: only the ingredients of recipes its kind can make (iron, explosives,
 // flux…), never finished items.
 function fabIngredients(f){const set=new Set();for(const r of FABRICATORS[fabKind(f)].recipes)for(const m of Object.keys(recipeNeeds(r)||{}))set.add(m);return set;}
-function tickLoaders(dt){for(const t of terrain.values()){if(t.type!=='loader')continue;t.phase=Math.min(1,(t.phase||0)+dt/LOADER_CYCLE);t.cooldown=Math.max(0,(t.cooldown??0)-dt);if(t.filterMode==='off')continue;
+// Loose items bucketed by 2×2-tile cell once per tick, so each loader only looks at items near its input instead of
+// every item aboard (hundreds of loaders × hundreds of items was most of a big ship's tick).
+let loaderItemGrid=null;
+function nearbyItems(t,cells){const out=new Set(),add=(x,y)=>{for(let gx=Math.floor((x-2.5)/2);gx<=Math.floor((x+2.5)/2);gx++)for(let gy=Math.floor((y-2.5)/2);gy<=Math.floor((y+2.5)/2);gy++)for(const i of loaderItemGrid.get(gx+','+gy)||[])out.add(i);};add(t.x,t.y);for(const c of cells)add(c.x,c.y);return [...out].filter(i=>!i.taken);}
+function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=Math.floor(p.x/2)+','+Math.floor(p.y/2);let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
+function tickLoadersNow(dt){for(const t of terrain.values()){if(t.type!=='loader')continue;t.phase=Math.min(1,(t.phase||0)+dt/LOADER_CYCLE);t.cooldown=Math.max(0,(t.cooldown??0)-dt);if(t.filterMode==='off')continue;
  const {d,input,output}=loaderEnds(t);t.cargo??=[];
  // An empty loader grabs from its hotbox every tick, so thrown or falling items are caught as they pass; delivery
  // still happens once per cycle.

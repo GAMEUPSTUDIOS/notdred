@@ -5,11 +5,11 @@ const zip=typeof module==='object'?require('fflate'):root.fflate,MAX=4*1024*1024
 function crc(bytes){let c=-1;for(const b of bytes){c^=b;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0);}return (c^-1)>>>0;}
 function validate(s){
  if(!s||typeof s!=='object'||Array.isArray(s))throw Error('Invalid ship');
- const b=s.bounds;if(!b||!['l','r','t','b'].every(k=>Number.isInteger(b[k]))||b.r-b.l<6||b.r-b.l>28||b.b-b.t<5||b.b-b.t>20)throw Error('Invalid ship bounds');
+ const b=s.bounds;if(!b||!['l','r','t','b'].every(k=>Number.isInteger(b[k]))||b.r-b.l<6||b.r-b.l>80||b.b-b.t<5||b.b-b.t>80)throw Error('Invalid ship bounds');/* era.js SHIP_LIMITS: 80×80 (ℵ10+) */
  const types=new Set(['recycler','anchor','comms','spawn','door','wrench','block','ladder','walkway','net','iron','fabricator','embiggener','shrinker','thruster','turret','starter','explosives','fuel','glass','storage','wedge','walkway_wedge','shredder','ammo','hatch','starter_hatch','starter_rc','ejector','pusher','punch','booster','repair','flux','pusher_block','fab_starter','fab_machine','fab_engineering','fab_munitions','loader','scatter','flak','sniper','yank','breaker','trash','silica','turret_burst','turret_auto','turret_controller']);
  const finite=(v)=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<1000000;
  function walk(v,depth=0){if(depth>30)throw Error('Save too deeply nested');if(typeof v==='number'&&!finite(v))throw Error('Invalid numeric value');if(v&&typeof v==='object')for(const [k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))throw Error('Invalid property');walk(x,depth+1);}}
- walk(s);for(const k of ['blocks','terrain','mounts','items','boxes'])if(!Array.isArray(s[k])||s[k].length>4096)throw Error('Invalid '+k);
+ walk(s);for(const k of ['blocks','terrain','mounts','items','boxes'])if(!Array.isArray(s[k])||s[k].length>12000)throw Error('Invalid '+k);/* an 80×80 ship has 6084 interior cells */
  const occupied=new Set();for(const t of [...s.blocks,...s.terrain]){if(!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<=b.l||t.x>=b.r||t.y<=b.t||t.y>=b.b||t.type&&!types.has(t.type))throw Error('Invalid tile');const key=t.x+','+t.y;if(occupied.has(key))throw Error('Duplicate tile');occupied.add(key);}
  if(!Array.isArray(s.stacks)||s.stacks.length!==5)throw Error('Five inventory slots required');
  for(const t of [...s.stacks,...s.items])if(t&&(!types.has(t.type)||!Number.isInteger(t.count)||t.count<1||t.count>16))throw Error('Invalid item stack');
