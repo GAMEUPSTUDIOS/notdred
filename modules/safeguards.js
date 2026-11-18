@@ -14,7 +14,7 @@ const SAFETY={
 };
 let safetyTimer=0,lastGoodShip=null;
 const finiteVec=v=>Number.isFinite(v.x)&&Number.isFinite(v.y);
-function solidCell(x,y){if(blocks.has(key(x,y)))return true;const t=terrainAt({x,y});return !!t&&['door','wedge','glass','pusher_block','loader','fabricator','net','walkway','walkway_wedge'].includes(t.type);}
+function solidCell(x,y){if(blocks.has(key(x,y)))return true;const t=terrainAt({x,y});return !!t&&['door','wedge','glass','pusher_block','loader','paint','fabricator','net','walkway','walkway_wedge'].includes(t.type);}
 // Nearest open interior cell to p (breadth-first over the ship's grid).
 function safeCell(p){if(!finiteVec(p))p=V(helm.x,helm.y-1);const start={x:clamp(Math.round(p.x),bounds.l+1,bounds.r-1),y:clamp(Math.round(p.y),bounds.t+1,bounds.b-1)},seen=new Set([key(start.x,start.y)]),q=[start];
  for(let i=0;i<q.length;i++){const c=q[i];if(!solidCell(c.x,c.y)&&!helmCells().some(h=>h.x===c.x&&h.y===c.y))return V(c.x,c.y);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:c.x+dx,y:c.y+dy};if(n.x<=bounds.l||n.x>=bounds.r||n.y<=bounds.t||n.y>=bounds.b||seen.has(key(n.x,n.y)))continue;seen.add(key(n.x,n.y));q.push(n);}}

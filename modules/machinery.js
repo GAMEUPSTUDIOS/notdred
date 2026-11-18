@@ -53,12 +53,14 @@ function pusherAllows(t,body){if((t.filterMode||'all')==='off')return false;cons
 // Does this interior fixture let a beam through? Walkways (category 4) and nets (16) are recognised by their
 // collision category; glass shares the solid category, so the tile just past the hit point is looked up.
 function beamPasses(f,pt,d){const cat=f.getFilterCategoryBits();if(cat===4||cat===16)return true;const c={x:Math.round(pt.x+d.x*.05),y:Math.round(pt.y+d.y*.05)};if(blocks.has(key(c.x,c.y)))return false;const t=terrainAt(c);return !!t&&BEAM_PASSES.includes(t.type);}
-function pusherBeam(t){const d=pusherDirection(t),reach=Math.max(bounds.r-bounds.l,bounds.b-bounds.t)+2,from=V(t.x,t.y),to=V(t.x+d.x*reach,t.y+d.y*reach);let wall=1;const hits=[];
+// The beam is blocked by the first thing in its path, solid tile or object (item stack, expando box, crew), and acts
+// only on that object: whatever sits in a beam shields everything behind it, which is what item-logic builds rely on.
+function pusherBeam(t){const d=pusherDirection(t),reach=Math.max(bounds.r-bounds.l,bounds.b-bounds.t)+2,from=V(t.x,t.y),to=V(t.x+d.x*reach,t.y+d.y*reach);let wall=1,first=null,firstFrac=1;
  inside.rayCast(from,to,(f,pt,n,frac)=>{if(f===t.f||f.isSensor())return -1;const body=f.getBody();
   if(body===interior){if(beamPasses(f,pt,d))return -1;if(frac<wall)wall=frac;return frac;}
-  if(body.getType()==='dynamic')hits.push({body,frac});return -1;});
- const seen=new Set(),bodies=[];for(const h of hits.sort((a,b)=>a.frac-b.frac))if(h.frac<wall&&!seen.has(h.body)){seen.add(h.body);bodies.push(h.body);}
- return {d,length:wall*reach,bodies};}
+  if(body.getType()==='dynamic'){if(frac<firstFrac){firstFrac=frac;first=body;}return frac;}return -1;});
+ if(first&&firstFrac<wall)return {d,length:firstFrac*reach,bodies:[first]};
+ return {d,length:wall*reach,bodies:[]};}
 function tickPushers(dt){for(const t of terrain.values()){if(t.type!=='pusher_block')continue;const {d,length,bodies}=pusherBeam(t);t.beam=length;const sign=t.pull?-1:1;
  for(const hit of bodies){if(!pusherAllows(t,hit))continue;const p=hit.getPosition();
   if(t.pull&&Math.abs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){const v=hit.getLinearVelocity(),along=v.x*d.x+v.y*d.y;if(along<0)hit.setLinearVelocity(V(v.x-along*d.x,v.y-along*d.y));continue;}
