@@ -21,6 +21,15 @@ for(let i=0;i<30;i++)r.game.tick(1/60);r.game.command('cap',{action:'select',slo
 for(let k=0;k<20;k++){r.game.command('cap',{action:'input',keys:{},held:true,aim:wp});r.game.tick(1/60);r.game.tick(1/60);}
 assert.ok(run('it.body.getPosition().x')>x0+.5,'the handheld pusher pushes a stack 6 tiles away');assert.equal(run('HAND_PUSHER_RANGE'),1000);assert.ok(Array.isArray(r.game.snapshot('cap').crew[0].beam),'beam in the snapshot');assert.ok(Array.isArray(r.game.zone.exteriorCrew()[0].b),'beam for other ships');
 assert.ok(/pusher:\['item-pusher_hand'/.test(require('node:fs').readFileSync('dist/game.js','utf8'))&&require('node:fs').existsSync('dist/sprites/item-pusher_hand.png'),'handheld pusher icon');
+// Right click on a recycler recycles what's in hand (online: the 'remove' action), tools included; Shift + right click with the wrench dismantles it.
+{const g=createRoom(null,{});g.join('c','C',true,'captain');const run2=g.run,st=n=>{for(let i=0;i<n;i++)g.tick(1/60);};run2('bindCrew("c");for(const t of [...terrain.values()])if(t.body){inside.destroyBody(t.body);terrain.delete(t.key);}');const fy2=run2('bounds.b-1');
+ run2(`globalThis.rc=spawnMachine("recycler",V(1.5,${fy2-1}));player.setTransform(V(-1,${fy2}),0);storeCrew();`);const aim=run2(`(p=>({x:p.x,y:p.y}))(ship.getWorldPoint(V(1.5,${fy2-1})))`);
+ for(const t of ['wrench','shredder','pusher']){run2(`bindCrew("c");giveItem("${t}",1);storeCrew();`);g.command('c',{action:'select',slot:run2(`(bindCrew("c"),slots.indexOf("${t}"))`),aim});g.command('c',{action:'remove',aim});
+  assert.equal(run2(`(bindCrew("c"),slots.filter(x=>x==="${t}").length)`),t==='wrench'?1:0,t+' went into the recycler');assert.ok(run2('!!rc.job'),t+' is being recycled');st(240);assert.ok(!run2('rc.job'),'done');}
+ assert.equal(run2('items.filter(i=>i.type==="pusher_block").length'),1,'the handheld pusher came out as a stationary pusher');
+ run2('bindCrew("c");giveItem("wrench",1);storeCrew();');g.command('c',{action:'select',slot:run2('(bindCrew("c"),slots.indexOf("wrench"))'),aim});g.command('c',{action:'input',keys:{shift:true},held:false,aim});g.command('c',{action:'remove',aim});
+ assert.ok(run2('![...terrain.values()].some(t=>t.type==="recycler")'),'Shift + right click with the wrench dismantles the recycler');}
+console.log('PASS: right click on a recycler recycles what you hold (wrench, shredder, handheld pusher); Shift + right click with the wrench dismantles it.');
 console.log('PASS: handheld pusher pushes, its beam reaches every client, own icon.');
 console.log('PASS: turrets, turret controllers and thrusters can\'t be rotated (placing, R, old saves).');
 process.exit(0);

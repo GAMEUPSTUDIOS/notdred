@@ -50,7 +50,7 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  if(['edit','remove','rotate'].includes(a)&&!piloting&&!(a==='edit'&&tool==='booster')){const c=cursorCell(),t=terrainAt(c)||blocks.get(key(c.x,c.y));if(P.Vec2.distance(localPlayer(),V(c.x,c.y))>8||buildBlocked(c,t?.f)){toast('Target is out of reach or blocked.');storeCrew();return;}}
  if(a==='input'){keys={};for(const k of ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','shift'])keys[k]=!!msg.keys?.[k];pusherHeld=!!msg.held;m.inputAt=Date.now();}
  else if(a==='select'&&Number.isInteger(msg.slot)&&msg.slot>=0&&msg.slot<5)selectSlot(msg.slot);
- else if(a==='interact')interact();else if(a==='edit')edit();else if(a==='remove')removeAt(cursorCell());else if(a==='rotate')rotateSelection();else if(a==='helm')setTool('helm');else if(a==='drop')dropItem(!!msg.half);else if(a==='portal')usePortal();
+ else if(a==='interact')interact();else if(a==='edit')edit();else if(a==='remove')secondaryAt(cursorCell());else if(a==='rotate')rotateSelection();else if(a==='helm')setTool('helm');else if(a==='drop')dropItem(!!msg.half);else if(a==='portal')usePortal();
  else if(a==='moveStack'&&[msg.from,msg.to].every(n=>Number.isInteger(n)&&n>=0&&n<5))moveStack(msg.from,msg.to,!!msg.half);
  else if(a==='craft'&&recipeNeeds(msg.item)&&Number.isInteger(msg.count)&&msg.count>=1&&msg.count<=8){activeFab=nearFab();if(activeFab)craft(msg.item,msg.count);}
  else if(a==='material'&&TYPES.includes(msg.item)){activeFab=nearFab();if(activeFab)transferMaterial(msg.item,!!msg.eject);}
