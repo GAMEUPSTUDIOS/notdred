@@ -29,12 +29,20 @@ const rc=spot('recycler');assert.ok(rc,'room for a recycler');
 run(`giveItem("recycler",1);selectSlot(slots.indexOf("recycler"));player.setTransform(V(${rc.x+1},${rc.y+2}),0);`);
 assert.equal(run(`validity({x:${rc.x},y:${rc.y}},"recycler")`),'');run(`commitBuild({x:${rc.x},y:${rc.y}},"recycler",0)`);
 assert.equal(run(`terrainAt({x:${rc.x+2},y:${rc.y+3}})?.type`),'recycler','3×4 footprint');assert.equal(run(`terrainAt({x:${rc.x+3},y:${rc.y+3}})?.type`)??null,null);
-// Half back: 16 standard ammo (4 per 1 iron + 1 explosive) → 2 iron + 2 explosives; a handheld pusher → a stationary one (ℵ30).
-run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("ammo",V(${rc.x+1},${rc.y}),V(0,0),16);`);step(10);
-assert.equal(run('JSON.stringify(items.filter(i=>i.recycled).map(i=>i.type+i.count).sort())'),JSON.stringify(['explosives2','iron2']),'half of 16 ammo\'s cost');
-run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("pusher",V(${rc.x+1},${rc.y}),V(0,0),1);`);step(70);
+// Thrown in: ignored. Clicked in with the stack in hand: worked on for RECYCLE_SECONDS, then half of 16 standard ammo's
+// cost (4 per 1 iron + 1 explosive) drops out: 2 iron + 2 explosives. A handheld pusher → a stationary one (ℵ30).
+run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("ammo",V(${rc.x+1},${rc.y}),V(0,0),16);`);step(240);
+assert.equal(run('items.filter(i=>i.type==="ammo").reduce((a,i)=>a+i.count,0)'),16,'thrown-in ammo is not recycled');
+run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;giveItem("ammo",16);selectSlot(slots.indexOf("ammo"));recycleCarried(terrainAt({x:${rc.x},y:${rc.y}}));`);
+assert.equal(run('inventory.ammo'),0,'loaded from the hand');step(60);assert.equal(run('items.length'),0,'still working');step(2*60+20);
+assert.equal(run('JSON.stringify(items.map(i=>i.type+i.count).sort())'),JSON.stringify(['explosives2','iron2']),'half of 16 ammo\'s cost, dropped when done');
+run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;giveItem("pusher",1);selectSlot(slots.indexOf("pusher"));recycleCarried(terrainAt({x:${rc.x},y:${rc.y}}));`);step(4*60);
 assert.ok(run('items.some(i=>i.type==="pusher_block")'),'pusher → stationary pusher');
-run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("iron",V(${rc.x+1},${rc.y}),V(0,0),16);`);step(70);assert.equal(run('items.filter(i=>i.type==="iron").reduce((a,i)=>a+i.count,0)'),16,'raw resources are left alone');
+run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;giveItem("iron",16);selectSlot(slots.indexOf("iron"));recycleCarried(terrainAt({x:${rc.x},y:${rc.y}}));`);assert.equal(run('inventory.iron'),16,'raw resources are refused');
+// Fabricators: nothing thrown in is taken, and only ingredients go in by hand.
+run(`for(const i of [...items])inside.destroyBody(i.body);items.length=0;`);const fab=run('(()=>{const f=[...terrain.values()].find(t=>t.type==="fabricator");return {x:f.x,y:f.y,iron:f.materials.iron||0};})()');
+run(`spawnItem("iron",V(${fab.x+.5},${fab.y+1}),V(0,0),8);`);step(60);assert.equal(run(`terrainAt({x:${fab.x},y:${fab.y}}).materials.iron||0`),fab.iron,'thrown iron not taken in');
+run(`activeFab=terrainAt({x:${fab.x},y:${fab.y}});giveItem("ladder",3);transferMaterial("ladder");`);assert.equal(run(`terrainAt({x:${fab.x},y:${fab.y}}).materials.ladder||0`),0,'a finished item is refused');
 // Recycler sitting on blocks keeps its support.
 assert.equal(run(`machineOnTop({x:${rc.x+1},y:${rc.y+4}})?.type??null`),'recycler');
 

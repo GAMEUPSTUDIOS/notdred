@@ -123,7 +123,9 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 
 ## Machines, ammo balance, live ships (v45)
 
-- **Recycler** (3×4, Machine fabricator, 16 iron): drop a stack in (or click it with the stack in hand) and it gives back half of what the item cost, from its bottom-right corner. A handheld pusher comes back as a stationary pusher (ℵ30). Raw resources and starter items are left alone; trash is eaten. Drednot's own recycler returned 80% at ℵ25: change `RECYCLE_RETURN` in `era.js` for that.
+- **Recycler** (3×4, Machine fabricator, 16 iron): click it with a stack in hand (or feed it with a loader). It works on the stack for 3 seconds, then drops half of what the item cost from its bottom-right corner. A handheld pusher comes back as a stationary pusher (ℵ30). Raw resources and starter items are left alone; trash is eaten. Drednot's own recycler returned 80% at ℵ25: change `RECYCLE_RETURN` in `era.js` for that.
+- **Loading machines:** nothing is taken in by throwing or dropping it onto a machine. Click the machine with the item in hand, or use a loader: loaders feed fabricators (ingredients only), recyclers, expando boxes, turrets (ammo), ejectors and thrusters (fuel or explosives). A fabricator only accepts the ingredients of what it can make.
+- **Automating recyclers:** a loader facing into a recycler feeds it a stack whenever it is idle and holds anything that can't be recycled. A loader beside its bottom-right corner, or a pusher, takes the dropped resources away.
 - **Comms station** (1×2, Machine fabricator, 8 iron): click it to talk to every ship in the zone. Ordinary chat now stays aboard your own ship (ℵ14). Classic mode: start a chat line with `;` while standing at one.
 - **Freeport anchor** (3×3, Engineering fabricator): while one is aboard in a Freeport, the ship can't leave through a portal (ℵ34).
 - **Spawn point** (1×1, Engineering fabricator, 8 iron): click it to choose captain, crew or guests. A player joining appears at a random spawn point set to their rank, otherwise at the helm (ℵ14). Crew and the captain can change it (ℵ15).

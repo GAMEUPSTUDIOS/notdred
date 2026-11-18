@@ -1,13 +1,15 @@
 'use strict';
 function canStore(f,t){return (f.materials[t]||0)>0||Object.values(f.materials).filter(n=>n>0).length<3}
 
-function transferMaterial(type,eject=false){if(!activeFab||!TYPES.includes(type))return;const mat=activeFab.materials;if(eject){const count=Math.min(stackLimit(type),mat[type]||0);scatter(type,count,V(activeFab.x-1.2,activeFab.y+1),key(activeFab.x,activeFab.y));mat[type]-=count;}else {if(!canStore(activeFab,type))return toast('All three fabricator bins are occupied. Eject a bin first.');const n=Math.min(inventory[type],64-(mat[type]||0));inventory[type]-=n;mat[type]=(mat[type]||0)+n;}renderRecipes();save(true)}
+function transferMaterial(type,eject=false){if(!activeFab||!TYPES.includes(type))return;const mat=activeFab.materials;if(!eject&&!fabIngredients(activeFab).has(type))return toast(NAMES[type]+' is not an ingredient for anything a '+FABRICATORS[fabKind(activeFab)].name.toLowerCase()+' makes.');if(eject){const count=Math.min(stackLimit(type),mat[type]||0);scatter(type,count,V(activeFab.x-1.2,activeFab.y+1),key(activeFab.x,activeFab.y));mat[type]-=count;}else {if(!canStore(activeFab,type))return toast('All three fabricator bins are occupied. Eject a bin first.');const n=Math.min(inventory[type],64-(mat[type]||0));inventory[type]-=n;mat[type]=(mat[type]||0)+n;}renderRecipes();save(true)}
 
 function clearQueue(){if(!activeFab)return;activeFab.queue=[];if(activeFab.job){for(const [m,n] of Object.entries(recipeNeeds(activeFab.job.type)||{}))inventory[m]+=n;activeFab.job=null}renderRecipes();save(true)}
 
 function craft(t,count=1){const f=activeFab||nearFab();if(!f||!recipeNeeds(t)||piloting)return false;if(!FABRICATORS[fabKind(f)].recipes.includes(t)){toast('A '+FABRICATORS[fabKind(f)].name+' cannot make '+NAMES[t]+'.');return false;}if(f.queue.length+count>32){toast('Queue limit: 32.');return false}for(let i=0;i<count;i++)f.queue.push(t);if(activeFab)renderRecipes();save(true);return true}
 
-function tickFabricators(dt){for(const f of terrain.values()){if(f.type!=='fabricator')continue;for(const item of [...items]){const p=item.body.getPosition();if(item.intakeFrom!==key(f.x,f.y)&&p.x>f.x-.45&&p.x<f.x+1.45&&p.y>f.y-.45&&p.y<f.y+2.45&&canStore(f,item.type)&&(f.materials[item.type]||0)<64){const n=Math.min(item.count,64-(f.materials[item.type]||0));f.materials[item.type]=(f.materials[item.type]||0)+n;item.count-=n;if(!item.count){inside.destroyBody(item.body);items.splice(items.indexOf(item),1);}}}f.queue=f.queue.filter(t=>recipeNeeds(t));if(f.job&&!recipeNeeds(f.job.type)){f.materials.iron=(f.materials.iron||0)+12;f.job=null;}if(!f.job&&f.queue.length){const t=f.queue[0];const need=Object.entries(recipeNeeds(t));if(need.every(([m,n])=>(f.materials[m]||0)>=n)){for(const [m,n] of need)f.materials[m]-=n;f.queue.shift();f.job={type:t,progress:0}}}if(f.job){f.job.progress=Math.min((DURATION[f.job.type]||2),f.job.progress+dt);if(f.job.progress>=(DURATION[f.job.type]||2)){const q=V(f.x-.9,f.y+1.5);const blocked=q.x<bounds.l+.85||[...blocks.values(),...[...terrain.values()].filter(t=>t.type==='net')].some(t=>Math.abs(t.x-q.x)<.85&&Math.abs(t.y-q.y)<.85)||items.filter(i=>P.Vec2.distance(i.body.getPosition(),q)<1).length>=4;if(!blocked){spawnItem(f.job.type,q,V(-1,-1),RECIPE_YIELD[f.job.type]||1).intakeFrom=key(f.x,f.y);effects.push({x:q.x,y:q.y,w:1,h:1,life:.3,color:'green',kind:'craft'});if(f.repeat&&f.queue.length<32)f.queue.push(f.job.type);f.job=null}}}}uiTimer+=dt;if(uiTimer>.2&&el('craft').open){uiTimer=0;renderRecipes()}}
+// Machines never swallow loose items thrown or dropped onto them: a player loads one by clicking it with the item in
+// hand, or a loader feeds it.
+function tickFabricators(dt){for(const f of terrain.values()){if(f.type!=='fabricator')continue;f.queue=f.queue.filter(t=>recipeNeeds(t));if(f.job&&!recipeNeeds(f.job.type)){f.materials.iron=(f.materials.iron||0)+12;f.job=null;}if(!f.job&&f.queue.length){const t=f.queue[0];const need=Object.entries(recipeNeeds(t));if(need.every(([m,n])=>(f.materials[m]||0)>=n)){for(const [m,n] of need)f.materials[m]-=n;f.queue.shift();f.job={type:t,progress:0}}}if(f.job){f.job.progress=Math.min((DURATION[f.job.type]||2),f.job.progress+dt);if(f.job.progress>=(DURATION[f.job.type]||2)){const q=V(f.x-.9,f.y+1.5);const blocked=q.x<bounds.l+.85||[...blocks.values(),...[...terrain.values()].filter(t=>t.type==='net')].some(t=>Math.abs(t.x-q.x)<.85&&Math.abs(t.y-q.y)<.85)||items.filter(i=>P.Vec2.distance(i.body.getPosition(),q)<1).length>=4;if(!blocked){spawnItem(f.job.type,q,V(-1,-1),RECIPE_YIELD[f.job.type]||1).intakeFrom=key(f.x,f.y);effects.push({x:q.x,y:q.y,w:1,h:1,life:.3,color:'green',kind:'craft'});if(f.repeat&&f.queue.length<32)f.queue.push(f.job.type);f.job=null}}}}uiTimer+=dt;if(uiTimer>.2&&el('craft').open){uiTimer=0;renderRecipes()}}
 
 function loadThruster(c,type){if(piloting)return toast('Leave the helm to load a thruster.');const m=mountHit(c);if(!m||m.type!=='thruster')return toast('Click a normal three-tile thruster. Starter thrusters do not need fuel.');if(!inventory[type])return toast('No '+NAMES[type]+' available.');inventory[type]--;const tank=type==='fuel'?'fuelItems':'explosiveItems';m[tank]=(m[tank]||0)+1;save(true);toast('Loaded '+NAMES[type]+'. Fuel: '+(m.fuelItems||0)+' / Explosives: '+(m.explosiveItems||0));}
 
@@ -23,7 +25,7 @@ function launchCargo(t,type,count){const port=ejectorExit(t);if(!port)return fal
 
 function ejectCarried(t){if(P.Vec2.distance(localPlayer(),mountPoint(t))>5||buildBlocked(mountPoint(t)))return toast('Move closer with a clear path to the ejector.');if(!slots[selected]||!stackCounts[selected])return toast('Hold an item stack and click the ejector.');const type=slots[selected],count=stackCounts[selected];if(launchCargo(t,type,count)){takeItem(type,count);save(true);toast('Ejected '+count+' '+NAMES[type]+'.');}}
 
-function tickEjectors(dt){for(const t of mounts){if(t.type!=='ejector')continue;t.cooldown=Math.max(0,(t.cooldown||0)-dt);if(t.cooldown>0)continue;const p=mountPoint(t),n=inward(t),q=V(p.x+n.x*1.1,p.y+n.y*1.1);const i=items.find(i=>P.Vec2.distance(i.body.getPosition(),q)<.8);if(i&&launchCargo(t,i.type,i.count)){inside.destroyBody(i.body);items.splice(items.indexOf(i),1);}}}
+function tickEjectors(dt){for(const t of mounts)if(t.type==='ejector')t.cooldown=Math.max(0,(t.cooldown||0)-dt);}
 
 function lootReachable(i){let blocked=false;world.rayCast(i.body.getPosition(),ship.getPosition(),f=>{if(f.getBody()!==ship&&f.getBody().getType()==='static'){blocked=true;return 0;}return 1;});return !blocked;}
 
@@ -81,12 +83,17 @@ function loaderTake(t,c){
  const box=cells.map(q=>boxAt(V(q.x,q.y))).find(Boolean);if(box){const type=TYPES.find(k=>(box.materials[k]||0)>0&&hatchAllows(t,k));if(type){const count=Math.min(stackLimit(type),box.materials[type]);box.materials[type]-=count;resizeBox(box);return {type,count};}}
  return null;}
 function loaderGive(t,c,stack,d){
+ // A loader facing into a recycler feeds it one stack per cycle (while it isn't busy). Anything it can't recycle
+ // stays in the loader, the same way a fabricator refuses finished items.
+ const rec=[...terrain.values()].find(f=>f.type==='recycler'&&terrainCells(f).some(q=>q.x===c.x&&q.y===c.y));
+ if(rec)return startRecycle(rec,stack.type,stack.count)?stack.count:0;
  const fab=[...terrain.values()].find(f=>f.type==='fabricator'&&terrainCells(f).some(q=>q.x===c.x&&q.y===c.y));
  if(fab){if(!fabIngredients(fab).has(stack.type)||!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
  const box=boxAt(V(c.x,c.y));if(box){const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
  const m=mountHit(c);
  if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return 0;const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
  if(m?.type==='ejector')return launchCargo(m,stack.type,stack.count)?stack.count:0;
+ if(m?.type==='thruster'){if(!['fuel','explosives'].includes(stack.type))return 0;const tank=stack.type==='fuel'?'fuelItems':'explosiveItems',n=Math.min(stack.count,THRUSTER_TANK-(m[tank]||0));if(n>0)m[tank]=(m[tank]||0)+n;return Math.max(0,n);}
  // Floor: an open interior cell with no solid tile and no stack already sitting there.
  if(t.requireOutput||!interiorCell(c)||blocks.has(key(c.x,c.y)))return 0;const there=terrainAt(c);if(there&&['wedge','glass','net','fabricator','loader','pusher_block','walkway_wedge'].includes(there.type))return 0;
  if(items.some(i=>{const p=i.body.getPosition();return Math.abs(p.x-c.x)<.7&&Math.abs(p.y-c.y)<.7;}))return 0;
@@ -105,18 +112,18 @@ function tickLoaders(dt){for(const t of terrain.values()){if(t.type!=='loader')c
  t.cooldown=Math.max(t.cooldown,LOADER_CYCLE);}}
 
 // ---- Recyclers -------------------------------------------------------------------------------------------------------
-// A loose stack that falls into a recycler's 3×4 frame is broken back down into half of what it cost (RECYCLE_RETURN),
-// one stack a second; fractions carry over per recycler so small stacks of ammo still add up. Out comes the
-// resources at the bottom-right corner (the arrow on the sprite). Starter items, raw resources and anything without
-// a recipe are left alone; trash ammo is simply eaten.
+// Loaded by clicking it with a stack in hand or by a loader facing into it (never by throwing things in). It works on
+// one stack for RECYCLE_SECONDS, then drops half of what that stack cost (RECYCLE_RETURN) from its bottom-right
+// corner, where a loader or pusher can take it away. Fractions carry over, so small stacks of ammo still add up.
+// Starter items, raw resources and anything without a recipe are refused; trash ammo is simply eaten.
 function recycleYield(type,count){if(RECYCLE_SWAP[type])return {[RECYCLE_SWAP[type]]:count};if(STARTER_ITEMS.includes(type)||type==='fab_starter')return null;if(FREE_RECIPES.includes(type))return {};const need=recipeNeeds(type);if(!need)return null;const per=RECIPE_YIELD[type]||1,out={};for(const [m,n] of Object.entries(need))out[m]=n*count/per*RECYCLE_RETURN;return out;}
-function inRecycler(f,p){const [w,h]=MACHINE_SIZE.recycler;return p.x>f.x-.5&&p.x<f.x+w-.5&&p.y>f.y-.5&&p.y<f.y+h-.5;}
-function recycleStack(f,type,count){const y=recycleYield(type,count);if(!y)return false;f.credit=f.credit||{};const out=[];for(const [m,n] of Object.entries(y)){f.credit[m]=(f.credit[m]||0)+n;const whole=Math.floor(f.credit[m]+1e-9);if(whole>0){f.credit[m]-=whole;out.push([m,whole]);}}
- const [w,h]=MACHINE_SIZE.recycler;let n=0;for(const [m,k] of out){let left=k;while(left>0){const c=Math.min(stackLimit(m),left);const it=spawnItem(m,V(f.x+w-1.2+(n%2)*.2,f.y+h-1.6),V(1.5,-1),c);it.recycled=true;left-=c;n++;}}
- f.busy=clock+1;f.lastOut=out.length?out.map(([m,k])=>k+' '+NAMES[m]).join(', '):'(nothing left)';actionEffect(f.x+1,f.y+1,'red',count+' x '+NAMES[type]);return true;}
-function tickRecyclers(dt){const list=[...terrain.values()].filter(t=>t.type==='recycler');if(!list.length)return;for(const f of list)f.cool=Math.max(0,(f.cool||0)-dt);for(const i of [...items]){const p=i.body.getPosition(),f=list.find(f=>inRecycler(f,p));if(!f){i.recycled=false;continue;}if(i.recycled||f.cool>0)continue;if(!recycleStack(f,i.type,i.count)){i.recycled=true;continue;}inside.destroyBody(i.body);items.splice(items.indexOf(i),1);f.cool=1;}}
-// Clicking a recycler with an item in hand feeds it the whole stack.
-function recycleCarried(f){if(P.Vec2.distance(localPlayer(),V(f.x+1,f.y+1.5))>4)return toast('Move closer to the recycler.');const t=slots[selected],n=stackCounts[selected];if(!t||!n)return toast('Hold an item to recycle, or drop it into the recycler.');if((f.cool||0)>0)return toast('The recycler is still working.');if(!recycleStack(f,t,n))return toast(NAMES[t]+' can\'t be recycled.');stackCounts[selected]=0;slots[selected]=null;f.cool=1;selectSlot(selected);save(true);}
+function startRecycle(f,type,count){if(f.job||!recycleYield(type,count))return false;f.job={type,count,left:RECYCLE_SECONDS};f.busy=clock+RECYCLE_SECONDS;f.lastOut='';actionEffect(f.x+1,f.y+1,'red',count+' x '+NAMES[type]);return true;}
+function finishRecycle(f){const {type,count}=f.job;f.job=null;const y=recycleYield(type,count)||{};f.credit=f.credit||{};const out=[];for(const [m,n] of Object.entries(y)){f.credit[m]=(f.credit[m]||0)+n;const whole=Math.floor(f.credit[m]+1e-9);if(whole>0){f.credit[m]-=whole;out.push([m,whole]);}}
+ const [w,h]=MACHINE_SIZE.recycler;let n=0;for(const [m,k] of out){let left=k;while(left>0){const c=Math.min(stackLimit(m),left);spawnItem(m,V(f.x+w-1.3+(n%2)*.3,f.y+h-1.5),V(1.2,-.6),c);left-=c;n++;}}
+ f.lastOut=out.length?out.map(([m,k])=>k+' '+NAMES[m]).join(', '):'(nothing left)';f.busy=clock+1.5;}
+function tickRecyclers(dt){for(const f of terrain.values()){if(f.type!=='recycler'||!f.job)continue;f.job.left-=dt;f.busy=clock+Math.max(f.job.left,0)+.05;if(f.job.left<=0)finishRecycle(f);}}
+// Clicking a recycler with an item in hand loads the whole stack.
+function recycleCarried(f){if(P.Vec2.distance(localPlayer(),V(f.x+1,f.y+1.5))>4)return toast('Move closer to the recycler.');const t=slots[selected],n=stackCounts[selected];if(!t||!n)return toast('Click the recycler with the stack you want to recycle in your hand.');if(f.job)return toast('The recycler is still working.');if(!recycleYield(t,n))return toast(NAMES[t]+' can\'t be recycled.');startRecycle(f,t,n);stackCounts[selected]=0;slots[selected]=null;selectSlot(selected);save(true);}
 
 // ---- Trash ammo decays (ℵ23: "It will decay in item form and in expando-boxes") ------------------------------------
 function tickTrashDecay(dt){const life=AMMO.trash.itemDecay||45;for(const i of [...items])if(i.type==='trash'&&Math.random()<dt/life){i.count--;if(i.count<=0){inside.destroyBody(i.body);items.splice(items.indexOf(i),1);}}for(const b of boxes)if(b.materials.trash>0&&Math.random()<dt*Math.min(16,b.materials.trash)/life/4)b.materials.trash--;}
