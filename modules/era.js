@@ -235,7 +235,7 @@ const THRUSTER_TANK = 16;
 // Comms station (ℵ14): talk to every ship in the zone. Ordinary chat stays aboard your own ship.
 const COMMS_RANGE = 2.5;
 // Spawn points (ℵ14): a joining player appears at a random spawn point set exactly to their rank, else at the helm.
-// ℵ15: "Crew can now edit door and spawn ranks."
+// In this build only the captain edits door and spawn ranks; a door or spawn point starts set to its placer's rank.
 const SPAWN_RANKS = ['captain', 'crew', 'guest'];
 // Ship size, in ship tiles. ℵ10+ (16 Mar 2019): "Ships now have a maximum size of 80x80 blocks". Minimum 6×5.
 const SHIP_LIMITS = {minW: 6, minH: 5, maxW: 80, maxH: 80};
