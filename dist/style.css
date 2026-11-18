@@ -93,3 +93,19 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 .pushermenu .pm-pick img{width:100%;height:100%}
 .pushermenu .pm-picker[hidden]{display:none}
 .pushermenu .pm-actions button{width:auto;padding:6px 16px;font-size:15px}
+
+/* Dev menu: give-item grid (search, icons, history) and mode toggles */
+#dev .devgivebar{display:flex;gap:8px;align-items:center}
+#dev .devsearch{flex:1;width:auto;background:#0d1a33;color:#fff;border:3px solid #e8e04a;font-size:16px}
+#dev .devgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;max-height:300px;overflow:auto;background:#141414;padding:8px;margin-top:6px}
+#dev .devitem{margin:0;padding:3px;width:46px;height:46px;background:#3a3a3a;border:3px solid #5fd45f;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#dev .devitem:hover{border-color:#fff;background:#4a4a4a}
+#dev .devitem[hidden]{display:none}
+#dev .devitem img{width:34px;height:34px;image-rendering:pixelated}
+#dev .devgiveopts input{width:70px}
+#dev .devhistory{min-height:52px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#dev .devhistory span{display:flex;gap:6px;flex-wrap:wrap}
+#dev .devmodes{display:flex;flex-direction:column;align-items:flex-start}
+#dev .devtoggle{display:flex;align-items:center;gap:10px;background:none;border:0;color:#e6eee9;font-size:18px;cursor:pointer}
+#dev .devtoggle i{display:inline-block;width:30px;height:30px;border:4px solid #e2342d;border-radius:6px;background:#26333b}
+#dev .devtoggle.on i{border-color:#5fd45f;background:#5fd45f}

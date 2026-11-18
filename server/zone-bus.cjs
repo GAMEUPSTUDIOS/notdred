@@ -46,7 +46,7 @@ class ZoneBus{
   // A ship arriving in a world (new, reloaded, or after a restart) never appears inside another ship: new ships all
   // start at 0,0, so a second one used to land in the first and the two were shoved apart as one tangled lump.
   for(const [r,x] of ext){const s0=this.sims.get(x.zone);if(s0&&s0.api.fleet.has(r.id))continue;try{if(r.game.run('clearSpawnSpot()'))ext.set(r,{...r.game.zone.exterior(),id:r.id,name:r.name});}catch{}}
-  for(const [r,x] of ext){const sim=this.sim(x.zone),info={x:x.x,y:x.y,vx:x.vx,vy:x.vy,ext:x.ext,size:x.size,mass:x.mass,damping:x.damping,docked:x.docked,name:r.name};
+  for(const [r,x] of ext){const sim=this.sim(x.zone),info={x:x.x,y:x.y,vx:x.vx,vy:x.vy,ext:x.ext,size:x.size,mass:x.mass,damping:x.damping,docked:x.docked,name:r.name,noclip:!!x.noclip};
    if(!sim.api.fleet.has(r.id))sim.api.zsAddShip(r.id,info);else{sim.api.zsUpdateShip(r.id,info);if(x.placed)sim.api.zsPlaceShip(r.id,info);}
    const f=r.game.zone.takeForces();sim.api.zsForces(r.id,f.forces,f.impulses);sim.emptySince=Date.now();}
   // 3. Apply queued room events: regeneration requests, missions, developer operations.

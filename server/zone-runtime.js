@@ -15,8 +15,11 @@ function zsAddShip(id,s){zsRemoveShip(id);const body=world.createDynamicBody({po
  const f={id,name:s.name||'',body,ext:{...s.ext},size:s.size||0,mass:s.mass||100,damping:s.damping??.55,docked:false,forces:[],impulses:[]};shipBox(body,f.ext);body.setMassData({mass:f.mass,center:V(0,0),I:0});body.setLinearVelocity(V(s.vx||0,s.vy||0));fleet.set(id,f);zsUpdateShip(id,s);return true;}
 function zsRemoveShip(id){const f=fleet.get(id);if(!f)return null;const out={x:f.body.getPosition().x,y:f.body.getPosition().y,vx:f.body.getLinearVelocity().x,vy:f.body.getLinearVelocity().y};world.destroyBody(f.body);fleet.delete(id);return out;}
 // Shape, mass and dock state follow the ship's room; a docked ship is held static where the room has it.
+// Ship noclip (dev menu): the hull collides with nothing — rocks, bots, loot or other ships.
+function shipNoclipApply(f){for(let x=f.body.getFixtureList();x;x=x.getNext())x.setFilterData({groupIndex:0,categoryBits:1,maskBits:f.noclip?0:0xffff});}
 function zsUpdateShip(id,s){const f=fleet.get(id);if(!f)return;f.name=s.name||f.name;f.size=s.size||f.size;
- const k=[s.ext.l,s.ext.r,s.ext.t,s.ext.b].join();if(k!==[f.ext.l,f.ext.r,f.ext.t,f.ext.b].join()){f.ext={...s.ext};shipBox(f.body,f.ext);f.body.setMassData({mass:f.mass,center:V(0,0),I:0});}
+ const k=[s.ext.l,s.ext.r,s.ext.t,s.ext.b].join();if(k!==[f.ext.l,f.ext.r,f.ext.t,f.ext.b].join()){f.ext={...s.ext};shipBox(f.body,f.ext);f.body.setMassData({mass:f.mass,center:V(0,0),I:0});shipNoclipApply(f);}
+ if(!!s.noclip!==!!f.noclip){f.noclip=!!s.noclip;shipNoclipApply(f);}
  if(s.mass&&Math.abs(s.mass-f.mass)>.01){f.mass=s.mass;f.body.setMassData({mass:f.mass,center:V(0,0),I:0});}if(s.damping!=null&&s.damping!==f.damping){f.damping=s.damping;f.body.setLinearDamping(s.damping);}
  if(s.docked){if(!f.docked||f.body.getType()!=='static'){f.body.setType('static');}f.body.setTransform(V(s.x,s.y),0);f.docked=true;}
  else if(f.docked){f.docked=false;f.body.setType('dynamic');f.body.setFixedRotation(true);f.body.setMassData({mass:f.mass,center:V(0,0),I:0});f.body.setTransform(V(s.x,s.y),0);f.body.setLinearVelocity(V(s.vx||0,s.vy||0));}}
