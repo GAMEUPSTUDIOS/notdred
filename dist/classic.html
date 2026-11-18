@@ -1,0 +1,141 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><title>notdred.io classic</title>
+<style type="text/css">
+body{margin:0;padding:8px;background:#0b1117;color:#e6eee9;font-family:Arial,Helvetica,sans-serif;font-size:13px}
+a{color:#eff63c}
+h1{font-size:20px;margin:0 0 6px 0;color:#b87be0}
+.box{background:#1b2733;border:2px solid #4b5b66;padding:8px;margin:0 0 8px 0}
+.small{font-size:11px;color:#9aa9ac}
+input,select{font-size:13px}
+button{font-size:12px;padding:2px 6px}
+.slot{width:86px;height:34px;font-size:11px}
+.sel{background:#2f6a2b;color:#ffffff}
+.cap{color:#5fc4ff;font-weight:bold}
+.crw{color:#ffd34a;font-weight:bold}
+.gst{color:#cfd8dc;font-weight:bold}
+.warn{color:#ff6b6b;font-weight:bold}
+#viewbox{border:2px solid #000;overflow:hidden}#view,#view2{cursor:crosshair}
+#chatlog{height:110px;overflow:auto;background:#0d151c;border:1px solid #4b5b66;padding:3px;font-size:12px}
+#notes{color:#ffcf6b}
+td{vertical-align:top}
+.ships td{padding:3px 6px;border-bottom:1px solid #33424c}
+</style></head>
+<body>
+<h1>notdred.io <span class="small">classic mode &middot; for old computers and browsers</span></h1>
+
+<div id="connect" class="box">
+ <b>Connect</b><br>
+ <table><tr><td>Name</td><td><input id="pname" maxlength="24" value="Player"></td></tr>
+ <tr><td>Token</td><td><input id="ptoken" type="password" size="24"> <span class="small">(the host's token, optional)</span></td></tr></table>
+ <button id="connectbtn" onclick="connectNow()">Connect</button> <span id="connstatus" class="small"></span>
+ <p class="small">Classic mode: the server draws the game and sends it to you as pictures, so it works in very old browsers such as Internet Explorer 6. Keys: WASD / arrows move and fly, Space jump/brake, E use, Q drop / portal, R rotate, 1&ndash;5 slots, Enter chat. Click the picture to use or build; right-click to dismantle.</p>
+</div>
+
+<div id="lobby" class="box" style="display:none">
+ <b>Ships on this server</b> <button onclick="send({type:'list'})">Refresh</button>
+ <div id="shiplist" style="margin:6px 0"></div>
+ New ship: <input id="newname" maxlength="32" size="20"> <button onclick="createShip()">Create</button> <span class="small">(blank = random name)</span>
+</div>
+
+<div id="game" style="display:none">
+ <table cellspacing="0" cellpadding="0"><tr><td>
+  <div id="viewbox" style="position:relative;width:640px;height:400px"><img id="view" src="" width="640" height="400" alt="notdred.io" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0"><img id="view2" src="" width="640" height="400" alt="" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0;visibility:hidden"></div><div class="small" style="text-align:right"><span id="fps"></span></div>
+  <div class="box" style="margin-top:4px">
+   <div id="hud">...</div>
+   <div id="slots" style="margin-top:4px"></div>
+   <div style="margin-top:4px">
+    <button onclick="tap('e')">E use / helm</button> <button onclick="tap('q')">Q drop / portal</button> <button onclick="tap('r')">R rotate</button>
+    &nbsp; Zoom <button onclick="zoomBy(-1)">&minus;</button><button onclick="zoomBy(1)">+</button>
+    &nbsp; Size <select id="size" onchange="resize()"><option value="480x300">small</option><option value="640x400" selected>medium</option><option value="800x500">large</option></select>
+    &nbsp; <button onclick="send({type:'leave'})">Leave ship</button>
+   </div>
+  </div>
+ </td><td style="padding-left:8px;width:300px">
+  <div id="motdbox" class="box" style="display:none"><table width="100%" cellspacing="0" cellpadding="0"><tr><td><b style="font-size:15px">Team MOTD</b></td><td align="right"><button onclick="motdHidden=1;showMotdBox()">Hide</button></td></tr></table><div id="motdshow" style="margin:6px 0"></div><div id="motdedit" style="display:none"><textarea id="motdtext" rows="6" style="width:96%" onfocus="typing=1" onblur="typing=0"></textarea><br><button onclick="saveMotd()">Save</button> <button onclick="motdEditing=0;showMotdBox()">Cancel</button></div><button id="motdeditbtn" style="display:none" onclick="motdEditing=1;$('motdtext').value=motd;showMotdBox()">Edit</button></div><div id="motdshowbtn" style="display:none;margin-bottom:8px"><button onclick="motdHidden=0;showMotdBox()">Show Team MOTD</button></div>
+  <div class="box"><b>Crew</b><div id="crew"></div></div>
+  
+  <div id="fab" class="box" style="display:none"></div>
+  <div class="box"><b>Chat</b><div id="chatlog"></div><input id="chatin" maxlength="200" style="width:96%" onfocus="typing=1" onblur="typing=0" onkeydown="return chatKey(event)"></div>
+  <div id="notes" class="box" style="display:none"></div>
+ </td></tr></table>
+</div>
+<p class="small">Want the full game? Open this server in a modern browser. <a href="/">Full version</a></p>
+
+<script type="text/javascript">
+/* Written for Internet Explorer 6: ES3 only (no JSON, no addEventListener, no Array methods beyond ES3). */
+var S=null,inGame=0,typing=0,down={},frameN=0,polling=0,walkZ=20,flyZ=8,piloting=0,W=640,H=400,lastStatus=null,notes=[];
+function $(id){return document.getElementById(id);}
+function esc(t){t=''+(t==null?'':t);return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function enc(o){var s='',k,v,first=1;if(o===null)return 'null';if(typeof o=='number'||typeof o=='boolean')return ''+o;if(typeof o=='string')return '"'+o.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\x00-\x1f]/g,' ')+'"';s='{';for(k in o){v=o[k];if(!first)s+=',';first=0;s+='"'+k+'":'+enc(v);}return s+'}';}
+function xhr(){if(window.XMLHttpRequest)return new XMLHttpRequest();try{return new ActiveXObject('Msxml2.XMLHTTP');}catch(e){}return new ActiveXObject('Microsoft.XMLHTTP');}
+function req(url,cb){var x=xhr();x.open('GET',url+(url.indexOf('?')<0?'?':'&')+'_='+(new Date()).getTime(),true);x.onreadystatechange=function(){if(x.readyState==4){var o=null;try{o=eval(x.responseText);}catch(e){}if(o&&o.error)note(o.error);if(o&&o.ended){S=null;showConnect();}if(cb)cb(o);}};x.send(null);}
+function setCookie(n,v){document.cookie=n+'='+encodeURIComponent(v)+'; expires=Fri, 31 Dec 2037 23:59:59 GMT; path=/';}
+function getCookie(n){var a=document.cookie.split('; '),i,p;for(i=0;i<a.length;i++){p=a[i].split('=');if(p[0]==n)return decodeURIComponent(p.slice(1).join('='));}return '';}
+function note(t){notes[notes.length]=t;if(notes.length>5)notes.shift();var h='',i;for(i=notes.length-1;i>=0;i--)h+=esc(notes[i])+'<br>';$('notes').innerHTML=h;show('notes',1);}
+function rankClass(r){return r=='captain'?'cap':r=='crew'?'crw':'gst';}
+function show(id,on){$(id).style.display=on?'block':'none';}
+function showConnect(){inGame=0;show('connect',1);show('lobby',0);show('game',0);}
+function showLobby(){inGame=0;show('connect',0);show('lobby',1);show('game',0);}
+function showGame(){if(!inGame){inGame=1;show('connect',0);show('lobby',0);show('game',1);nextFrame();}}
+
+function connectNow(){var name=$('pname').value,tok=$('ptoken').value;setCookie('nd_name',name);$('connstatus').innerHTML='Connecting...';
+ req('/classic/connect?name='+encodeURIComponent(name)+'&token='+encodeURIComponent(getCookie('nd_token'))+'&dev='+encodeURIComponent(tok),function(o){if(!o||!o.session){$('connstatus').innerHTML='Could not connect.';return;}S=o.session;setCookie('nd_token',o.token);$('connstatus').innerHTML='';showRooms(o.rooms);showLobby();if(!polling){polling=1;poll();}});}
+function send(m){if(S)req('/classic/send?s='+S+'&m='+encodeURIComponent(enc(m)));}
+function createShip(){send({type:'create',name:$('newname').value});}
+function showRooms(rooms){var h='<table class="ships" cellspacing="0">',i,r;if(!rooms||!rooms.length)h+='<tr><td>No ships yet. Make one below.</td></tr>';
+ for(i=0;rooms&&i<rooms.length;i++){r=rooms[i];h+='<tr><td><b>'+esc(r.name)+'</b>'+(r.mine?' <span class="crw">(yours)</span>':'')+'</td><td>'+r.players+'/'+r.maxPlayers+' crew</td><td>'+esc(r.zone)+'</td><td><button onclick="send({type:\'join\',room:\''+esc(r.id)+'\'})">Join</button></td></tr>';}
+ $('shiplist').innerHTML=h+'</table>';}
+
+function poll(){if(!S){polling=0;return;}req('/classic/poll?s='+S,function(o){var i,m;if(o&&o.messages)for(i=0;i<o.messages.length;i++){m=o.messages[i];
+  if(m.type=='rooms'){showRooms(m.rooms);showLobby();}else if(m.type=='joined')showGame();else if(m.type=='chat')chatLine(m);else if(m.type=='error')note(m.message);else if(m.type=='motd')setMotd(m);}
+  if(o&&o.status){if(!inGame)showGame();status(o.status);}setTimeout(poll,600);});}
+function status(st){var h='',i,s,c;lastStatus=st;piloting=st.piloting?1:0;
+ h='<b>'+esc(st.ship)+'</b> &middot; '+esc(st.zone)+' <span class="small">'+esc(st.blurb)+'</span><br>Shields '+st.hp+' / '+st.maxHp+(st.critical?' <span class="warn">CRITICAL &middot; returning to Freeport in '+st.critical+' s</span>':'')+' &middot; you are <span class="'+rankClass(st.rank)+'">'+esc(st.rank)+'</span>'+(st.piloting?' &middot; <b>at the helm</b>':'')+'<br><span class="small">'+esc(st.mission)+'</span>';
+ $('hud').innerHTML=h;h='';showMotdBox();
+ for(i=0;i<5;i++){s=st.slots[i];h+='<button class="slot'+(st.selected==i?' sel':'')+'" onclick="tap(\''+(i+1)+'\')">'+(i+1)+'. '+(s?esc(s.name)+' x'+s.count:'empty')+'</button> ';}
+ $('slots').innerHTML=h;h='';for(i=0;i<st.crew.length;i++){c=st.crew[i];h+='<span class="'+rankClass(c.rank)+'">'+esc(c.rank.charAt(0).toUpperCase())+'</span> '+esc(c.name)+'<br>';}$('crew').innerHTML=h;
+ if(st.fab){h='<b>'+esc(st.fab.kind)+'</b> <button onclick="req(\'/classic/closefab?s=\'+S)">Close</button><br><span class="small">Has: ';
+  for(i=0;i<st.fab.materials.length;i++)h+=esc(st.fab.materials[i].name)+' '+st.fab.materials[i].count+(i<st.fab.materials.length-1?', ':'');
+  h+=(st.fab.materials.length?'':'nothing')+' &middot; queue '+st.fab.queue+'</span><br><button onclick="req(\'/classic/insert?s=\'+S)">Insert held item</button><br>';
+  for(i=0;i<st.fab.recipes.length;i++)h+='<button style="margin:1px" onclick="req(\'/classic/craft?s=\'+S+\'&amp;item='+esc(st.fab.recipes[i].type)+'\')">'+esc(st.fab.recipes[i].name)+'</button> <span class="small">'+esc(st.fab.recipes[i].cost)+'</span><br>';
+  $('fab').innerHTML=h;show('fab',1);}else show('fab',0);}
+function chatLine(m){var d=$('chatlog');d.innerHTML+='<span class="'+rankClass(m.rank)+'">'+esc((m.rank||'guest').charAt(0).toUpperCase())+'</span> <b>'+esc(m.from)+'</b> <span class="small">'+esc(m.ship)+'</span>: '+esc(m.text)+'<br>';d.scrollTop=d.scrollHeight;}
+function chatKey(e){e=e||window.event;var c=e.keyCode,t;if(c==13){t=$('chatin').value;$('chatin').value='';if(t)send({type:'chat',text:t});$('chatin').blur();typing=0;return false;}if(c==27){$('chatin').blur();typing=0;return false;}return true;}
+
+function resize(){var v=$('size').value.split('x');W=+v[0];H=+v[1];$('view').width=W;$('view').height=H;$('view2').width=W;$('view2').height=H;$('viewbox').style.width=W+'px';$('viewbox').style.height=H+'px';}
+function zoomBy(d){if(piloting)flyZ=Math.max(4,Math.min(40,flyZ+d*2));else walkZ=Math.max(8,Math.min(64,walkZ+d*4));}
+/* Pictures are double-buffered: the next frame loads into the hidden image and the two swap when it is ready, so
+   the picture never flickers. The next request goes out the moment a frame arrives; the server answers with its
+   newest picture (it draws 30 a second), so the frame rate is as high as the connection and this computer allow. */
+var front=$('view'),back=$('view2'),loading=0,fpsCount=0,fpsAt=(new Date()).getTime();
+function nextFrame(){if(!inGame||!S||loading)return;loading=1;frameN++;back.src='/classic/frame?s='+S+'&w='+W+'&h='+H+'&z='+(piloting?flyZ:walkZ)+'&n='+frameN;}
+function frameLoaded(img){if(img!=back)return;loading=0;back.style.visibility='visible';front.style.visibility='hidden';back=front;front=img;fpsCount++;
+ var now=(new Date()).getTime();if(now-fpsAt>=1000){$('fps').innerHTML=Math.round(fpsCount*1000/(now-fpsAt))+' fps';fpsCount=0;fpsAt=now;}nextFrame();}
+function frameFailed(img){if(img!=back)return;loading=0;setTimeout(nextFrame,1000);}
+$('view').onload=function(){frameLoaded($('view'));};$('view2').onload=function(){frameLoaded($('view2'));};
+$('view').onerror=function(){frameFailed($('view'));};$('view2').onerror=function(){frameFailed($('view2'));};
+
+/* Ship MOTD: plain text (escaped, line breaks kept); the captain gets an edit box. */
+var motd='',motdHidden=0,motdEditing=0;
+function setMotd(m){motd=m.text||'';if(!m.changed||!lastStatus||!lastStatus.captain)motdHidden=0;$('motdshow').innerHTML=motd?esc(motd).replace(/\n/g,'<br>'):'<span class="small"><i>No message yet.</i></span>';showMotdBox();}
+function showMotdBox(){var cap=lastStatus&&lastStatus.captain?1:0,has=motd||cap;show('motdbox',has&&!motdHidden?1:0);show('motdshowbtn',has&&motdHidden?1:0);show('motdedit',cap&&motdEditing?1:0);show('motdshow',cap&&motdEditing?0:1);show('motdeditbtn',cap&&!motdEditing?1:0);}
+function saveMotd(){send({type:'motd',text:$('motdtext').value});motdEditing=0;showMotdBox();}
+/* Keyboard: keys are sent when pressed and released; repeats are not. */
+var NAMES={32:' ',37:'arrowleft',38:'arrowup',39:'arrowright',40:'arrowdown',16:'shift',27:'escape',191:'/',113:'f2'};
+function keyName(c){if(c>=65&&c<=90)return String.fromCharCode(c+32);if(c>=48&&c<=57)return String.fromCharCode(c);return NAMES[c]||null;}
+function sendKey(k,isDown,shift){if(S)req('/classic/key?s='+S+'&k='+encodeURIComponent(k)+'&d='+(isDown?1:0)+'&sh='+(shift?1:0));}
+function tap(k){sendKey(k,1,0);sendKey(k,0,0);}
+document.onkeydown=function(e){e=e||window.event;if(typing||!inGame)return true;var c=e.keyCode,k;if(c==13){$('chatin').focus();typing=1;return false;}k=keyName(c);if(!k)return true;if(!down[k]){down[k]=1;sendKey(k,1,e.shiftKey);}return false;};
+document.onkeyup=function(e){e=e||window.event;if(typing||!inGame)return true;var k=keyName(e.keyCode);if(!k)return true;if(down[k]){down[k]=0;sendKey(k,0,e.shiftKey);}return false;};
+window.onblur=function(){var k;for(k in down)if(down[k]){down[k]=0;sendKey(k,0,0);}};
+
+/* Mouse on the picture: left = use / build / fire, right = dismantle. */
+$('view').onmousedown=$('view2').onmousedown=function(e){e=e||window.event;if(!S)return false;var x=e.offsetX,y=e.offsetY,b=0;
+ if(x==null){var el=front,ox=0,oy=0;while(el){ox+=el.offsetLeft;oy+=el.offsetTop;el=el.offsetParent;}x=e.pageX-ox;y=e.pageY-oy;}
+ if(e.which){b=e.which==3?2:0;}else{b=e.button==2?2:0;}
+ req('/classic/click?s='+S+'&x='+x+'&y='+y+'&b='+b+'&w='+W+'&h='+H);return false;};
+
+$('pname').value=getCookie('nd_name')||'Player';
+window.onbeforeunload=function(){if(S){var x=xhr();try{x.open('GET','/classic/quit?s='+S,false);x.send(null);}catch(e){}}};
+</script>
+</body></html>

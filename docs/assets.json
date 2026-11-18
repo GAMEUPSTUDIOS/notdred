@@ -1,0 +1,42 @@
+{
+ "punch": {
+  "local": "dist/sprites/punch.png",
+  "official": "https://drednot.io/img/item/ammo_punch.png",
+  "status": "from the original build"
+ },
+ "booster": {
+  "local": "dist/sprites/booster.png",
+  "official": "https://drednot.io/img/item/repairkit.png",
+  "status": "from the original build"
+ },
+ "repair": {
+  "local": "dist/sprites/repair.png",
+  "official": "https://drednot.io/img/item/repair_tool.png",
+  "status": "from the original build"
+ },
+ "flux": {
+  "local": "dist/sprites/flux.png",
+  "source": "user texture pack img-2/item/res_flux_crystals.png",
+  "status": "original asset"
+ },
+ "pusher": {
+  "local": "dist/sprites/pusher.png",
+  "source": "image supplied by the user in chat (handheld pusher)",
+  "status": "original asset"
+ },
+ "pusher_block": {
+  "local": "dist/sprites/pusher_block.png",
+  "source": "user texture pack img-2/pusher.png",
+  "status": "original asset (placed stationary pusher)"
+ },
+ "_unwired_from_img-2": {
+  "official-fab_t_munitions/machine/engineering.png": "copied for the \u213518 fabricator types (not built yet)",
+  "bot_eye*.png": "zero-byte files in the zip; unusable"
+ },
+ "_policy": "Only the user's art: sprites from the original build, plus the user's texture pack (img-2) where the build had nothing. No generated artwork.",
+ "bot_saw": {
+  "local": "dist/sprites/official-bot_saw.png",
+  "source": "texture pack img-2/bot_saw.png",
+  "status": "original asset; drawn spinning around blue rammers"
+ }
+}
