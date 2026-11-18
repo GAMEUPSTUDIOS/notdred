@@ -24,11 +24,11 @@ function viewFactory(root){const dist=path.join(root,'dist'),compiled=new Map();
   const timers=new Set();
   const doc={querySelector:q=>q==='#game'?canvas:stubElement(),querySelectorAll:()=>[],getElementById:id=>id==='game'?canvas:(elements[id]??=stubElement()),
    createElement:tag=>{if(tag==='canvas'){const c=Canvas.createCanvas(1,1);c.style={};c.addEventListener=()=>{};return c;}return stubElement();},body:stubElement(),activeElement:stubElement({tagName:'BODY'}),addEventListener(){}};
-  const s={document:doc,Image:Img,localStorage:{getItem(){return null},setItem(){},removeItem(){}},console,performance,Date,Math,JSON,
+  const s={URL,URLSearchParams,document:doc,Image:Img,localStorage:{getItem(){return null},setItem(){},removeItem(){}},console,performance,Date,Math,JSON,
    setTimeout:(f,ms)=>{const t=setTimeout(()=>{timers.delete(t);try{f();}catch{}},ms);timers.add(t);return t;},clearTimeout:t=>{clearTimeout(t);timers.delete(t);},
    setInterval:(f,ms)=>{const t=setInterval(()=>{try{f();}catch{}},ms);timers.add(t);return t;},clearInterval:t=>{clearInterval(t);timers.delete(t);},
    requestAnimationFrame(){},innerWidth:640,innerHeight:400,devicePixelRatio:1,ZoneGenerator:require(path.join(dist,'zone-generator.js')),ShipCodec:require(path.join(dist,'modules/save-codec.js')),confirm:()=>false,prompt:()=>null,alert(){}};
-  s.window=s;s.addEventListener=(t,f)=>{(listeners.window[t]??=[]).push(f);};s.removeEventListener=()=>{};s.location={protocol:'http:',host:'classic'};s.navigator={userAgent:'notdred-classic'};
+  s.window=s;s.addEventListener=(t,f)=>{(listeners.window[t]??=[]).push(f);};s.removeEventListener=()=>{};s.location={protocol:'http:',host:'classic',hostname:'classic',search:''};s.navigator={userAgent:'notdred-classic'};
   vm.createContext(s);const opts={timeout:5000};for(const f of SCRIPTS)script(f).runInContext(s,opts);
   vm.runInContext('initialize();inLobby=true;',s,opts);
   // The client's socket is this session: what it sends goes straight to the server's message handler.
