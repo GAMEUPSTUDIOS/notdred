@@ -34,13 +34,14 @@ const PORTAL_RANGE = 12;
 // Combat-zone portals are placed by the generator from the zone seed (portalsTo, in order).
 // The first one always sits on the entry cavern at (0,0). Safe zones list fixed positions.
 const ZONES = {
-  freeport: {id: 'freeport', name: 'Freeport I', kind: 'safe', pvp: null, half: {w: 100, h: 56},
+  // Freeports are big enough for several 80×80 battleships to berth side by side (they were 200×112).
+  freeport: {id: 'freeport', name: 'Freeport I', kind: 'safe', pvp: null, half: {w: 240, h: 150},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'finch', x: 0, y: -28}]},
-  freeport2: {id: 'freeport2', name: 'Freeport II', kind: 'safe', pvp: null, half: {w: 100, h: 56},
+  freeport2: {id: 'freeport2', name: 'Freeport II', kind: 'safe', pvp: null, half: {w: 240, h: 150},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'finch2', x: 0, y: -28}]},
-  freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 100, h: 56},
+  freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 240, h: 150},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'sparrow', x: 0, y: -28}]},
   finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: null,
@@ -236,6 +237,8 @@ const COMMS_RANGE = 2.5;
 // Spawn points (ℵ14): a joining player appears at a random spawn point set exactly to their rank, else at the helm.
 // ℵ15: "Crew can now edit door and spawn ranks."
 const SPAWN_RANKS = ['captain', 'crew', 'guest'];
+// Ship size, in ship tiles. ℵ10+ (16 Mar 2019): "Ships now have a maximum size of 80x80 blocks". Minimum 6×5.
+const SHIP_LIMITS = {minW: 6, minH: 5, maxW: 80, maxH: 80};
 const FABRICATORS = {
   starter:     {name: 'Starter fabricator',     item: 'fab_starter',     badge: 'official-fab_t_starter',
                 recipes: ['block', 'ladder', 'walkway', 'net', 'wrench', 'door', 'booster', 'ammo', 'fab_machine', 'fab_engineering']},
@@ -290,4 +293,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};

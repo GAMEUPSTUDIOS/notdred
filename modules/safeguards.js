@@ -4,13 +4,13 @@
 // launching cargo through the hull, corrupting physics, or piling up enough loose bodies to lag a server.
 // Every limit lives in SAFETY.
 const SAFETY={
- maxLooseStacks:220,      // loose item bodies inside one ship before stacks are merged
- hardLooseStacks:320,     // …and before the oldest excess stacks are ejected from the ship
+ maxLooseStacks:1200,     // loose item bodies inside one ship before stacks are merged (high: item logic counts stacks)
+ hardLooseStacks:1600,    // …and before the oldest excess stacks are ejected from the ship
  maxCargoSpeed:40,        // m/s, loose items and expando boxes (stops pusher/loader launch exploits)
  maxCrewSpeed:30,         // m/s, crew members
  compactionSeconds:2,     // an item wedged inside a solid tile this long is moved to the nearest open cell
  checkInterval:.25,       // seconds between the slower checks
- maxMachines:{pusher_block:48,loader:48}
+ maxMachines:{}          // no cap on loaders or pushers: big battleships and item-logic builds use hundreds
 };
 let safetyTimer=0,lastGoodShip=null;
 const finiteVec=v=>Number.isFinite(v.x)&&Number.isFinite(v.y);
@@ -43,7 +43,8 @@ function tickSafeguards(dt){
  // Too many loose bodies: merge stacks first; past the hard limit, eject the oldest excess (never deleted).
  if(items.length>SAFETY.maxLooseStacks){const merged=mergeLooseStacks();if(merged)toastAll('Cargo tidy-up: merged '+merged+' loose stacks.');}
  if(items.length>SAFETY.hardLooseStacks){const extra=items.splice(0,items.length-SAFETY.hardLooseStacks);for(const i of extra){addWorldLoot(i.type,ship.getWorldPoint(V(0,bounds.t-4)),i.count,ship.getLinearVelocity()).grace=5;inside.destroyBody(i.body);}toastAll(extra.length+' loose stacks were ejected: too much cargo lying around (limit '+SAFETY.hardLooseStacks+').');}}
-// Server lag relief (room.cjs calls this when a ship's simulation runs slow): merge stacks and put still
-// cargo to sleep so it costs nothing until something touches it.
-function lagRelief(){const merged=mergeLooseStacks();let slept=0;for(const i of [...items,...boxes])if(!cargoWakeLocks.get(i.body)?.size&&i.body.isAwake()&&i.body.getLinearVelocity().length()<.3){i.body.setAwake(false);slept++;}toastAll('This ship was lagging the server: merged '+merged+' stacks and settled '+slept+' idle items.');return {merged,slept};}
+// Server lag relief (room.cjs calls this when a ship's simulation runs slow): put still cargo to sleep so it costs
+// nothing until something touches it. It no longer merges stacks: item-logic builds (gates, sorters, counters) depend
+// on exactly which stacks exist, and a sleeping item wakes the moment a pusher or loader acts on it.
+function lagRelief(){const merged=0;let slept=0;for(const i of [...items,...boxes])if(!cargoWakeLocks.get(i.body)?.size&&i.body.isAwake()&&i.body.getLinearVelocity().length()<.3){i.body.setAwake(false);slept++;}if(slept)toastAll('This ship was lagging the server: settled '+slept+' idle items.');return {merged,slept};}
 function machineLimitReached(type){const max=SAFETY.maxMachines[type];if(!max)return false;let n=0;for(const t of terrain.values())if(t.type===type)n++;return n>=max;}
