@@ -47,7 +47,7 @@ function tickShots(dt){const add=[];for(const s of shots){s.v.y+=zoneDef().shotG
     if(b){const imp=AMMO[s.type]?.impulse||0,k=b.body.getMass()*(imp?imp*BOULDER_KICK:.25);b.body.applyLinearImpulse(V(d.x*k,d.y*k),at,true);b.body.setAwake(true);}s.life=0;}
    else if(hit.startsWith('ghost:')){const amount=dmg*(typeof shotPvp==='function'?shotPvp(s):pvpMultiplier());const d=s.v.clone();d.normalize();if(typeof zoneEvent==='function')zoneEvent({type:'hit',target:hit.slice(6),zone,amount,ammo:s.frag?'flak':s.type||'ammo',point:{x:at.x,y:at.y},dir:{x:d.x,y:d.y}});if(amount>0)addScore(amount/100*SCORE.pvpPer100);s.life=0;}
    else if(hit.startsWith('bot:')){const [,species,ix]=hit.split(':'),index=Number(ix),bot=findBot(species,index);if(bot)shotImpulse(s,bot.body,bot.body.getMass(),8);damageBot(dmg,species,index);s.life=0;}
-   else {const r=rocks.get(hit);if(r.kind==='hazard'){s.life=0;continue;}if(r.kind==='seeker'){wakeSeeker(hit);s.life=0;continue;}if(def.rockBreaker&&s.damage==null)r.hp=0;else r.hp-=dmg/100;if(r.hp<=0)mineRock(hit);
+   else {const r=rocks.get(hit);if(r.kind==='hazard'){s.life=0;continue;}if(r.kind==='seeker'){wakeSeeker(hit);s.life=0;continue;}if(def.rockBreaker&&s.damage==null)r.hp=0;else r.hp-=dmg*WORLD_DAMAGE_SCALE;if(typeof noteRockHurt==='function')noteRockHurt(r);if(r.hp<=0)mineRock(hit);
     // Sniper rounds ricochet off rock.
     if(s.bounces>0&&normal){s.bounces--;const vn=s.v.x*normal.x+s.v.y*normal.y;s.v=V(s.v.x-2*vn*normal.x,s.v.y-2*vn*normal.y);s.p=V(at.x+normal.x*.05,at.y+normal.y*.05);s.life-=dt;continue;}s.life=0;}}
   s.p=next;s.life-=dt;}

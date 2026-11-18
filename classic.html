@@ -79,7 +79,8 @@ function showLobby(){inGame=0;show('connect',0);show('lobby',1);show('game',0);}
 function showGame(){if(!inGame){inGame=1;show('connect',0);show('lobby',0);show('game',1);nextFrame();}}
 
 function connectNow(){var name=$('pname').value,tok=$('ptoken').value;setCookie('nd_name',name);$('connstatus').innerHTML='Connecting...';
- req('/classic/connect?name='+encodeURIComponent(name)+'&token='+encodeURIComponent(getCookie('nd_token'))+'&dev='+encodeURIComponent(tok),function(o){if(!o||!o.session){$('connstatus').innerHTML='Could not connect.';return;}S=o.session;setCookie('nd_token',o.token);$('connstatus').innerHTML='';showRooms(o.rooms);showLobby();if(!polling){polling=1;poll();}});}
+ req('/classic/connect?name='+encodeURIComponent(name)+'&token='+encodeURIComponent(getCookie('nd_token'))+'&dev='+encodeURIComponent(tok),function(o){if(!o||!o.session){$('connstatus').innerHTML='Could not connect.';return;}S=o.session;setCookie('nd_token',o.token);$('connstatus').innerHTML='';showRooms(o.rooms);showLobby();if(!polling){polling=1;poll();}var lk=linkParams();if(lk.ship)send({type:'join',room:lk.ship,key:lk.key||''});});}
+function linkParams(){var q=window.location.search.replace(/^\?/,'').split('&'),o={},i,p;for(i=0;i<q.length;i++){p=q[i].split('=');if(p[0])o[p[0]]=decodeURIComponent(p[1]||'');}return o;}
 function send(m){if(S)req('/classic/send?s='+S+'&m='+encodeURIComponent(enc(m)));}
 function createShip(){send({type:'create',name:$('newname').value});}
 function showRooms(rooms){var h='<table class="ships" cellspacing="0">',i,r;if(!rooms||!rooms.length)h+='<tr><td>No ships yet. Make one below.</td></tr>';
