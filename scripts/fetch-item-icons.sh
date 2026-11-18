@@ -1,20 +1,32 @@
 #!/usr/bin/env bash
-# Downloads the original item icons the game uses from the drednot.io image folder (Index of /img/item/) into
-# dist/sprites/item-<name>.png. The game picks them up automatically; any file that is missing falls back to
-# the build's own icon. Run once from the project folder (needs internet, e.g. in a Codespace):
+# Copies drednot.io's own images into the project, so the game uses the real art instead of stand-ins.
+# It reads the folder listings at https://drednot.io/img/ and https://drednot.io/img/item/ and downloads every PNG:
+#   /img/item/<name>.png  ->  dist/sprites/item-<name>.png      (item icons: ammo, metal, explosives, turrets, ...)
+#   /img/<name>.png       ->  dist/sprites/official-<name>.png  (placed tiles, machines, bots, ...)
+# Run it once from the project folder somewhere with internet access (a Codespace works), then commit:
 #
-#   bash scripts/fetch-item-icons.sh                      # from https://drednot.io/img/item/
-#   bash scripts/fetch-item-icons.sh https://host/img/item  # from another copy of the folder
+#   bash scripts/fetch-item-icons.sh
+#   git add dist/sprites && git commit -m "Official drednot images" && git push
+#
+# Another copy of the folders can be used instead:  bash scripts/fetch-item-icons.sh https://host/img
 set -uo pipefail
 cd "$(dirname "$0")/.."
-BASE="${1:-https://drednot.io/img/item}"; BASE="${BASE%/}"
-FILES="ammo_standard ammo_scattershot ammo_flak ammo_sniper ammo_punch ammo_yank ammo_slug ammo_trash turret_rc turret_rc_starter turret_burst turret_auto turret_controller repairkit repair_tool"
+BASE="${1:-https://drednot.io/img}"; BASE="${BASE%/}"
 ok=0; fail=0
-for f in $FILES; do
-  if curl -fsSL --max-time 20 -o "dist/sprites/item-$f.png.tmp" "$BASE/$f.png" && head -c 8 "dist/sprites/item-$f.png.tmp" | grep -q PNG; then
-    mv "dist/sprites/item-$f.png.tmp" "dist/sprites/item-$f.png"; ok=$((ok+1)); echo "  ✓ $f.png"
-  else
-    rm -f "dist/sprites/item-$f.png.tmp"; fail=$((fail+1)); echo "  ✗ $f.png (not downloaded)"
-  fi
-done
-echo; echo "  $ok icons saved to dist/sprites/ ($fail missing). Reload the game page to see them."
+fetch_dir(){ # $1 = folder URL, $2 = file prefix
+  local list names
+  list=$(curl -fsSL --max-time 30 "$1/") || { echo "  ✗ could not read the listing at $1/"; return; }
+  names=$(printf '%s' "$list" | grep -oE 'href="[^"?/]+\.png"' | sed -E 's/href="([^"]+)\.png"/\1/' | sort -u)
+  [ -z "$names" ] && { echo "  ✗ no PNG files listed at $1/"; return; }
+  for f in $names; do
+    if curl -fsSL --max-time 30 -o "dist/sprites/$2$f.png.tmp" "$1/$f.png" && head -c 8 "dist/sprites/$2$f.png.tmp" | grep -q PNG; then
+      mv "dist/sprites/$2$f.png.tmp" "dist/sprites/$2$f.png"; ok=$((ok+1)); echo "  ✓ $2$f.png"
+    else
+      rm -f "dist/sprites/$2$f.png.tmp"; fail=$((fail+1)); echo "  ✗ $f.png (not downloaded)"
+    fi
+  done
+}
+fetch_dir "$BASE/item" "item-"
+fetch_dir "$BASE" "official-"
+echo; echo "  $ok images saved to dist/sprites/ ($fail failed)."
+echo "  Next: git add dist/sprites && git commit -m \"Official drednot images\" && git push"
