@@ -1,0 +1,17 @@
+'use strict';
+// Starter corner gimbals swing around the hull pivot. Reverse thrust is
+// shared diagonally by the pair, so neither exhaust points into the cabin.
+function thrusterDirection(m,requested){
+ const n=V(requested.x,requested.y);if(n.length()<.0001)return inward(m);n.mul(1/n.length());
+ if(m.type==='starter'&&m.side==='bottom'&&n.y>0){
+  const left=m.at===bounds.l,right=m.at===bounds.r;
+  if(left&&n.x<n.y)return V(Math.SQRT1_2,Math.SQRT1_2);
+  if(right&&-n.x<n.y)return V(-Math.SQRT1_2,Math.SQRT1_2);
+ }
+ return n;
+}
+
+function stepController(dt){if(piloting){let desired=V((keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0));if(desired.length()>1)desired.mul(1/desired.length());const localVel=ship.getLinearVelocity();let commands=[];for(const m of mounts.filter(m=>m.type==='thruster'||m.type==='starter')){const base=inward(m),a=(m.rotation||0)*Math.PI/2;const axis=V(base.x*Math.cos(a)-base.y*Math.sin(a),base.x*Math.sin(a)+base.y*Math.cos(a));let n=desired.clone(),power=desired.length();if(m.type!=='starter'&&P.Vec2.dot(axis,n)<-.01)power=0;if(keys[' ']){if(localVel.length()>.01){n=V(-localVel.x,-localVel.y);n.mul(1/n.length());power=clamp(localVel.length()*.35,0,1)}else if(m.type==='thruster')power=Math.max(power,clamp(-P.Vec2.dot(n,localVel)*.35,0,1))}const requested=n;n=thrusterDirection(m,n);power*=Math.max(0,P.Vec2.dot(n,requested));const available=m.type==='starter'||m.burnRemaining>0||m.fuelItems>0||m.explosiveItems>0;if(power>0&&available)commands.push({m,n,power})}if(docked&&P.Vec2.dot(desired,dockNormal(docked.side))>.1&&commands.some(c=>P.Vec2.dot(c.n,dockNormal(docked.side))>.1))releaseDock();if(!docked)for(const {m,n,power} of commands){const thrust=burn(m,dt,power);if(thrust>0){m.active=power;m.thrustDirection={x:n.x,y:n.y};ship.applyForce(V(n.x*thrust*power,n.y*thrust*power),ship.getWorldPoint(mountPoint(m)),true)}}player.setTransform(V(helm.x,helm.y-.15),0);
+}else{const p=localPlayer(),v=player.getLinearVelocity(),move=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),up=keys.w||keys.arrowup,down=keys.s||keys.arrowdown;if(manning&&(move||up||down||keys[' '])){manning=null;}if(manning&&pusherHeld)controllerFire();const ladder=[...terrain.values()].find(t=>t.type==='ladder'&&!(t.rotation%2)&&Math.abs(t.x-p.x)<.6&&Math.abs(t.y-p.y)<1.04);if(!ladder)climbing=false;else if((up||down)&&ladderCooldown<=0){climbing=true;ladderX=ladder.x}grounded=false;inside.rayCast(V(p.x,p.y+.53),V(p.x,p.y+.75),(f,point,n)=>{if(f.getBody()!==player&&f.getFilterCategoryBits()!==16&&n.y<-.4)grounded=true;return 1});
+const pressed=keys[' ']&&!jumpWas;if(pressed&&(grounded||climbing)){climbing=false;ladderCooldown=.3;jumpTime=.16;v.y=-4.6;}if(climbing){player.setTransform(V(ladderX,p.y),0);v.x=0;v.y=accelerate(v.y,((down?1:0)-(up?1:0))*3.2,30*dt);player.setGravityScale(0)}else{if(move)facing=move;/* glass is icy: little grip to start or stop */const onIce=grounded&&terrainAt({x:Math.round(p.x),y:Math.round(p.y+.95)})?.type==='glass';v.x=accelerate(v.x,move*4.5,(grounded?(onIce?(move?4:1):(move?28:34)):14)*dt);player.setGravityScale(1);if(keys[' ']&&jumpTime>0){v.y-=35*dt;jumpTime-=dt}else {jumpTime=0;if(!keys[' ']&&v.y< -4)v.y=accelerate(v.y,-4,30*dt)}}player.setLinearVelocity(v);}
+jumpWas=!!keys[' '];}

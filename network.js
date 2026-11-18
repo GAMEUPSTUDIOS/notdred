@@ -1,0 +1,180 @@
+'use strict';
+let netMined=[],netOthers=new Map(),netCaptain=false,netCrewKey='';
+// Snapshots arrive at 10 Hz; everything moving is extrapolated from its last known velocity (capped at 250 ms).
+const netAge=()=>Math.min((performance.now()-netLast)/1000,.25);const ahead=(p,v,t)=>({x:p.x+(v?.x||0)*t,y:p.y+(v?.y||0)*t});let netRank='guest',netActive=false,netSocket=null,netSeq=0,netState=null,netLast=0,netTick=0,netLayout='',netID='',netAdmin=false,localName='Player 0';
+const localMethods={edit,interact,removeAt,selectSlot,dropItem,rotateSelection,setTool,moveStack,craft,transferMaterial,clearQueue,configureHatch,recover,usePortal,leaveShip,devAction,save,drawCombatActors,drawBotMarkers};
+function networkSend(data){if(['create','join','import'].includes(data?.type)&&el('crewname'))data={...data,player:el('crewname').value};if(netSocket?.readyState===1)netSocket.send(JSON.stringify(data));}
+function netAction(action,data={}){const aim={x:(mouse.x-W/2)/zoom+cam.x,y:(mouse.y-H/2)/zoom+cam.y};networkSend({type:'action',action,seq:++netSeq,aim,...data});}
+edit=function(){if(netActive){{const d=terrainAt(cursorCell());if(d?.type==='door'&&['walk','empty'].includes(tool)&&!keys.shift){if(netCaptain||netRank==='captain')return openDoorMenu(d);if(tool==='empty')return toast('Only the captain can set who may use this door.');}}const f=terrainAt(cursorCell());if(f?.type==='fabricator'&&nearFab()===f&&['empty','walk'].includes(tool)&&!keys.shift)openCraft(f);return netAction('edit');}return;};
+interact=function(){if(netActive){if(nearFab()){activeFab=nearFab();openCraft(activeFab);}return netAction('interact');}return;};
+removeAt=function(c){if(netActive)return netAction('remove');return;};
+selectSlot=function(n){if(netActive)return netAction('select',{slot:n});return;};
+dropItem=function(half){if(netActive)return netAction('drop',{half});return;};
+rotateSelection=function(){if(netActive)return netAction('rotate');return;};
+setTool=function(t){if(netActive){if(t==='helm')netAction('helm');return;}return;};
+moveStack=function(from,to,half){if(netActive)return netAction('moveStack',{from,to,half});return;};
+craft=function(item,count=1){if(netActive)return netAction('craft',{item,count});return;};
+transferMaterial=function(item,eject=false){if(netActive)return netAction('material',{item,eject});return;};
+clearQueue=function(){if(netActive)return netAction('clearQueue');return;};
+configureHatch=function(cell,mode,items,opts={}){if(netActive)return netAction('hatch',{cell,mode,items,pull:!!opts.pull,requireOutput:!!opts.requireOutput});return;};
+recover=function(){if(netActive)return netAction('recover');return;};
+usePortal=function(){if(netActive)return netAction('portal');return;};
+save=function(silent=false){if(netActive){if(!silent)networkSend({type:'export'});return;}return;};
+leaveShip=function(){if(netActive){networkSend({type:'leave'});netActive=false;inLobby=true;el('lobby').hidden=false;netState=null;keys={};return;}return;};
+devAction=function(op){if(netActive){if(!netAdmin)return toast('Server dev controls require the host’s DEV_TOKEN.');return netAction('dev',{op:op==='seed'?'regen':op,item:el('devitem').value,count:+el('devamount').value,species:el('devbot')?.value,zone:el('devmission')?.value});}return;};
+// Rebind direct function references installed before the network module.
+el('recover').onclick=()=>recover();el('clearqueue').onclick=()=>clearQueue();el('repeatqueue').onchange=e=>{if(netActive)netAction('repeat',{value:e.target.checked});else if(activeFab){activeFab.repeat=e.target.checked;save(true);}};
+const leaveButton=[...document.querySelectorAll('button')].find(b=>b.textContent==='Leave ship');if(leaveButton)leaveButton.onclick=()=>leaveShip();
+function layoutKey(s){return JSON.stringify([s.zone,s.zoneData[s.zone]?.seed,s.bounds,s.brokenHull,s.blocks.map(b=>[b.x,b.y,b.rotation]),s.terrain.map(t=>[t.type,t.x,t.y,t.rotation]),s.mounts.map(m=>[m.type,m.side,m.at,m.rotation]),s.helm]);}
+function receiveSnapshot(s,tick){if(tick<netTick)return;netTick=tick;const zd=s.zoneData[s.zone]??={};if(s.minedReset)netMined=[...(zd.mined||[])];else netMined.push(...(s.minedAdd||[]));zd.mined=netMined;const layout=layoutKey(s);if(layout!==netLayout){const previousCam={...cam};netActive=false;initialize(s);netActive=true;netLayout=layout;cam=previousCam;}if(s.name)shipName=s.name;shipScore=s.score||0;renameIn=s.renameIn||0;criticalFor=s.criticalFor||0;if(s.mission)missionState={...missionState,...s.mission};if(zd.treasure!=null&&zoneData[zone]&&zoneData[zone].treasure!==zd.treasure){if(typeof refreshTreasure==='function')refreshTreasure();}
+ netState=s;netLast=performance.now();if(typeof playerFilter==='function')playerFilter(player,s.self.rank||'guest');zone=s.zone;zoneData=s.zoneData;shipHP=s.shipHP;hullHP=s.hullHP||{};brokenHull=new Set(s.brokenHull||[]);effects=s.effects||[];clock=s.clock||clock;slots=s.stacks.map(x=>x?.type||null);stackCounts=s.stacks.map(x=>x?.count||0);selected=s.self.selected;tool=s.self.tool;piloting=s.self.piloting;docked=s.docked??null;facing=s.self.facing;climbing=s.self.climbing;buildRotation=s.self.rotation;pusherPull=s.self.pusherPull;manning=s.self.manning??null;buildJob=s.self.buildJob;if(!(piloting&&!docked))ship.setLinearVelocity(V(s.velocity.x,s.velocity.y));
+ for(const b of s.blocks){const t=blocks.get(key(b.x,b.y));if(t)t.hp=b.hp;}
+ for(const value of s.terrain){const t=terrain.get(key(value.x,value.y));if(t)Object.assign(t,value);}s.mounts.forEach((m,i)=>{if(mounts[i])Object.assign(mounts[i],m);});
+ while(items.length>s.items.length)inside.destroyBody(items.pop().body);s.items.forEach((i,n)=>{if(!items[n])spawnItem(i.type,V(i.x,i.y),V(0,0),i.count);const t=items[n];t.type=i.type;t.count=i.count;t.body.setTransform(V(i.x,i.y),i.angle||0);t.body.setLinearVelocity(V(i.v?.x||0,i.v?.y||0));});
+ while(boxes.length>s.boxes.length)inside.destroyBody(boxes.pop().body);s.boxes.forEach((b,n)=>{if(!boxes[n])spawnBox(V(b.x,b.y),b.materials);boxes[n].materials=b.materials;boxes[n].body.setTransform(V(b.x,b.y),b.angle||0);});
+ if(s.minedReset){const mined=new Set(netMined);for(const id of [...rocks.keys()])if(mined.has(id))removeRock(id,false);}else for(const id of s.minedAdd||[])removeRock(id,false);rebuildDirtyRockChunks();
+ for(const b of s.zoneData[s.zone]?.boulders||[]){const o=boulders.find(x=>x.id===b.id);if(b.gone){if(o){world.destroyBody(o.body);boulders.splice(boulders.indexOf(o),1);}continue;}if(o)o.body.setTransform(V(b.x,b.y),b.a||0);else if(typeof addBoulder==='function')addBoulder(b.id,V(b.x,b.y),b.a||0,b.r||0);}
+ const loot=s.zoneData[s.zone]?.loot||[];while(worldLoot.length>loot.length)world.destroyBody(worldLoot.pop().body);loot.forEach((i,n)=>{const w=worldLoot[n]??(worldLoot[n]=addWorldLoot(i.type,V(i.x,i.y),1,V(0,0)));w.type=i.type;w.count=i.count;w.body.setTransform(V(i.x,i.y),0);w.body.setLinearVelocity(V(i.vx||0,i.vy||0));});
+ if(el('craft').open){activeFab=nearFab();if(activeFab)renderRecipes();else el('craft').close();}
+ for(const n of s.notices||[])toast(n);
+ netRank=s.self.rank||netRank;const crewKey=JSON.stringify(s.crew.map(c=>[c.id,c.name,c.rank]))+netCaptain;if(crewKey!==netCrewKey){netCrewKey=crewKey;el('netbadge').innerHTML='';const head=document.createElement('div');head.textContent=`Online · ${s.crew.length}/8 crew · you are ${netRank}`;el('netbadge').appendChild(head);for(const c of s.crew){const row=document.createElement('div');row.className='crewrow';const tag=document.createElement('span');tag.className='rank rank-'+(c.rank||'guest');tag.textContent=(c.rank||'guest').toUpperCase();row.append(tag,' '+(c.id===netID?'▸ ':'')+c.name);
+  // Captains set each member's rank (crew can build and pilot; guests can only walk, chat and carry) or kick them.
+  if(netCaptain&&c.id!==netID){const sel=document.createElement('select');sel.innerHTML='<option value="crew">crew</option><option value="guest">guest</option>';sel.value=c.rank==='crew'?'crew':'guest';sel.onchange=()=>networkSend({type:'rank',crew:c.id,rank:sel.value});const k=document.createElement('button');k.textContent='kick';k.onclick=()=>networkSend({type:'kick',crew:c.id});row.append(' ',sel,' ',k);}el('netbadge').appendChild(row);}}
+ const seenShips=new Set();for(const o of s.others||[]){seenShips.add(o.id);const rec=netOthers.get(o.id)||{};Object.assign(rec,o,{layout:o.layout||rec.layout,at:performance.now()});netOthers.set(o.id,rec);}for(const k of [...netOthers.keys()])if(!seenShips.has(k))netOthers.delete(k);
+}
+let netFrameAt=0;
+function networkFrame(){if(!netState)return;const now=performance.now(),dt=Math.min((now-netFrameAt)/1000||1/60,.1);netFrameAt=now;clock+=dt;const alpha=1-Math.exp(-dt*22),self=netState.crew.find(c=>c.id===netID);const age=netAge(),lead=Math.min(age+netRTT/2+1/60,.4);
+ // Client-side prediction: your own player — and your ship while you pilot it — moves the moment you press a key,
+ // using the same controller and physics as the server; the server's position then gently corrects it, or snaps
+ // it when they disagree by more than a tile and a half (five for ships). Everything else is shown as sent.
+ const predictShip=piloting&&!docked&&!modalOpen(),predictCrew=self&&!piloting&&!modalOpen();
+ if(predictShip||predictCrew){try{stepController(dt);if(predictShip)world.step(dt);else inside.step(dt);}catch{}}
+ // snap: error (tiles) beyond which prediction is abandoned; rate: how fast small errors are corrected (1/s).
+ const settle=(body,q,v,keep,snap,rate)=>{const p=body.getPosition(),e=Math.hypot(q.x-p.x,q.y-p.y);if(!keep||e>snap){body.setTransform(V(p.x+(q.x-p.x)*(keep?1:alpha),p.y+(q.y-p.y)*(keep?1:alpha)),0);body.setLinearVelocity(V(v.x,v.y));}else{const k=1-Math.exp(-dt*rate);if(e>.04)body.setTransform(V(p.x+(q.x-p.x)*k,p.y+(q.y-p.y)*k),0);const w=body.getLinearVelocity();body.setLinearVelocity(V(w.x+(v.x-w.x)*k*.5,w.y+(v.y-w.y)*k*.5));}};
+ settle(ship,ahead(netState.position,netState.velocity,lead),netState.velocity,predictShip,5,2);
+ if(self)settle(player,ahead(self.p,self.v,predictCrew?lead:age),self.v,predictCrew,1.5,4);for(const e of effects)e.life-=dt;effects=effects.filter(e=>e.life>0);}
+function drawCrew(){if(!netActive||!netState)return;const own={player,facing,piloting,climbing,tool,slots,selected,localName};for(const c of netState.crew){if(c.id===netID)continue;const cp=ahead(c.p,c.v,netAge());player={getPosition:()=>cp,getLinearVelocity:()=>c.v};facing=c.facing;piloting=c.piloting;climbing=c.climbing;tool=c.tool;slots=[c.held];selected=0;localName=c.name;drawPlayer();}({player,facing,piloting,climbing,tool,slots,selected,localName}=own);}
+drawCombatActors=function(){if(!netActive)return localMethods.drawCombatActors();for(const b of netState?.bots||[])drawBot(b.color,ahead(b.p,b.v,netAge()),b.hp,b.index);for(const s of netState?.projectiles||[])drawProjectile(ahead(s.p,s.v,netAge()),s.v,s.type);};
+drawBotMarkers=function(cx,cy,scale,x,y,mw){if(!netActive)return localMethods.drawBotMarkers(cx,cy,scale,x,y,mw);ctx.save();for(const b of netState?.bots||[]){ctx.fillStyle=(BOT_TYPES[b.color]||BOT_TYPES.red).minimap;ctx.beginPath();ctx.arc(cx+b.p.x*scale,cy+b.p.y*scale,b.color==='green'?4:2.5,0,Math.PI*2);ctx.fill();}ctx.restore();};
+// Every ship on the server is a card: yours (green, "Owned"), other players' (blue), plus "New Ship".
+let netRooms=[],ownedOnly=false;
+function showRooms(rooms){netRooms=rooms||[];renderShipCards();}
+function renderShipCards(){const list=el('shipcards');if(!list)return;list.replaceChildren();const q=(el('shipsearch')?.value||'').trim().toLowerCase();
+ const rooms=netRooms.filter(r=>(!q||r.name.toLowerCase().includes(q))&&(!ownedOnly||r.mine)).sort((a,b)=>(b.mine-a.mine)||(b.players-a.players)||a.name.localeCompare(b.name));
+ for(const r of rooms){const card=document.createElement('div');card.className='shipcard '+(r.mine?'owned':'other');const b=document.createElement('button');b.disabled=r.players>=r.maxPlayers;
+  b.innerHTML=`<strong>${r.mine?'⚓︎':'⛵︎'}</strong><span class="shipname"></span><small>${r.players}/${r.maxPlayers} crew · ${escapeHTML(ZONES[r.zone]?.name||r.zone)}</small>${r.mine?'<em>Owned</em>':''}${r.returnIn>0&&!ZONES[r.zone]?.kind?.startsWith('safe')?`<small class="returning">Returning to ${escapeHTML(ZONES[HOME_FREEPORT[r.zone]]?.name||'Freeport')} in ${missionClock(r.returnIn)}</small>`:''}`;
+  b.querySelector('.shipname').textContent=r.name;b.onclick=()=>networkSend({type:'join',room:r.id});card.appendChild(b);
+  if(r.mine&&!r.players){const d=document.createElement('button');d.className='deleteship';d.textContent='Delete';d.title='Delete this ship permanently';d.onclick=()=>{if(confirm('Delete '+r.name+' permanently?'))networkSend({type:'delete',room:r.id});};card.appendChild(d);}list.appendChild(card);}
+ if(netSocket?.readyState===1){const n=document.createElement('div');n.className='shipcard newship';const b=document.createElement('button');b.innerHTML='<strong>＋</strong>New Ship<small>Blank name = random name</small>';b.onclick=()=>{const name=prompt('Name your new ship (leave blank for a random name):','');if(name!==null)networkSend({type:'create',name});};n.appendChild(b);list.appendChild(n);}
+ else{const p=document.createElement('p');p.textContent='Connect to a server to see its ships.';list.appendChild(p);}}
+// Accepts a full ws(s):// address, an http(s):// link to the server, or just its host name.
+function normalizeServer(v){v=String(v||'').trim();if(!v)return '';if(!/^[a-z]+:\/\//i.test(v))v='wss://'+v;try{const u=new URL(v);if(u.protocol==='https:')u.protocol='wss:';else if(u.protocol==='http:')u.protocol='ws:';if(u.pathname==='/'||u.pathname==='')u.pathname='/play';u.search='';u.hash='';return u.href;}catch{return v;}}
+function connectServer(){el('serverurl').value=normalizeServer(el('serverurl').value);const address=el('serverurl').value.trim();let u;try{u=new URL(address);if(!['ws:','wss:'].includes(u.protocol))throw Error();}catch{return toast('Enter a ws:// or wss:// server address ending in /play.');}if(location.protocol==='https:'&&u.protocol==='ws:')return toast('HTTPS pages require wss://. For local play, open the Node server’s http://localhost:8080 page.');try{localStorage.setItem('notdred-server',u.href);localStorage.setItem('notdred-name',el('crewname').value);}catch{}netSocket?.close();el('networkstatus').textContent='Connecting…';netSocket=new WebSocket(u.href);netLayout='';netTick=0;netSeq=0;netSocket.onopen=()=>networkSend({type:'hello',protocol:1,name:el('crewname').value,token:localStorage.getItem('freeport-session'),devToken:el('devtoken').value});netSocket.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}if(m.type==='welcome'){localStorage.setItem('freeport-session',m.token);netID=m.self;netAdmin=m.admin;el('networkstatus').textContent='Connected'+(netAdmin?' with host access':'')+'.';el('realmname').textContent='⚓︎ '+u.host;el('realmnote').textContent='Join any ship below, or make a new one.';showRooms(m.rooms);}else if(m.type==='pong'){const r=(performance.now()-m.t)/1000;if(r>=0&&r<3)netRTT=netRTT*.7+r*.3;}else if(m.type==='chat')addChat(m);else if(m.type==='rooms')showRooms(m.rooms);else if(m.type==='leaderboard'){leaderboardRows=(m.ships||[]).map(r=>({...r,you:r.id===m.you}));renderLeaderboard();}else if(m.type==='joined'){netCaptain=!!m.captain;netCrewKey='';netOthers=new Map();netActive=true;inLobby=false;el('lobby').hidden=true;localName=el('crewname').value||'Crew';el('netbadge').hidden=false;}else if(m.type==='motd')receiveMotd(m);else if(m.type==='crew'){crewReportData=m;if(el('manageship')?.open&&manageTab==='crew')renderManage();}else if(m.type==='snapshot')receiveSnapshot(m.state,m.tick);else if(m.type==='error')toast(m.message);else if(m.type==='export')openSavePanel(m.data);};netSocket.onclose=()=>{netActive=false;inLobby=true;netState=null;el('lobby').hidden=false;el('netbadge').hidden=true;el('networkstatus').textContent='Disconnected. Press Connect to reconnect.';el('realmname').textContent='Not connected';netRooms=[];renderShipCards();keys={};};netSocket.onerror=()=>el('networkstatus').textContent='Connection failed. Check the server address and TLS/origin settings.';}
+// Lobby wiring. The address defaults to the server this page came from (or the last one used); connecting is automatic then.
+{let saved={};try{saved={server:localStorage.getItem('notdred-server'),name:localStorage.getItem('notdred-name')};}catch{}if(saved.name)el('crewname').value=saved.name;
+ // A copy of the page on GitHub Pages (or any static host) has no game server of its own: the server comes from the
+ // link (?server=...), or the one used last time. Served by a notdred.io server, the page connects to that server.
+ const fromLink=normalizeServer(new URLSearchParams(location.search).get('server')||''),staticHost=/\.github\.io$/i.test(location.hostname);
+ const here=!staticHost&&(location.protocol==='http:'||location.protocol==='https:')?(location.protocol==='https:'?'wss://':'ws://')+location.host+'/play':'';el('serverurl').value=fromLink||here||saved.server||'';
+ if(staticHost)for(const a of document.querySelectorAll('a[href="/classic"],a[href="source.zip"]'))a.hidden=true;
+ el('connectserver').onclick=connectServer;el('refreshrooms').onclick=()=>networkSend({type:'list'});el('shipsearch').oninput=renderShipCards;el('ownedonly').onclick=()=>{ownedOnly=!ownedOnly;el('ownedonly').setAttribute('aria-pressed',ownedOnly);el('ownedonly').classList.toggle('on',ownedOnly);renderShipCards();};
+ el('importship').onclick=()=>openSavePanel();for(const id of ['serverurl','devtoken','crewname'])el(id).addEventListener('keydown',e=>{if(e.key==='Enter')connectServer();});
+ renderShipCards();if(el('serverurl').value)setTimeout(connectServer,0);
+ // The ship list refreshes itself while you are in the menu (crew counts, return timers).
+ setInterval(()=>{if(inLobby&&netSocket?.readyState===1)networkSend({type:'list'});},3000);}
+const badge=document.createElement('div');badge.id='netbadge';badge.hidden=true;document.body.appendChild(badge);
+// Input goes out the moment a key changes (plus a 50 ms heartbeat), and a ping every 2 s measures the round trip
+// so the client can predict how far ahead of the last snapshot the server really is.
+let netInputSig='',netRTT=.1;function sendInput(force=false){if(!netActive)return;const paused=modalOpen()||el('craft').open,k=paused?{}:keys,sig=JSON.stringify([k,!paused&&pusherHeld]);if(!force&&sig===netInputSig)return;netInputSig=sig;netAction('input',{keys:k,held:!paused&&pusherHeld});}
+setInterval(()=>sendInput(true),50);for(const ev of ['keydown','keyup','mousedown','mouseup'])window.addEventListener(ev,()=>setTimeout(()=>sendInput(),0));
+setInterval(()=>{if(netActive&&netSocket?.readyState===1)netSocket.send(JSON.stringify({type:'ping',t:performance.now()}));},2000);
+function openSavePanel(encoded){let d=el('savepanel');if(!d){d=document.createElement('dialog');d.id='savepanel';document.body.appendChild(d);}d.innerHTML='<h2>Ship save · FSV1</h2><p>Vector records · raw DEFLATE · Base64 · checksum</p><textarea id="savecode" aria-label="Encoded ship save"></textarea><button id="exportcode">Export current ship</button> <button id="importcode">Import as ship</button> <button id="closesave">Close</button><p id="savestatus"></p>';el('savecode').value=encoded||'';el('exportcode').onclick=()=>{if(netActive)return networkSend({type:'export'});el('savestatus').textContent='Join your ship to export it.';};el('importcode').onclick=()=>{try{const raw=el('savecode').value.trim(),s=ShipCodec.decode(raw);if(netSocket?.readyState===1){if(netActive)return toast('Leave the ship before importing a new multiplayer ship.');networkSend({type:'import',data:raw});d.close();}else el('savestatus').textContent='Connect to a server first.';}catch(e){el('savestatus').textContent='Import rejected: '+e.message;}};el('closesave').onclick=()=>d.close();keys={};d.showModal();}
+el('save').textContent='Export';el('save').onclick=()=>{if(netActive)networkSend({type:'export'});};
+
+el('reset').remove();
+
+// Other ships in this zone, drawn from their exterior layout (sent once per layout change) with live crew.
+function drawOtherShips(){if(!netActive||!netOthers.size)return;const saved={bounds,helm,terrain,brokenHull,piloting,player,facing,climbing,tool,slots,selected,localName};
+ try{for(const o of netOthers.values()){const L=o.layout;if(!L)continue;const t=Math.min((performance.now()-o.at)/1000,.25),x=o.x+o.vx*t,y=o.y+o.vy*t;
+  bounds=L.bounds;helm=L.helm;terrain=new Map();brokenHull=new Set(L.brokenHull);piloting=o.crew.some(c=>c.p);const b=bounds;ctx.save();ctx.translate(snapX(x),snapY(y));
+  drawShipFloor(b);for(let xx=b.l;xx<=b.r;xx++){if(!brokenHull.has(key(xx,b.t)))boundary(xx,b.t);if(!brokenHull.has(key(xx,b.b)))boundary(xx,b.b);}for(let yy=b.t+1;yy<b.b;yy++){if(!brokenHull.has(key(b.l,yy)))boundary(b.l,yy);if(!brokenHull.has(key(b.r,yy)))boundary(b.r,yy);}
+  for(const [bx,by,r] of L.blocks)block(bx,by,r);for(const [type,tx,ty,r] of L.terrain)drawTerrain(type,tx,ty,r);drawHelm();for(const m of L.mounts)drawMount(m);
+  for(const c of o.crew){const p={x:c.x,y:c.y};player={getPosition:()=>p,getLinearVelocity:()=>({x:0,y:0})};facing=c.f||1;piloting=c.p;climbing=c.c;tool=c.t;slots=[c.h];selected=0;localName=c.n;if(!c.p)drawPlayer();}
+  drawHealthBar((b.l+b.r)/2,b.t-1.35,b.r-b.l,o.hp/(o.maxHp||SHIELDS.base),o.name+' · '+(o.hp>0?'Shields '+o.hp+' / '+(o.maxHp||SHIELDS.base):'CRITICAL'));ctx.restore();}}
+ finally{({bounds,helm,terrain,brokenHull,piloting,player,facing,climbing,tool,slots,selected,localName}=saved);}}
+function drawOtherShipMarkers(cx,cy,s){if(!netActive)return;ctx.save();ctx.font='bold 9px Arial';for(const o of netOthers.values()){const px=cx+o.x*s,py=cy+o.y*s;ctx.fillStyle='#ffb347';ctx.fillRect(px-2,py-2,4,4);ctx.fillText(o.name.slice(0,12),px+4,py-3);}ctx.restore();}
+
+// ---- Chat ------------------------------------------------------------------------------------------------------
+// Enter opens the chat line; Enter sends, Esc cancels. Messages reach everyone in your zone (every ship there) and
+// your own crew.
+const chatLog=[];
+function chatUI(){if(el('chatlog'))return;const log=document.createElement('div');log.id='chatlog';document.body.appendChild(log);const input=document.createElement('input');input.id='chatinput';input.maxLength=200;input.placeholder='Say something… (Enter to send, Esc to cancel)';input.hidden=true;document.body.appendChild(input);
+ input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){const text=input.value.trim();input.value='';closeChat();if(text&&netActive)networkSend({type:'chat',text});}else if(e.key==='Escape'){input.value='';closeChat();}});}
+function openChat(){chatUI();keys={};pusherHeld=false;const i=el('chatinput');i.hidden=false;i.focus();renderChat(true);}
+function closeChat(){const i=el('chatinput');if(i){i.hidden=true;i.blur();}renderChat();}
+function addChat(m){chatUI();chatLog.push({...m,seen:Date.now()});if(chatLog.length>60)chatLog.shift();renderChat();}
+function renderChat(all=false){const log=el('chatlog');if(!log)return;const now=Date.now(),typing=!el('chatinput')?.hidden,rows=chatLog.filter(m=>all||typing||now-m.seen<15000).slice(typing?-14:-7);
+ log.innerHTML=rows.map(m=>`<div class="chatline"><span class="rank rank-${escapeHTML(m.rank||'guest')}">${escapeHTML((m.rank||'guest')[0].toUpperCase())}</span> <b>${escapeHTML(m.from)}</b> <small>${escapeHTML(m.ship||'')}</small>: ${escapeHTML(m.text)}</div>`).join('');}
+setInterval(()=>renderChat(),1000);
+window.addEventListener('keydown',e=>{if(e.key!=='Enter'||inLobby||document.activeElement?.tagName==='INPUT'||document.activeElement?.tagName==='TEXTAREA'||modalOpen())return;e.preventDefault();openChat();});
+
+// ---- Manage Ship: Ship Settings · Crew Control & Log ----------------------------------------------------------------
+// The log (left) is the ship's history from the server; Crew Control (right) lists everyone who has been aboard, with
+// who is online, what they carry, their play time and rank. The captain sets ranks (also for people who are offline)
+// and kicks people who are aboard.
+let manageTab='crew',crewReportData=null;
+function openManage(tab=manageTab){if(!netActive)return;manageTab=tab;let d=el('manageship');if(!d){d=document.createElement('dialog');d.id='manageship';document.body.appendChild(d);}
+ d.innerHTML=`<div class="managetabs"><button data-tab="settings">Ship Settings</button><button data-tab="crew">Crew Control &amp; Log</button><button id="closemanage" class="closebtn">Close</button></div><div id="managebody"></div>`;
+ d.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('on',b.dataset.tab===tab);b.onclick=()=>openManage(b.dataset.tab);});el('closemanage').onclick=()=>d.close();keys={};if(!d.open)d.showModal();renderManage();if(tab==='crew')networkSend({type:'crew'});}
+function renderManage(){const body=el('managebody');if(!body)return;
+ if(manageTab==='settings'){body.innerHTML=`<div class="managesettings"><h3>Ship name</h3><p><b id="msname"></b> <button id="msrename">Rename…</button></p><p class="fine">Ships can be renamed once per hour (captain only).</p><h3>Ship file</h3><p><button id="msexport">Export ship</button></p><h3>Zone</h3><p id="mszone"></p></div>`;
+  el('msname').textContent=shipName;el('mszone').textContent=zoneDef().name+' · '+zoneDef().blurb;el('msrename').disabled=!netCaptain;el('msrename').onclick=()=>{el('manageship').close();openRename();};el('msexport').onclick=()=>networkSend({type:'export'});return;}
+ const R=crewReportData,fmtTime=t=>new Date(t).toLocaleString(),rankTag=r=>`<span class="rank rank-${escapeHTML(r||'guest')}">${escapeHTML((r||'guest').toUpperCase())}</span>`;
+ body.innerHTML=`<div class="managecrew"><section><h3>Log</h3><div id="shiplog" class="shiplog"></div></section><section><h3>Crew Control</h3><div class="crewtools"><button id="crewrefresh">↻ Refresh List + Clear Filters</button><input id="crewsearch" placeholder="Search"></div><table class="crewtable"><thead><tr><th>On.</th><th>Identity</th><th>Inventory</th><th>Playtime</th><th>Rank / Actions</th></tr></thead><tbody id="crewrows"></tbody></table></section></div>`;
+ el('crewrefresh').onclick=()=>{el('crewsearch').value='';networkSend({type:'crew'});};el('crewsearch').oninput=()=>renderCrewRows();
+ if(!R){el('shiplog').textContent='Loading…';return;}
+ el('shiplog').innerHTML=R.log.map(e=>e.kind==='time'?`<div class="logtime">${escapeHTML(fmtTime(e.t))}</div>`:`<div class="logline">${e.who?rankTag(e.who.rank)+' <b class="rn-'+escapeHTML(e.who.rank||'guest')+'">'+escapeHTML(e.who.short)+'</b> <small>'+escapeHTML(e.who.name)+'</small> ':'<b>[EMPTY SHIP]</b> '}${escapeHTML(e.text)}</div>`).join('')||'<p>No events yet.</p>';
+ el('shiplog').scrollTop=1e9;renderCrewRows();}
+function renderCrewRows(){const R=crewReportData,tb=el('crewrows');if(!R||!tb)return;const q=(el('crewsearch')?.value||'').trim().toLowerCase();tb.replaceChildren();
+ for(const c of R.crew.filter(c=>!q||(c.name+' '+c.short+' '+c.rank).toLowerCase().includes(q))){const tr=document.createElement('tr');tr.className=c.online?'online':'offline';
+  const inv=c.inventory.map(i=>`<span class="invitem" title="${escapeHTML(NAMES[i.type]||i.type)}">${spriteImages[i.type]?.src?`<img src="${spriteImages[i.type].renderURL||spriteImages[i.type].src}" alt="">`:escapeHTML(NAMES[i.type]||i.type)}<b>${i.count}</b></span>`).join('');
+  tr.innerHTML=`<td>${c.online?'<span class="ondot">1</span>':'0'}</td><td><code>${escapeHTML(c.short)}</code> ${escapeHTML(c.name)}${c.owner?'<div class="ownertag">Ship Owner</div>':''}${c.you?' <small>(you)</small>':''}</td><td>${inv}</td><td>${missionClock(c.playtime)}</td><td class="rankcell"></td>`;
+  const cell=tr.querySelector('.rankcell');
+  const btn=(label,cls,fn)=>{const b=document.createElement('button');b.textContent=label;b.className=cls;b.onclick=fn;cell.append(' ',b);return b;};
+  if(c.banned){cell.innerHTML='<span class="bannedtag">Banned</span>';if(R.captain)btn('Unban','unbanbtn',()=>networkSend({type:'ban',account:c.short,banned:false,report:true}));tb.appendChild(tr);continue;}
+  if(R.captain&&!c.owner){const sel=document.createElement('select');sel.innerHTML='<option value="crew">Crew</option><option value="guest">Guest</option>';sel.value=c.rank==='crew'?'crew':'guest';sel.onchange=()=>networkSend({type:'rank',account:c.short,rank:sel.value,report:true});cell.appendChild(sel);
+   if(c.online){const k=document.createElement('button');k.textContent='Kick';k.className='kickbtn';k.onclick=()=>{if(confirm('Kick '+c.name+' from the ship?'))networkSend({type:'kick',crew:c.uid,report:true});};cell.append(' ',k);}
+   btn('Ban','kickbtn',()=>{if(confirm('Ban '+c.name+' ('+c.short+') from this ship? They will not be able to join again until you unban them.'))networkSend({type:'ban',account:c.short,banned:true,report:true});});}
+  else cell.innerHTML=`<span class="rankname rn-${c.rank}">${c.rank[0].toUpperCase()+c.rank.slice(1)}</span>`;
+  // Crew (not the captain, who can kick outright) vote to kick guests who are aboard.
+  if(!R.captain&&R.rank==='crew'&&c.online&&c.rank==='guest'&&!c.you){const b=btn(c.voted?`Voted (${c.votes}/${R.votesNeeded})`:`Vote kick (${c.votes}/${R.votesNeeded})`,'kickbtn',()=>networkSend({type:'votekick',crew:c.uid,report:true}));b.disabled=c.voted;}tb.appendChild(tr);}}
+{const nav=el('save').parentElement,b=document.createElement('button');b.id='manageshipbtn';b.textContent='Manage Ship';b.onclick=()=>openManage();nav.insertBefore(b,el('save'));}
+
+// Doors: the captain clicks a door (empty hand or wrench; Shift+click or right-click dismantles) to choose who may pass.
+function mayBuildDoor(){return !netActive||netRank==='captain';}
+function openDoorMenu(t){let d=el('doormenu');if(!d){d=document.createElement('dialog');d.id='doormenu';document.body.appendChild(d);}const cur=t.access||'crew';
+ d.innerHTML=`<h2>Door</h2><p>Who may walk through this door?</p>${[['captain','Captain only'],['crew','Crew and captain'],['guest','Everyone']].map(([v,l])=>`<label class="dooroption"><input type="radio" name="dooraccess" value="${v}" ${v===cur?'checked':''}> <span class="rn-${v}">■</span> ${l}</label>`).join('')}<p class="fine">Doors always stop loose items. Shift+click or right-click with a wrench to dismantle.</p><p><button id="doorok" class="primary">Set</button> <button id="doorcancel">Cancel</button></p>`;
+ el('doorcancel').onclick=()=>d.close();el('doorok').onclick=()=>{const v=d.querySelector('input[name=dooraccess]:checked')?.value;if(v)netAction('door',{cell:{x:t.x,y:t.y},access:v});d.close();};keys={};d.showModal();}
+
+// Reduced-mode switch in the main menu (also offered on load when the computer looks slow).
+{const t=el('litemode');if(t){t.checked=!!window.NOTDRED_LITE;t.onchange=()=>{window.NOTDRED_LITE=t.checked;try{localStorage.setItem('notdred-mode',t.checked?'lite':'full');}catch{}};}}
+
+// ---- Team MOTD -------------------------------------------------------------------------------------------------------
+// A panel in the top-right corner (as in drednot): "Team MOTD", a Hide button, the message as plain text, and for the
+// captain an Edit button that turns the text into an edit box with Save / Cancel. It shows for every rank when they
+// join (if there is a message) and again whenever the captain changes it; Hide tucks it away until the next change
+// (the MOTD button brings it back).
+let netMotd='',motdHidden=false,motdEditing=false;
+function motdPanel(){let d=el('motdpanel');if(!d){d=document.createElement('section');d.id='motdpanel';d.hidden=true;document.body.appendChild(d);}return d;}
+function receiveMotd(m){netMotd=m.text||'';if(!m.changed||m.by!==localName)motdHidden=false;if(!motdEditing)renderMotd();updateMotdButton();}
+function updateMotdButton(){const b=el('motdbtn');if(b)b.hidden=!netActive||!(netMotd||netCaptain)||!motdPanel().hidden;}
+function renderMotd(){const d=motdPanel();if(!netActive||motdHidden||!(netMotd||netCaptain)){d.hidden=true;updateMotdButton();return;}d.hidden=false;
+ d.innerHTML='<div class="motdhead"><h3>Team MOTD</h3><button id="motdhide">Hide</button></div><div id="motdbody"></div><div id="motdactions"></div>';
+ el('motdhide').onclick=()=>{motdHidden=true;motdEditing=false;renderMotd();};const body=el('motdbody'),act=el('motdactions');
+ if(motdEditing&&netCaptain){const t=document.createElement('textarea');t.id='motdtext';t.maxLength=1000;t.rows=6;t.value=netMotd;t.placeholder='Plain text, shown to everyone on the ship.';t.addEventListener('keydown',e=>e.stopPropagation());body.appendChild(t);
+  const save=document.createElement('button');save.textContent='Save';save.className='motdsave';save.onclick=()=>{networkSend({type:'motd',text:t.value});netMotd=t.value.trim();motdEditing=false;renderMotd();};
+  const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>{motdEditing=false;renderMotd();};const n=document.createElement('span');n.className='fine';const upd=()=>n.textContent=t.value.length+'/1000';t.oninput=upd;upd();act.append(save,' ',cancel,' ',n);setTimeout(()=>t.focus(),0);}
+ else{const p=document.createElement('div');p.className='motdtext';p.textContent=netMotd||'No message yet.';if(!netMotd)p.classList.add('empty');body.appendChild(p);
+  if(netCaptain){const e=document.createElement('button');e.textContent='Edit';e.className='motdedit';e.onclick=()=>{motdEditing=true;renderMotd();};act.appendChild(e);}}
+ updateMotdButton();}
+{const nav=el('save').parentElement,b=document.createElement('button');b.id='motdbtn';b.textContent='MOTD';b.hidden=true;b.onclick=()=>{motdHidden=false;renderMotd();};setInterval(()=>{if(!netActive&&!motdPanel().hidden)renderMotd();updateMotdButton();},500);nav.insertBefore(b,el('manageshipbtn'));}
