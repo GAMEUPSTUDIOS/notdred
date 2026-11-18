@@ -227,6 +227,10 @@ const STANDING_MACHINES = ['recycler', 'anchor', 'comms', 'spawn'];
 // ℵ30: recycling a handheld pusher gives a stationary pusher. Starter items, trash and raw resources don't recycle.
 const RECYCLE_RETURN = 0.5;
 const RECYCLE_SWAP = {pusher: 'pusher_block'};
+// Seconds a recycler works on one stack before dropping the resources. PLACEHOLDER (not published).
+const RECYCLE_SECONDS = 3;
+// Most fuel or explosives a loader will put into one thruster tank.
+const THRUSTER_TANK = 16;
 // Comms station (ℵ14): talk to every ship in the zone. Ordinary chat stays aboard your own ship.
 const COMMS_RANGE = 2.5;
 // Spawn points (ℵ14): a joining player appears at a random spawn point set exactly to their rank, else at the helm.
@@ -286,4 +290,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
