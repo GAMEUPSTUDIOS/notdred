@@ -19,6 +19,9 @@ fetch_dir(){ # $1 = folder URL, $2 = file prefix
   names=$(printf '%s' "$list" | grep -oE 'href="[^"?/]+\.png"' | sed -E 's/href="([^"]+)\.png"/\1/' | sort -u)
   [ -z "$names" ] && { echo "  ✗ no PNG files listed at $1/"; return; }
   for f in $names; do
+    # Never replace an image the game already has: the game is drawn from the 2019 versions, and drednot's
+    # current images have different sizes and sheet layouts (overwriting them broke the hull, player, turrets...).
+    if [ -e "dist/sprites/$2$f.png" ]; then echo "  = $2$f.png (kept)"; continue; fi
     if curl -fsSL --max-time 30 -o "dist/sprites/$2$f.png.tmp" "$1/$f.png" && head -c 8 "dist/sprites/$2$f.png.tmp" | grep -q PNG; then
       mv "dist/sprites/$2$f.png.tmp" "dist/sprites/$2$f.png"; ok=$((ok+1)); echo "  ✓ $2$f.png"
     else
