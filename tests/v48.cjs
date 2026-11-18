@@ -26,12 +26,13 @@ r.game.command('cap',{action:'sign',cell:{x:sx,y:sy},text:'2 RC for 1 crystal\u0
 assert.equal(run(`terrainAt({x:${sx},y:${sy}}).text`),'2 RC for 1 crystal ','text kept, control characters removed');assert.equal(run(`terrainAt({x:${sx+1},y:${sy}}).color`),'#ff8800');
 r.game.command('cap',{action:'paint',cell:{x:sx+1,y:sy},color:'red; background:url(x)'});assert.equal(run(`terrainAt({x:${sx+1},y:${sy}}).color`),'#ff8800','bad colours refused');
 r.game.command('g',{action:'sign',cell:{x:sx,y:sy},text:'vandal'});r.game.command('g',{action:'paint',cell:{x:sx+1,y:sy},color:'#000000'});
-assert.equal(run(`terrainAt({x:${sx},y:${sy}}).text`),'2 RC for 1 crystal ','guests cannot edit signs');assert.equal(run(`terrainAt({x:${sx+1},y:${sy}}).color`),'#ff8800','or paint');
+assert.equal(run(`terrainAt({x:${sx},y:${sy}}).text`),'2 RC for 1 crystal ','guests cannot edit signs');assert.equal(run(`terrainAt({x:${sx+1},y:${sy}}).color`),'#000000','anyone can paint');r.game.command('cap',{action:'paint',cell:{x:sx+1,y:sy},color:'#ff8800'});
+assert.equal(run('(()=>{bindCrew("g");giveItem("sign",1);return validity({x:'+(sx+2)+',y:'+sy+'},"sign")})()'),'Guests cannot place signs.');
 r.game.command('cap',{action:'sign',cell:{x:sx,y:sy},text:'x'.repeat(500)});assert.equal(run(`terrainAt({x:${sx},y:${sy}}).text.length`),era.SIGN_MAX,'capped length');
 r.game.command('cap',{action:'sign',cell:{x:sx,y:sy},text:'FOR TRADE'});
 // Saved, restored, and sent to other ships.
 const sv=codec.decode(codec.encode(JSON.parse(JSON.stringify(run('state()')))));const r2={};r2.game=createRoom(sv,{});r2.game.join('c2','Cap',true,'captain');
 assert.equal(r2.game.run(`terrainAt({x:${sx},y:${sy}}).text`),'FOR TRADE');assert.equal(r2.game.run(`terrainAt({x:${sx+1},y:${sy}}).color`),'#ff8800');
 const L=r.game.zone.exteriorLayout();assert.ok(L.terrain.some(t=>t[0]==='sign'&&t[4]?.text==='FOR TRADE')&&L.terrain.some(t=>t[0]==='paint'&&t[4]?.color==='#ff8800'),'other ships see the text and colour');
-console.log('PASS: pusher beams stop at and act on the first object (a stack shields what is behind it); signs and paint blocks — crew/captain edit, cleaned text and colours, saved, shown to other ships.');
+console.log('PASS: pusher beams stop at and act on the first object (a stack shields what is behind it); signs (crew/captain; guests can\'t place them) and paint blocks (anyone), cleaned text and colours, saved, shown to other ships.');
 process.exit(0);

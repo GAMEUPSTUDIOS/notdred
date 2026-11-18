@@ -25,7 +25,10 @@ const originalInteract=interact;interact=function(){if(!piloting&&nearHelm()&&[.
 // pilot and use every machine; guests can walk around, chat, pick up and drop items, but cannot build, remove,
 // rotate, pilot, man turrets, craft, configure machines or use portals.
 // All ranks build and dismantle (v39). Guests still cannot fly, use machines or travel. Doors are set by the captain.
-const RANKS=['captain','crew','guest'],GUEST_BLOCKED=['helm','interact','craft','material','clearQueue','repeat','hatch','portal','rename','spawnrank','sign','paint'];
+// Ranks: everyone can do everything aboard (build and dismantle, place doors and spawn points, fly, craft, use hatches
+// and portals, paint) except: only the captain edits doors and spawn points, renames the ship, and moderates (MOTD,
+// ranks, kicks, bans — server.cjs); guests can't place or edit signs. Crew can vote-kick guests (server.cjs).
+const RANKS=['captain','crew','guest'],CAPTAIN_ONLY=['rename','door','spawnrank'],GUEST_BLOCKED=['sign'];
 // Spawn kit: only the captain spawns with a wrench (crew and guests start empty-handed). The wrench goes with the
 // captain when they leave instead of being dropped, so wrenches never pile up aboard.
 function spawnKit(id){if(!bindCrew(id))return;const cap=currentCrew.rank==='captain';for(let i=0;i<5;i++)if(slots[i]==='wrench'&&!cap){slots[i]=null;stackCounts[i]=0;}
@@ -34,11 +37,15 @@ function spawnKit(id){if(!bindCrew(id))return;const cap=currentCrew.rank==='capt
  const sp=spawnPointFor(currentCrew.rank||'guest');if(sp&&!piloting){climbing=false;player.setTransform(V(sp.x,sp.y-.13),0);player.setLinearVelocity(V(0,0));}storeCrew();}
 // Comms: may this player talk to the zone right now (standing at a comms station, on foot)?
 function commsCheck(id){if(!bindCrew(id))return false;const t=!piloting&&nearComms();if(t)t.sent=clock+3;storeCrew();return !!t;}
-function mayBuildDoor(){return (currentCrew?.rank||'guest')==='captain';}
+function mayBuildDoor(){return true;}
+// Guests can't place signs.
+function mayPlaceSign(){return (currentCrew?.rank||'guest')!=='guest';}
+// A door or spawn point starts out set to the rank of whoever placed it; only the captain changes it afterwards.
+function placerRank(){return currentCrew?.rank||'crew';}
 function setCrewRank(id,rank){const c=crew.get(id);if(!c||!RANKS.includes(rank))return false;c.rank=rank;c.captain=rank==='captain';storeCrew();playerFilter(c.player,rank);return true;}
-function allowed(m,a){const rank=m.rank||'guest';if(rank==='captain'||a==='dev')return true;if(a==='rename'||a==='door')return false;if(rank==='crew')return true;if(GUEST_BLOCKED.includes(a))return false;return true;}
+function allowed(m,a){const rank=m.rank||'guest';if(rank==='captain'||a==='dev')return true;if(CAPTAIN_ONLY.includes(a))return false;if(rank==='guest'&&GUEST_BLOCKED.includes(a))return false;return true;}
 function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg.action;actor=m;try{
- if(!allowed(m,a)){if(a!=='input')toast(m.rank==='guest'?'Guests cannot do that here — ask the captain to make you crew.':'Only the captain can do that.');storeCrew();return;}
+ if(!allowed(m,a)){if(a!=='input')toast(CAPTAIN_ONLY.includes(a)?'Only the captain can do that.':'Guests cannot do that here — ask the captain to make you crew.');storeCrew();return;}
  if(msg.aim&&Number.isFinite(msg.aim.x)&&Number.isFinite(msg.aim.y)&&Math.abs(msg.aim.x)<10000&&Math.abs(msg.aim.y)<10000)mouse={x:msg.aim.x,y:msg.aim.y,active:true};
  if(['edit','remove','rotate'].includes(a)&&!piloting&&!(a==='edit'&&tool==='booster')){const c=cursorCell(),t=terrainAt(c)||blocks.get(key(c.x,c.y));if(P.Vec2.distance(localPlayer(),V(c.x,c.y))>8||buildBlocked(c,t?.f)){toast('Target is out of reach or blocked.');storeCrew();return;}}
  if(a==='input'){keys={};for(const k of ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','shift'])keys[k]=!!msg.keys?.[k];pusherHeld=!!msg.held;m.inputAt=Date.now();}

@@ -124,8 +124,8 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 ## Pusher beams, signs and paint (v48)
 
 - **Pusher beams are blocked by the first thing in their path**, a solid tile or an object (item stack, expando box, crew member), and push or pull only that object. Anything sitting in a beam shields what's behind it, which is what item-logic builds (gates, vending and trading machines) rely on. Beams still pass glass, walkways, item nets and ladders.
-- **Signs** (Engineering fabricator): a tile showing a short text label above it (up to 80 characters). Crew and the captain click one to edit it.
-- **Paint blocks** (Engineering fabricator): solid blocks in any colour. Crew and the captain click one to pick from a basic palette, a colour picker, or any hex code (`#rrggbb`).
+- **Signs** (Engineering fabricator): a tile showing a short text label above it (up to 80 characters). Crew and the captain click one to edit it; guests can't place signs.
+- **Paint blocks** (Engineering fabricator): solid blocks in any colour. Anyone aboard can click one to pick from a basic palette, a colour picker, or any hex code (`#rrggbb`).
 - Both use the game's own sprites (sign, color panel), save with the ship and show on other ships. Recipes (1 iron each) are placeholders.
 
 ## Massive battleships and item logic (v47)
@@ -152,7 +152,7 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 - **Automating recyclers:** a loader facing into a recycler feeds it a stack whenever it is idle and holds anything that can't be recycled. A loader beside its bottom-right corner, or a pusher, takes the dropped resources away.
 - **Comms station** (1×2, Machine fabricator, 8 iron): click it to talk to every ship in the zone. Ordinary chat now stays aboard your own ship (ℵ14). Classic mode: start a chat line with `;` while standing at one.
 - **Freeport anchor** (3×3, Engineering fabricator): while one is aboard in a Freeport, the ship can't leave through a portal (ℵ34).
-- **Spawn point** (1×1, Engineering fabricator, 8 iron): click it to choose captain, crew or guests. A player joining appears at a random spawn point set to their rank, otherwise at the helm (ℵ14). Crew and the captain can change it (ℵ15).
+- **Spawn point** (1×1, Engineering fabricator, 8 iron): it starts set to the rank of whoever placed it, and the captain can click it to choose captain, crew or guests. A player joining appears at a random spawn point set to their rank, otherwise at the helm (ℵ14).
 - **Ammo** follows the ℵ30 changelog: standard reloads twice as fast as every other type (ℵ10); punch, yank and trash hit as hard as standard (ℵ7/ℵ10); scatter and flak are 5 pellets each, and scatter is strongest up close; loose trash ammo slowly decays (ℵ23). Every round hits rock for 2.25× its damage: standard and punch/yank take 5 hits to break a rock tile, sniper 3, breaker 1.
 - **Stacks merge** whenever two stacks of the same item touch (the server's contact mirror only found new contacts when something spawned).
 - **Freeport docks**: every edge wall of a Freeport (floor, ceiling and both sides) docks ships, not just the central dock.
@@ -210,9 +210,13 @@ Neither is ever switched on by itself; the page only offers them.
 
 - **Ranks:**
   - The ship's owner is **captain**.
-  - Anyone else joins as a **guest** and can walk, carry, drop and chat. Guests cannot build, remove, rotate, pilot, man turrets, craft, configure machines or use portals.
-  - The captain can make a player **crew** (everything except ranks, renaming and kicking) or back to guest, from the crew list at the top of the screen. Ranks are stored per player per ship, and the server checks every action.
-- **Chat:** press **Enter**, type, then Enter to send (Esc cancels). Everyone in your zone, on every ship there, and your own crew wherever they are, sees it with your rank and ship name. Messages are plain text, up to 200 characters, at most one every 0.6 s.
+  - Everyone aboard can do everything (build and dismantle, place doors and spawn points, fly, man turrets, craft, configure machines, use portals, paint), with these exceptions.
+  - **Captain only:** editing doors and spawn points, renaming the ship, the Team MOTD, setting ranks, kicking and banning, and spawning with a wrench.
+  - **Crew** can vote-kick guests.
+  - **Guests** can't place or edit signs and can't take part in moderation.
+  - A door or spawn point starts out set to the rank of whoever placed it.
+  - The captain makes a player **crew** or back to guest from the crew list. Ranks are stored per player per ship, and the server checks every action.
+- **Chat:** press **Enter**, type, then Enter to send (Esc cancels). Your own crew sees it with your rank and ship name; other ships hear you only through a comms station (v45). Messages are plain text, up to 200 characters, at most one every 0.6 s.
 
 ## New 2019 content (v28)
 

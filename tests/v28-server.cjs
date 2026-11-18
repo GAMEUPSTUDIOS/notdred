@@ -50,9 +50,8 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){
  cap.send({type:'create',name:'Rank Test'});await until(()=>cap.room);mate.send({type:'join',room:cap.room});await until(()=>mate.snaps.length>1);
  const self=c=>c.snaps.at(-1).self,me=c=>c.snaps.at(-1).crew.find(x=>x.id===self(c).id);
  assert.equal(self(cap).rank,'captain');assert.equal(self(mate).rank,'guest','joiners start as guests');
- // Guests cannot build, take the helm or craft…
- const blocks0=cap.snaps.at(-1).blocks.length;mate.act('remove',{aim:{x:0,y:0}});mate.act('interact');await sleep(300);
- assert.equal(cap.snaps.at(-1).blocks.length,blocks0);assert.equal(self(mate).piloting,false);assert.ok(mate.notices.some(n=>/Guests cannot/.test(n)),'told why');
+ // Guests can do everything aboard except captain-only things (ship name, doors, spawn points, moderation) and signs.
+ mate.act('rename',{name:'Mutiny'});mate.act('sign',{cell:{x:0,y:0},text:'x'});await sleep(300);assert.ok(mate.notices.some(n=>/Only the captain/.test(n)),'told why (captain only)');assert.ok(mate.notices.some(n=>/Guests cannot/.test(n)),'told why (signs)');
  // …until the captain makes them crew. Only the captain can set ranks.
  mate.send({type:'rank',crew:self(cap).id,rank:'guest'});await until(()=>mate.errors.some(e=>/Only the captain/.test(e)));
  cap.send({type:'rank',crew:self(mate).id,rank:'crew'});await until(()=>self(mate).rank==='crew',3000,'promoted');assert.equal(me(cap)?.rank??'captain','captain');
@@ -66,5 +65,5 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){
  assert.equal(mate.chat[0].text,'hello b crew /b','tags stripped');assert.equal(mate.chat[0].from,'Cap');assert.equal(mate.chat[0].rank,'captain');assert.equal(mate.chat[0].ship,'Rank Test');
  await sleep(300);assert.equal(near.chat.length,0,'another ship in the zone does not');assert.equal(far.chat.length,0,'a ship in another zone does not');
  cap.send({type:'chat',text:'spam'});await until(()=>cap.errors.some(e=>/too fast/.test(e)),2000,'rate limit');
- ok=true;console.log('PASS: real server — guests restricted, captain-only ranks, promotion seen by all and remembered, ship chat (own crew only), sanitized and rate-limited.');
+ ok=true;console.log('PASS: real server — guest limits (captain-only actions, no signs), captain-only ranks, promotion seen by all and remembered, ship chat (own crew only), sanitized and rate-limited.');
 }catch(e){console.error(e);console.error(log.join(''));}finally{srv.kill();await sleep(400);fs.rmSync(dataDir,{recursive:true,force:true,maxRetries:10,retryDelay:100});process.exit(ok?0:1);}})();
