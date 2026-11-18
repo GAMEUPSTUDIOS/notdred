@@ -142,7 +142,7 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 
 ## Physics machines and loader swing (v49)
 
-- **Fabricators, recyclers and comms stations are physics objects**, like expando boxes. They're placed where you aim (not snapped to the grid), fall, slide, can be pushed by pushers and other objects, and stand on walkways (loose items still fall through walkways). Crew walk straight through them; expando boxes stay solid. Loaders still feed whichever machine covers the tile they face.
+- **Fabricators, recyclers and comms stations are placed freely but are not physics objects.** They go exactly where you aim horizontally (not snapped to the grid) and rest on the block, floor or walkway below — never on an expando box. Once placed they stay put: they don't fall, slide or get pushed, crew and items pass straight through them, and the blocks under one can't be removed until it's moved. Expando boxes are the physics objects. Loaders still feed whichever machine covers the tile they face.
 - A **loader facing out of a recycler** takes the finished resources straight from it. With no loader there, the recycler drops them beside itself.
 - **A loader's swing is its cooldown.** The hand grabs a stack, carries it across in half a cycle and delivers only when it arrives (waiting there if the target is full), then swings back before it can grab again. A turret delivery adds the turret's loading wait.
 - **Fixed:** pusher beams and loader swings now show for every player (they weren't in the snapshot, so beams never drew).

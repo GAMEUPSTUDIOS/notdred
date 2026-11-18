@@ -1,6 +1,6 @@
 'use strict';
-// v49: fabricators, recyclers and comms stations are physics objects like expando boxes (placed anywhere, fall, slide,
-// pushed), still fed by loaders; a loader's swing is its cooldown; pusher beams and loader swings reach the clients.
+// v49: fabricators, recyclers and comms stations are placed freely (off the grid, resting on a surface) and then stay
+// fixed (not pushed, crew and items pass through), still fed by loaders; a loader's swing is its cooldown; pusher beams and loader swings reach the clients.
 const assert=require('node:assert/strict'),path=require('node:path');
 const root=path.resolve(__dirname,'..');process.chdir(root);
 const {createRoom}=require('../server/room.cjs'),codec=require('../dist/modules/save-codec.js');
@@ -9,12 +9,12 @@ run('bounds={l:-14,r:14,t:-8,b:5};rebuildShell();rebuildMounts();for(const i of 
 const fy=run('bounds.b-1');
 // The starter fabricator is a physics object.
 assert.ok(run('!![...terrain.values()].find(t=>t.type==="fabricator").body'),'starter fabricator has a body');
-// Placed off the grid, mid-air: it falls and lands on the floor.
-run('player.setTransform(V(-10,4),0);giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));');
-assert.equal(run('machineSpace("fabricator",V(6.3,-3.7))'),true);run('globalThis.mf=spawnMachine("fabricator",V(6.3,-3.7));mf.kind="munitions";');step(120);
-const mp=run('(({x,y})=>({x,y}))(mf.body.getPosition())');assert.ok(Math.abs(mp.x-6.3)<.05,'not snapped to the grid ('+mp.x.toFixed(2)+')');assert.ok(Math.abs(mp.y+1.5-(fy+.5))<.05,'fell to the floor');
-// A pusher shoves it.
-run(`addTerrain("pusher_block",2,${fy},0);`);step(240);assert.ok(run('mf.body.getPosition().x')>mp.x+.5,'pushed by a pusher beam');
+// Placed off the grid where aimed, resting on the floor below the aim, and it stays there.
+run('player.setTransform(V(-10,4),0);');run(`placingAim=V(6.3,-3.7);globalThis.mf=spawnMachine("fabricator",placementPoint({x:6,y:-4},"fab_munitions"));placingAim=null;mf.kind="munitions";`);step(120);
+const mp=run('(({x,y})=>({x,y}))(mf.body.getPosition())');assert.ok(Math.abs(mp.x-6.3)<.05,'not snapped to the grid ('+mp.x.toFixed(2)+')');assert.ok(Math.abs(mp.y+1.5-(fy+.5))<.05,'resting on the floor');
+// Not a physics object: a pusher beam leaves it where it is, and its support can't be pulled out from under it.
+run(`addTerrain("pusher_block",2,${fy},0);`);step(240);assert.ok(Math.abs(run('mf.body.getPosition().x')-mp.x)<1e-6,'not pushed');
+assert.equal(run(`machineOnTop({x:6,y:${fy+1}})===mf`),true,'the floor/blocks under it are its support');
 // A loader still feeds it: put a loader against its left side and feed iron from behind.
 run(`(()=>{const t=terrain.get(key(2,${fy}));interior.destroyFixture(t.f);terrain.delete(key(2,${fy}));mf.body.setTransform(V(5.8,${fy-1}),0);mf.body.setLinearVelocity(V(0,0));})()`);step(2);
 const lx=4;run(`addTerrain("loader",${lx},${fy},0);spawnItem("iron",V(${lx-1},${fy}),V(0,0),8);`);
@@ -40,8 +40,9 @@ const bp=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"storage")
 const fp=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"fab_munitions"))`);assert.ok(Math.abs(fp.x+4.37)<1e-6&&Math.abs(fp.y+1.5-(fy+.5))<.05,'fabricator x where aimed, resting on the floor');
 run(`for(let x=-6;x<=-2;x++)addBlock(x,${fy-2},0);placingAim=V(-4.37,${fy-3});`);const onBlocks=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:-4,y:${fy-3}},"storage"))`);assert.ok(Math.abs(onBlocks.y+1-(fy-2.5))<.05,'rests on the blocks below the aim');run(`placingAim=V(-4.37,${fy-.8});`);assert.ok(Math.abs(run(`placementPoint({x:-4,y:${fy-2}},"storage").y`)+1-(fy+.5))<.05,'aimed below the blocks: rests on the floor');
 run(`placingAim=V(-4.37,${fy-3.2});giveItem("storage",1);selectSlot(slots.indexOf("storage"));commitBuild({x:-4,y:${fy-3}},"storage",0);placingAim=null;`);assert.ok(Math.abs(run('boxes[boxes.length-1].body.getPosition().x')+4.37)<1e-6,'built where aimed, not snapped');
-// Crew walk straight through physics machines (they're background machines); expando boxes stay solid to crew.
-{const m=run('(()=>{const f=spawnMachine("fabricator",V(0,0)).body.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()'),pl=run('(()=>{bindCrew("cap");const f=player.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()');
- assert.ok(!(m.mask&2)&&!(pl.mask&m.cat),'crew pass through machines');const bx=run('(()=>{const f=spawnBox(V(5,0)).body.getFixtureList();return {cat:f.getFilterCategoryBits(),mask:f.getFilterMaskBits()};})()');assert.ok((bx.mask&2)&&(pl.mask&bx.cat),'but not expando boxes');}
-console.log('PASS: physics machines (crew walk through them) — placed off-grid (boxes too, resting on the surface below), fall, pushed by pushers, fed by loaders, saved and reloaded; loader swing is the cooldown (deliver on arrival, no grab while returning); beams and swings reach clients.');
+// Crew and items pass straight through machines (no collision shape), and nothing can be placed on an expando box.
+assert.equal(run('spawnMachine("fabricator",V(0,0)).body.getFixtureList()'),null,'no collision shape');
+run(`for(const b of [...boxes])inside.destroyBody(b.body);boxes.length=0;for(const t of [...terrain.values()])if(t.body){inside.destroyBody(t.body);terrain.delete(t.key);}globalThis.bx2=spawnBox(V(8,${fy-.5}),{});placingAim=V(8,${fy-3});`);
+const onBox=run(`(p=>p&&({x:p.x,y:p.y}))(placementPoint({x:8,y:${fy-3}},"comms"))`);run('placingAim=null;');assert.ok(Math.abs(onBox.y+1-(fy+.5))<.05,'the box is not a surface: it would go to the floor');assert.equal(run(`machineSpace("comms",V(${onBox.x},${onBox.y}))`),false,'and the box is in the way, so it is refused');
+console.log('PASS: machines placed freely (off-grid, resting on a surface; boxes too; never on expando boxes) and then fixed — not pushed, supports protected, crew pass through — fed by loaders, saved and reloaded; loader swing is the cooldown (deliver on arrival, no grab while returning); beams and swings reach clients.');
 process.exit(0);

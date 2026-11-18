@@ -111,16 +111,16 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 // --- Fabricators and the helm stand on walkways ---------------------------------------------------------------------
 {const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of [...terrain.values()])if(t.type!=="fabricator"){if(t.f)interior.destroyFixture(t.f);terrain.delete(key(t.x,t.y));}for(const i of items)inside.destroyBody(i.body);items=[];';
  run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0)');
- assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'','a fabricator can be placed anywhere it fits (it is a physics object)');
+ assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'','a fabricator can be placed where it fits, resting on a surface');
  run('giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
- assert.ok(Math.abs(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return f.body.getPosition().y+1.5;})()')-.5)<.1,'it falls and stands on the walkways');
+ assert.ok(Math.abs(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return f.body.getPosition().y+1.5;})()')-.5)<.1,'it rests on the walkways');
  run(clr+'addTerrain("walkway",3,1);addTerrain("walkway",4,1);player.setTransform(V(1,1.8),0)');
  assert.equal(run('validity({x:3,y:0},"helm")'),'','helm on walkways');assert.ok(run('validity({x:3,y:-1},"helm")')!=='','not floating');
- // Pull the walkways out and the fabricator drops to the floor, whole.
+ // The walkways under it can't be pulled out while it stands there, and it never moves.
  run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0);giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
  run('selectSlot(slots.indexOf("wrench"));player.setTransform(V(3,1.8),0);removeAt({x:0,y:1});removeAt({x:1,y:1})');ticks(90);
- assert.ok(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return !!f&&f.body.getPosition().y+1.5>bounds.b-.6;})()'),'support removed: it falls to the floor');
- console.log('PASS: fabricators are physics objects — placed anywhere they fit, stand on walkways, fall when their support goes; the helm stands on walkways, not floating.');}
+ assert.ok(run('terrain.has(key(0,1))&&terrain.has(key(1,1))'),'support removal refused');assert.ok(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return Math.abs(f.body.getPosition().y+1.5-.5)<.05;})()'),'it stays put');
+ console.log('PASS: fabricators placed where they fit, resting on walkways, fixed in place (supports protected); the helm stands on walkways, not floating.');}
 
 // --- Loader pickup hotbox: thrown, dropped nearby, or falling through --------------------------------------------------
 {const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';
