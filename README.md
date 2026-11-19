@@ -377,6 +377,16 @@ Push this repo to GitHub, a private repo works. Then:
 
 The links live while the codespace runs and stop after GitHub's idle timeout (30 minutes by default; adjustable in your Codespaces settings). If GitHub's address asks testers to sign in to GitHub, set port 8080 to **Public** in the **PORTS** tab. Logs: `/tmp/freeport.log` (server), `/tmp/freeport-tunnel.log` (tunnel).
 
+## One-line setup on a new machine
+
+On any Linux or macOS machine (Windows: inside WSL), this installs what's missing, downloads the code and starts the server with a temporary public link:
+
+```
+curl -fsSL https://gameupstudios.github.io/notdred/install.sh | bash
+```
+
+The repository is private, so the first run asks you to sign in to GitHub once (it shows a code to approve in the browser), and it may ask for your password to install system packages (git, a C++ compiler, the GitHub CLI). Node.js 22 goes into `~/.nvm`, the code into `~/notdred`. Run the same command again to update and restart. `NOTDRED_LOCAL=1` serves on `http://localhost:8080` without a public link; `DEV_TOKEN=…` sets your dev-menu token. The script (`dist/install.sh`, published with the play page) contains no game code.
+
 ## Temporary public test link
 
 To host on your own machine with a throwaway public address:
