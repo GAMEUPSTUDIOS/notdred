@@ -33,10 +33,18 @@ let netBlocks=[],netTerrainList=[],netMountList=[];
 // second), drawn a little in the past, so uneven network arrival (jitter) no longer makes ships jerk back and forth —
 // the rubber-banding crew saw while someone else flew. Used for your ship when you aren't at the helm (the pilot keeps
 // prediction) and for every other ship.
-const netClock={offset:null,jitter:.02,
- note(tick,now){const off=now/1000-tick/60;if(this.offset==null||off<this.offset)this.offset=off;else this.offset+=(off-this.offset)*.002;this.jitter+=(Math.min(.3,off-this.offset)-this.jitter)*.05;},
+// The server's clock: a busy host runs its world slower than real time (it drops time rather than fall further behind).
+// `rate` is how fast server time is passing (server seconds per real second, measured over the last two seconds),
+// and `s` is a local clock that runs at that rate, so playback and the pilot's prediction keep pace with the server
+// instead of running ahead of it and being dragged back.
+const netClock={offset:null,jitter:.02,rate:1,hist:[],s:0,last:null,
+ adv(now){if(this.last!=null&&now>this.last)this.s+=(now-this.last)/1000*this.rate;this.last=now;return this.s;},
+ // The anchor (offset) is the earliest-arriving snapshot of the last two seconds, so it re-settles within two seconds
+ // when the server's pace changes; jitter is how much later than that the others arrive.
+ note(tick,now){const h=this.hist;if(h.length>=2&&now-h[0][0]>600){const r=(tick-h[0][1])/60/((now-h[0][0])/1000);this.adv(now);this.rate+=(Math.min(1.05,Math.max(.2,r))-this.rate)*.25;}
+  const off=this.adv(now)-tick/60;h.push([now,tick,off]);while(h.length>2&&now-h[0][0]>2000)h.shift();let lo=Infinity;for(const e of h)lo=Math.min(lo,e[2]);this.offset=lo;this.jitter+=(Math.min(.3,off-lo)-this.jitter)*.05;},
  // Render time on the server's timeline: enough behind the newest snapshot to ride out the measured jitter.
- renderTime(now){return now/1000-this.offset-Math.min(.3,Math.max(.08,this.jitter*2+.06));}};
+ renderTime(now){return this.adv(now)-this.offset-Math.min(.3,Math.max(.08,this.jitter*2+.06));}};
 function makeTrack(){return {pts:[],push(tick,p,v){const t=tick/60,last=this.pts[this.pts.length-1];if(last&&t<=last.t)return;if(last&&Math.hypot(p.x-last.x,p.y-last.y)>60)this.pts=[];this.pts.push({t,x:p.x,y:p.y,vx:v?.x||0,vy:v?.y||0});while(this.pts.length>2&&this.pts[1].t<t-1.5)this.pts.shift();},
  sample(rt){const P=this.pts;if(!P.length)return null;if(rt<=P[0].t)return {...P[0]};const L=P[P.length-1];if(rt>=L.t){const d=Math.min(rt-L.t,.2);return {x:L.x+L.vx*d,y:L.y+L.vy*d,vx:L.vx,vy:L.vy};}
   let i=P.length-2;while(i>0&&P[i].t>rt)i--;const a=P[i],b=P[i+1],h=b.t-a.t,u=(rt-a.t)/h,u2=u*u,u3=u2*u;
@@ -66,11 +74,12 @@ function networkFrame(){if(!netState)return;const now=performance.now(),dt=Math.
  // using the same controller and physics as the server; the server's position then gently corrects it, or snaps
  // it when they disagree by more than a tile and a half (five for ships). Everything else is shown as sent.
  const predictShip=piloting&&!docked&&!modalOpen(),predictCrew=self&&!piloting&&!modalOpen();
- if(predictShip||predictCrew){try{stepController(dt);if(predictShip)world.step(dt);else{inside.step(dt);clampToLadder();}}catch{}}
+ /* the prediction runs at the server's speed (netClock.rate): a slow host's world is not raced ahead of */const pdt=dt*netClock.rate;
+ if(predictShip||predictCrew){try{stepController(pdt);if(predictShip){world.step(pdt);const sv=ship.getLinearVelocity();if(sv.length()>60){sv.mul(60/sv.length());ship.setLinearVelocity(sv);}}else{syncSkin();inside.step(pdt);clampToLadder();}}catch{}}
  // snap: error (tiles) beyond which prediction is abandoned; rate: how fast small errors are corrected (1/s).
  const settle=(body,q,v,keep,snap,rate)=>{const p=body.getPosition(),e=Math.hypot(q.x-p.x,q.y-p.y);if(!keep||e>snap){body.setTransform(V(p.x+(q.x-p.x)*(keep?1:alpha),p.y+(q.y-p.y)*(keep?1:alpha)),0);body.setLinearVelocity(V(v.x,v.y));}else{const k=1-Math.exp(-dt*rate);if(e>.04)body.setTransform(V(p.x+(q.x-p.x)*k,p.y+(q.y-p.y)*k),0);const w=body.getLinearVelocity();body.setLinearVelocity(V(w.x+(v.x-w.x)*k*.5,w.y+(v.y-w.y)*k*.5));}};
- if(predictShip){const sp=Math.hypot(netState.velocity.x,netState.velocity.y),q=ahead(netState.position,netState.velocity,lead),c=ship.getPosition(),e=Math.hypot(q.x-c.x,q.y-c.y);/* fast ships: a few tiles of disagreement (a brush with rock or a bot the server saw a little differently) is eased out, faster the bigger it is, instead of snapping */settle(ship,q,netState.velocity,true,5+sp*.3,2+Math.min(6,e));}else{const q=shipTrack.sample(netClock.renderTime(now));if(q){const c=ship.getPosition(),k=Math.hypot(q.x-c.x,q.y-c.y)>20?1:1-Math.exp(-dt*30);ship.setTransform(V(c.x+(q.x-c.x)*k,c.y+(q.y-c.y)*k),0);ship.setLinearVelocity(V(q.vx,q.vy));}else settle(ship,ahead(netState.position,netState.velocity,lead),netState.velocity,false,5,2);}
- if(self)settle(player,ahead(self.p,self.v,predictCrew?lead:age),self.v,predictCrew,1.5,4);for(const e of effects)e.life-=dt;effects=effects.filter(e=>e.life>0);}
+ if(predictShip){const sp=Math.hypot(netState.velocity.x,netState.velocity.y),q=ahead(netState.position,netState.velocity,lead*netClock.rate),c=ship.getPosition(),e=Math.hypot(q.x-c.x,q.y-c.y);/* fast ships: a few tiles of disagreement (a brush with rock or a bot the server saw a little differently) is eased out, faster the bigger it is, instead of snapping */settle(ship,q,netState.velocity,true,5+sp*.3,2+Math.min(6,e));}else{const q=shipTrack.sample(netClock.renderTime(now));if(q){const c=ship.getPosition(),k=Math.hypot(q.x-c.x,q.y-c.y)>20?1:1-Math.exp(-dt*30);ship.setTransform(V(c.x+(q.x-c.x)*k,c.y+(q.y-c.y)*k),0);ship.setLinearVelocity(V(q.vx,q.vy));}else settle(ship,ahead(netState.position,netState.velocity,lead),netState.velocity,false,5,2);}
+ if(self)settle(player,ahead(self.p,self.v,(predictCrew?lead:age)*netClock.rate),self.v,predictCrew,1.5,4);for(const e of effects)e.life-=dt;effects=effects.filter(e=>e.life>0);}
 function drawCrew(){if(!netActive||!netState)return;const own={player,facing,piloting,climbing,tool,slots,selected,localName,localRank};for(const c of netState.crew){if(c.id===netID)continue;const cp=ahead(c.p,c.v,netAge());player={getPosition:()=>cp,getLinearVelocity:()=>c.v};facing=c.facing;piloting=c.piloting;climbing=c.climbing;tool=c.tool;slots=[c.held];selected=0;localName=c.name;localRank=c.rank||'guest';drawPlayer();}({player,facing,piloting,climbing,tool,slots,selected,localName,localRank}=own);}
 drawCombatActors=function(){if(!netActive)return localMethods.drawCombatActors();for(const b of netState?.bots||[])drawBot(b.color,ahead(b.p,b.v,netAge()),b.hp,b.index);for(const s of netState?.projectiles||[])drawProjectile(ahead(s.p,s.v,netAge()),s.v,s.type);};
 drawBotMarkers=function(cx,cy,scale,x,y,mw){if(!netActive)return localMethods.drawBotMarkers(cx,cy,scale,x,y,mw);ctx.save();for(const b of netState?.bots||[]){ctx.fillStyle=(BOT_TYPES[b.color]||BOT_TYPES.red).minimap;ctx.beginPath();ctx.arc(cx+b.p.x*scale,cy+b.p.y*scale,b.color==='green'?4:2.5,0,Math.PI*2);ctx.fill();}ctx.restore();};
