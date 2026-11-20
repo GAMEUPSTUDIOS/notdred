@@ -14,11 +14,13 @@ button{font-size:12px;padding:2px 6px}
 .crw{color:#ffd34a;font-weight:bold}
 .gst{color:#cfd8dc;font-weight:bold}
 .warn{color:#ff6b6b;font-weight:bold}
-#viewbox{border:2px solid #000;overflow:hidden}#view,#view2{cursor:crosshair}
+#viewbox{border:2px solid #000;overflow:hidden}#view,#view2,#view3,#view4{cursor:crosshair}
 #chatlog{height:110px;overflow:auto;background:#0d151c;border:1px solid #4b5b66;padding:3px;font-size:12px}
 #notes{color:#ffcf6b}
 td{vertical-align:top}
 .ships td{padding:3px 6px;border-bottom:1px solid #33424c}
+.mg td{padding:2px 4px;border-bottom:1px solid #33424c;font-size:12px}
+.on{color:#63ff30}.off{color:#6b7a80}
 </style></head>
 <body>
 <h1>notdred.io <span class="small">classic mode &middot; for old computers and browsers</span></h1>
@@ -39,7 +41,7 @@ td{vertical-align:top}
 
 <div id="game" style="display:none">
  <table cellspacing="0" cellpadding="0"><tr><td>
-  <div id="viewbox" style="position:relative;width:640px;height:400px"><img id="view" src="" width="640" height="400" alt="notdred.io" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0"><img id="view2" src="" width="640" height="400" alt="" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0;visibility:hidden"></div><div class="small" style="text-align:right"><span id="fps"></span></div>
+  <div id="viewbox" style="position:relative;width:640px;height:400px"><img id="view" src="" width="640" height="400" alt="notdred.io" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0"><img id="view2" src="" width="640" height="400" alt="" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0;visibility:hidden"><img id="view3" src="" width="640" height="400" alt="" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0;visibility:hidden"><img id="view4" src="" width="640" height="400" alt="" galleryimg="no" ondragstart="return false" oncontextmenu="return false" style="position:absolute;left:0;top:0;visibility:hidden"></div><div class="small" style="text-align:right"><span id="fps"></span></div>
   <div class="box" style="margin-top:4px">
    <div id="hud">...</div>
    <div id="slots" style="margin-top:4px"></div>
@@ -53,6 +55,7 @@ td{vertical-align:top}
  </td><td style="padding-left:8px;width:300px">
   <div id="motdbox" class="box" style="display:none"><table width="100%" cellspacing="0" cellpadding="0"><tr><td><b style="font-size:15px">Team MOTD</b></td><td align="right"><button onclick="motdHidden=1;showMotdBox()">Hide</button></td></tr></table><div id="motdshow" style="margin:6px 0"></div><div id="motdedit" style="display:none"><textarea id="motdtext" rows="6" style="width:96%" onfocus="typing=1" onblur="typing=0"></textarea><br><button onclick="saveMotd()">Save</button> <button onclick="motdEditing=0;showMotdBox()">Cancel</button></div><button id="motdeditbtn" style="display:none" onclick="motdEditing=1;$('motdtext').value=motd;showMotdBox()">Edit</button></div><div id="motdshowbtn" style="display:none;margin-bottom:8px"><button onclick="motdHidden=0;showMotdBox()">Show Team MOTD</button></div>
   <div class="box"><b>Crew</b><div id="crew"></div></div>
+  <div class="box"><table width="100%" cellspacing="0" cellpadding="0"><tr><td><b>Manage ship</b></td><td align="right"><button id="managebtn" onclick="toggleManage()">Open</button></td></tr></table><div id="manage" style="display:none;margin-top:6px"></div></div>
   
   <div id="fab" class="box" style="display:none"></div>
   <div class="box"><b>Chat</b><div id="chatlog"></div><input id="chatin" maxlength="200" style="width:96%" onfocus="typing=1" onblur="typing=0" onkeydown="return chatKey(event)"></div>
@@ -62,15 +65,29 @@ td{vertical-align:top}
 <p class="small">Want the full game? Open this server in a modern browser. <a href="/">Full version</a></p>
 
 <script type="text/javascript">
-/* Written for Internet Explorer 6: ES3 only (no JSON, no addEventListener, no Array methods beyond ES3). */
+/* Written for Internet Explorer 5 and later: ES3 as JScript 5.0 knows it (no JSON, no addEventListener, no ===, no
+   encodeURIComponent, no Array push/shift: those are filled in below when missing). */
+if(!Array.prototype.push)Array.prototype.push=function(){var i;for(i=0;i<arguments.length;i++)this[this.length]=arguments[i];return this.length;};
+if(!Array.prototype.shift)Array.prototype.shift=function(){var f=this[0],i;for(i=1;i<this.length;i++)this[i-1]=this[i];if(this.length>0)this.length=this.length-1;return f;};
+var HEX='0123456789ABCDEF';function hx(b){return '%'+HEX.charAt((b>>4)&15)+HEX.charAt(b&15);}
+/* URL encoding (UTF-8), done by hand where the browser has no encodeURIComponent (IE5.0). */
+function uenc(t){t=''+t;if(typeof encodeURIComponent!='undefined')return encodeURIComponent(t);var o='',i,c,d;for(i=0;i<t.length;i++){c=t.charCodeAt(i);
+ if((c>=48&&c<=57)||(c>=65&&c<=90)||(c>=97&&c<=122)||"-_.!~*'()".indexOf(t.charAt(i))>=0)o+=t.charAt(i);
+ else if(c<128)o+=hx(c);else if(c<2048)o+=hx(192|(c>>6))+hx(128|(c&63));
+ else if(c>=55296&&c<=56319&&i+1<t.length){d=t.charCodeAt(++i);c=65536+((c-55296)<<10)+(d-56320);o+=hx(240|(c>>18))+hx(128|((c>>12)&63))+hx(128|((c>>6)&63))+hx(128|(c&63));}
+ else o+=hx(224|(c>>12))+hx(128|((c>>6)&63))+hx(128|(c&63));}return o;}
+function udec(t){t=''+t;if(typeof decodeURIComponent!='undefined'){try{return decodeURIComponent(t);}catch(e){return t;}}var o='',i=0,b,n,c,k;
+ while(i<t.length){if(t.charAt(i)!='%'){o+=t.charAt(i++);continue;}b=parseInt(t.substring(i+1,i+3),16);i+=3;n=b<128?0:b<224?1:b<240?2:3;c=n==0?b:n==1?b&31:n==2?b&15:b&7;
+  for(k=0;k<n&&t.charAt(i)=='%';k++){c=(c<<6)|(parseInt(t.substring(i+1,i+3),16)&63);i+=3;}
+  if(c>65535){c-=65536;o+=String.fromCharCode(55296+(c>>10),56320+(c&1023));}else o+=String.fromCharCode(c);}return o;}
 var S=null,inGame=0,typing=0,down={},frameN=0,polling=0,walkZ=20,flyZ=8,piloting=0,W=640,H=400,lastStatus=null,notes=[];
 function $(id){return document.getElementById(id);}
 function esc(t){t=''+(t==null?'':t);return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function enc(o){var s='',k,v,first=1;if(o===null)return 'null';if(typeof o=='number'||typeof o=='boolean')return ''+o;if(typeof o=='string')return '"'+o.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\x00-\x1f]/g,' ')+'"';s='{';for(k in o){v=o[k];if(!first)s+=',';first=0;s+='"'+k+'":'+enc(v);}return s+'}';}
-function xhr(){if(window.XMLHttpRequest)return new XMLHttpRequest();try{return new ActiveXObject('Msxml2.XMLHTTP');}catch(e){}return new ActiveXObject('Microsoft.XMLHTTP');}
-function req(url,cb){var x=xhr();x.open('GET',url+(url.indexOf('?')<0?'?':'&')+'_='+(new Date()).getTime(),true);x.onreadystatechange=function(){if(x.readyState==4){var o=null;try{o=eval(x.responseText);}catch(e){}if(o&&o.error)note(o.error);if(o&&o.ended){S=null;showConnect();}if(cb)cb(o);}};x.send(null);}
-function setCookie(n,v){document.cookie=n+'='+encodeURIComponent(v)+'; expires=Fri, 31 Dec 2037 23:59:59 GMT; path=/';}
-function getCookie(n){var a=document.cookie.split('; '),i,p;for(i=0;i<a.length;i++){p=a[i].split('=');if(p[0]==n)return decodeURIComponent(p.slice(1).join('='));}return '';}
+function enc(o){var s='',k,v,first=1;if(o==null)return 'null';if(typeof o=='number'||typeof o=='boolean')return ''+o;if(typeof o=='string')return '"'+o.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\x00-\x1f]/g,' ')+'"';s='{';for(k in o){v=o[k];if(!first)s+=',';first=0;s+='"'+k+'":'+enc(v);}return s+'}';}
+function xhr(){if(window.XMLHttpRequest)return new XMLHttpRequest();try{return new ActiveXObject('Msxml2.XMLHTTP');}catch(e){}try{return new ActiveXObject('Microsoft.XMLHTTP');}catch(e2){}alert('This browser cannot talk to the server (XMLHTTP is missing or ActiveX is turned off). In Internet Explorer: Tools > Internet Options > Security > Custom Level > enable \'Run ActiveX controls\' for this zone.');return null;}
+function req(url,cb){var x=xhr();if(!x)return;x.open('GET',url+(url.indexOf('?')<0?'?':'&')+'_='+(new Date()).getTime(),true);x.onreadystatechange=function(){if(x.readyState==4){var o=null;try{o=eval(x.responseText);}catch(e){}if(o&&o.error)note(o.error);if(o&&o.ended){S=null;showConnect();}if(cb)cb(o);}};x.send(null);}
+function setCookie(n,v){document.cookie=n+'='+uenc(v)+'; expires=Fri, 31 Dec 2037 23:59:59 GMT; path=/';}
+function getCookie(n){var a=document.cookie.split('; '),i,p;for(i=0;i<a.length;i++){p=a[i].split('=');if(p[0]==n)return udec(p.slice(1).join('='));}return '';}
 function note(t){notes[notes.length]=t;if(notes.length>5)notes.shift();var h='',i;for(i=notes.length-1;i>=0;i--)h+=esc(notes[i])+'<br>';$('notes').innerHTML=h;show('notes',1);}
 function rankClass(r){return r=='captain'?'cap':r=='crew'?'crw':'gst';}
 function show(id,on){$(id).style.display=on?'block':'none';}
@@ -79,16 +96,16 @@ function showLobby(){inGame=0;show('connect',0);show('lobby',1);show('game',0);}
 function showGame(){if(!inGame){inGame=1;show('connect',0);show('lobby',0);show('game',1);nextFrame();}}
 
 function connectNow(){var name=$('pname').value,tok=$('ptoken').value;setCookie('nd_name',name);$('connstatus').innerHTML='Connecting...';
- req('/classic/connect?name='+encodeURIComponent(name)+'&token='+encodeURIComponent(getCookie('nd_token'))+'&dev='+encodeURIComponent(tok),function(o){if(!o||!o.session){$('connstatus').innerHTML='Could not connect.';return;}S=o.session;setCookie('nd_token',o.token);$('connstatus').innerHTML='';showRooms(o.rooms);showLobby();if(!polling){polling=1;poll();}var lk=linkParams();if(lk.ship)send({type:'join',room:lk.ship,key:lk.key||''});});}
-function linkParams(){var q=window.location.search.replace(/^\?/,'').split('&'),o={},i,p;for(i=0;i<q.length;i++){p=q[i].split('=');if(p[0])o[p[0]]=decodeURIComponent(p[1]||'');}return o;}
-function send(m){if(S)req('/classic/send?s='+S+'&m='+encodeURIComponent(enc(m)));}
+ req('/classic/connect?name='+uenc(name)+'&token='+uenc(getCookie('nd_token'))+'&dev='+uenc(tok),function(o){if(!o||!o.session){$('connstatus').innerHTML='Could not connect.';return;}S=o.session;setCookie('nd_token',o.token);$('connstatus').innerHTML='';showRooms(o.rooms);showLobby();if(!polling){polling=1;poll();}var lk=linkParams();if(lk.ship)send({type:'join',room:lk.ship,key:lk.key||''});});}
+function linkParams(){var q=window.location.search.replace(/^\?/,'').split('&'),o={},i,p;for(i=0;i<q.length;i++){p=q[i].split('=');if(p[0])o[p[0]]=udec(p[1]||'');}return o;}
+function send(m){if(S)req('/classic/send?s='+S+'&m='+uenc(enc(m)));}
 function createShip(){send({type:'create',name:$('newname').value});}
 function showRooms(rooms){var h='<table class="ships" cellspacing="0">',i,r;if(!rooms||!rooms.length)h+='<tr><td>No ships yet. Make one below.</td></tr>';
  for(i=0;rooms&&i<rooms.length;i++){r=rooms[i];h+='<tr><td><b>'+esc(r.name)+'</b>'+(r.mine?' <span class="crw">(yours)</span>':'')+'</td><td>'+r.players+'/'+r.maxPlayers+' crew</td><td>'+esc(r.zone)+'</td><td><button onclick="send({type:\'join\',room:\''+esc(r.id)+'\'})">Join</button></td></tr>';}
  $('shiplist').innerHTML=h+'</table>';}
 
 function poll(){if(!S){polling=0;return;}req('/classic/poll?s='+S,function(o){var i,m;if(o&&o.messages)for(i=0;i<o.messages.length;i++){m=o.messages[i];
-  if(m.type=='rooms'){showRooms(m.rooms);showLobby();}else if(m.type=='joined')showGame();else if(m.type=='chat')chatLine(m);else if(m.type=='error')note(m.message);else if(m.type=='motd')setMotd(m);}
+  if(m.type=='rooms'){showRooms(m.rooms);showLobby();}else if(m.type=='joined')showGame();else if(m.type=='chat')chatLine(m);else if(m.type=='error')note(m.message);else if(m.type=='motd')setMotd(m);else if(m.type=='crew'){crewRep=m;drawManage();}else if(m.type=='shipsettings'){shipSet=m;drawManage();}}
   if(o&&o.status){if(!inGame)showGame();status(o.status);}setTimeout(poll,600);});}
 function status(st){var h='',i,s,c;lastStatus=st;piloting=st.piloting?1:0;
  h='<b>'+esc(st.ship)+'</b> &middot; '+esc(st.zone)+' <span class="small">'+esc(st.blurb)+'</span><br>Shields '+st.hp+' / '+st.maxHp+(st.critical?' <span class="warn">CRITICAL &middot; returning to Freeport in '+st.critical+' s</span>':'')+' &middot; you are <span class="'+rankClass(st.rank)+'">'+esc(st.rank)+'</span>'+(st.piloting?' &middot; <b>at the helm</b>':'')+'<br><span class="small">'+esc(st.mission)+'</span>';
@@ -103,18 +120,44 @@ function status(st){var h='',i,s,c;lastStatus=st;piloting=st.piloting?1:0;
 function chatLine(m){var d=$('chatlog');d.innerHTML+='<span class="'+rankClass(m.rank)+'">'+esc((m.rank||'guest').charAt(0).toUpperCase())+'</span> '+(m.comms?'<b style="color:#2e7d4f">[COMMS]</b> ':'')+'<b>'+esc(m.from)+'</b> <span class="small">'+esc(m.ship)+'</span>: '+esc(m.text)+'<br>';d.scrollTop=d.scrollHeight;}
 function chatKey(e){e=e||window.event;var c=e.keyCode,t;if(c==13){t=$('chatin').value;$('chatin').value='';if(t){if(t.charAt(0)==';'){t=t.substring(1);if(t)send({type:'comms',text:t});}else send({type:'chat',text:t});}$('chatin').blur();typing=0;return false;}if(c==27){$('chatin').blur();typing=0;return false;}return true;}
 
-function resize(){var v=$('size').value.split('x');W=+v[0];H=+v[1];$('view').width=W;$('view').height=H;$('view2').width=W;$('view2').height=H;$('viewbox').style.width=W+'px';$('viewbox').style.height=H+'px';}
+function resize(){var v=$('size').value.split('x'),i,ids=['view','view2','view3','view4'];W=+v[0];H=+v[1];for(i=0;i<4;i++){$(ids[i]).width=W;$(ids[i]).height=H;}$('viewbox').style.width=W+'px';$('viewbox').style.height=H+'px';}
 function zoomBy(d){if(piloting)flyZ=Math.max(4,Math.min(40,flyZ+d*2));else walkZ=Math.max(8,Math.min(64,walkZ+d*4));}
-/* Pictures are double-buffered: the next frame loads into the hidden image and the two swap when it is ready, so
-   the picture never flickers. The next request goes out the moment a frame arrives; the server answers with its
-   newest picture (it draws 30 a second), so the frame rate is as high as the connection and this computer allow. */
-var front=$('view'),back=$('view2'),loading=0,fpsCount=0,fpsAt=(new Date()).getTime();
-function nextFrame(){if(!inGame||!S||loading)return;loading=1;frameN++;back.src='/classic/frame?s='+S+'&w='+W+'&h='+H+'&z='+(piloting?flyZ:walkZ)+'&n='+frameN;}
-function frameLoaded(img){if(img!=back)return;loading=0;back.style.visibility='visible';front.style.visibility='hidden';back=front;front=img;fpsCount++;
+/* Pictures: several requests are kept in flight (3, or 2 in old Internet Explorer, which opens only two connections
+   per server) so the frame rate isn't limited to one picture per round trip to the server; the server hands each request
+   its own newer frame. Each picture loads into a hidden image and is shown when ready, so it never flickers. */
+var DEPTH=/MSIE [1-7]\./.test(navigator.userAgent)?2:3,front=$('view'),pool=[$('view2'),$('view3'),$('view4')],inFlight=0,fpsCount=0,fpsAt=(new Date()).getTime();
+function nextFrame(){var img;while(inGame&&S&&inFlight<DEPTH&&pool.length){img=pool.shift();img.loadingFrame=1;inFlight++;frameN++;img.src='/classic/frame?s='+S+'&w='+W+'&h='+H+'&z='+(piloting?flyZ:walkZ)+'&n='+frameN;}}
+function frameLoaded(img){if(!img.loadingFrame)return;img.loadingFrame=0;inFlight--;img.style.visibility='visible';front.style.visibility='hidden';pool[pool.length]=front;front=img;fpsCount++;
  var now=(new Date()).getTime();if(now-fpsAt>=1000){$('fps').innerHTML=Math.round(fpsCount*1000/(now-fpsAt))+' fps';fpsCount=0;fpsAt=now;}nextFrame();}
-function frameFailed(img){if(img!=back)return;loading=0;setTimeout(nextFrame,1000);}
-$('view').onload=function(){frameLoaded($('view'));};$('view2').onload=function(){frameLoaded($('view2'));};
-$('view').onerror=function(){frameFailed($('view'));};$('view2').onerror=function(){frameFailed($('view2'));};
+function frameFailed(img){if(!img.loadingFrame)return;img.loadingFrame=0;inFlight--;pool[pool.length]=img;setTimeout(nextFrame,1000);}
+function hookImage(id){var im=$(id);im.onload=function(){frameLoaded(im);};im.onerror=function(){frameFailed(im);};}
+hookImage('view');hookImage('view2');hookImage('view3');hookImage('view4');
+
+/* Manage ship (like the full game's Manage Ship window): ship name, who can join and the invite link, every crew member
+   ever aboard with their rank, kick / ban (captains) or vote-kick (crew, for guests), and the ship log. */
+var manageOpen=0,manageTimer=null,crewRep=null,shipSet=null;
+function toggleManage(){manageOpen=manageOpen?0:1;show('manage',manageOpen);$('managebtn').innerHTML=manageOpen?'Close':'Open';if(manageOpen){$('manage').innerHTML='<span class="small">Loading...</span>';refreshManage();}}
+function refreshManage(){clearTimeout(manageTimer);if(!manageOpen||!inGame||!S)return;send({type:'crew'});send({type:'shipsettings'});manageTimer=setTimeout(refreshManage,5000);}
+function soon(){setTimeout(refreshManage,400);}
+function setRank(acc,sel){send({type:'rank',account:acc,rank:sel.value});soon();}
+function doRename(){var v=$('mgname').value;if(v)req('/classic/rename?s='+S+'&name='+uenc(v));$('mgname').value='';soon();}
+function ago(t){var s=Math.round(((new Date()).getTime()-t)/1000);return s<60?s+'s':s<3600?Math.round(s/60)+'m':s<86400?Math.round(s/3600)+'h':Math.round(s/86400)+'d';}
+function drawManage(){if(!manageOpen||!crewRep)return;var cap=crewRep.captain,h='',i,r,base=window.location.protocol+'//'+window.location.host,lg;
+ h+='<b>'+esc(crewRep.ship)+'</b>';if(cap)h+='<br><input id="mgname" size="16" maxlength="32" onfocus="typing=1" onblur="typing=0"> <button onclick="doRename()">Rename</button> <span class="small">(once an hour)</span>';
+ if(shipSet){h+='<p style="margin:6px 0"><b>Who can join:</b> '+(shipSet['private']?'invite link only':'everyone');
+  if(cap)h+=' <button onclick="send({type:\'privacy\',\'private\':'+(shipSet['private']?'false':'true')+'});soon()">Make '+(shipSet['private']?'public':'private')+'</button>';
+  if(shipSet.invite){h+='<br><span class="small">Invite link (classic): </span><input size="30" readonly onfocus="this.select()" value="'+esc(base+'/classic?ship='+shipSet.id+'&key='+shipSet.invite)+'"><br><span class="small">Full game: </span><input size="30" readonly onfocus="this.select()" value="'+esc(base+'/?ship='+shipSet.id+'&key='+shipSet.invite)+'">';if(cap)h+=' <button onclick="send({type:\'newinvite\'});soon()">New link</button>';}
+  h+='</p>';}
+ h+='<table class="mg" width="100%" cellspacing="0">';
+ for(i=0;i<crewRep.crew.length;i++){r=crewRep.crew[i];h+='<tr><td><span class="'+(r.online?'on':'off')+'">&#9679;</span> '+esc(r.name)+(r.you?' <span class="small">(you)</span>':'')+(r.owner?' <span class="small">(owner)</span>':'')+(r.banned?' <span class="warn">banned</span>':'')+'<br><span class="small">'+esc(r['short'])+' &middot; '+Math.round(r.playtime/60)+' min'+(r.online?'':' &middot; seen '+ago(r.last)+' ago')+'</span></td><td>';
+  if(cap&&!r.you&&!r.owner){h+='<select onchange="setRank(\''+esc(r['short'])+'\',this)"><option value="captain"'+(r.rank=='captain'?' selected':'')+'>captain</option><option value="crew"'+(r.rank=='crew'?' selected':'')+'>crew</option><option value="guest"'+(r.rank!='captain'&&r.rank!='crew'?' selected':'')+'>guest</option></select><br>';
+   if(r.online&&r.uid)h+='<button onclick="send({type:\'kick\',crew:\''+esc(r.uid)+'\'});soon()">Kick</button> ';
+   h+='<button onclick="send({type:\'ban\',account:\''+esc(r['short'])+'\',banned:'+(r.banned?'false':'true')+'});soon()">'+(r.banned?'Unban':'Ban')+'</button>';}
+  else{h+='<span class="'+rankClass(r.rank)+'">'+esc(r.rank)+'</span>';if(!cap&&crewRep.rank=='crew'&&r.online&&r.uid&&r.rank=='guest'&&!r.you)h+='<br><button onclick="send({type:\'votekick\',crew:\''+esc(r.uid)+'\'});soon()"'+(r.voted?' disabled':'')+'>Vote kick '+r.votes+'/'+crewRep.votesNeeded+'</button>';}
+  h+='</td></tr>';}
+ h+='</table><p style="margin:6px 0 2px 0"><b>Ship log</b></p><div style="height:120px;overflow:auto;background:#0d151c;border:1px solid #4b5b66;padding:3px">';
+ lg=crewRep.log||[];for(i=lg.length-1;i>=0&&i>=lg.length-40;i--)h+='<span class="small">'+ago(lg[i].t)+'</span> '+(lg[i].who?'<span class="'+rankClass(lg[i].who.rank)+'">'+esc(lg[i].who.name)+'</span> ':'')+esc(lg[i].text)+'<br>';
+ $('manage').innerHTML=h+'</div>';}
 
 /* Ship MOTD: plain text (escaped, line breaks kept); the captain gets an edit box. */
 var motd='',motdHidden=0,motdEditing=0;
@@ -124,14 +167,14 @@ function saveMotd(){send({type:'motd',text:$('motdtext').value});motdEditing=0;s
 /* Keyboard: keys are sent when pressed and released; repeats are not. */
 var NAMES={32:' ',37:'arrowleft',38:'arrowup',39:'arrowright',40:'arrowdown',16:'shift',27:'escape',191:'/',113:'f2'};
 function keyName(c){if(c>=65&&c<=90)return String.fromCharCode(c+32);if(c>=48&&c<=57)return String.fromCharCode(c);return NAMES[c]||null;}
-function sendKey(k,isDown,shift){if(S)req('/classic/key?s='+S+'&k='+encodeURIComponent(k)+'&d='+(isDown?1:0)+'&sh='+(shift?1:0));}
+function sendKey(k,isDown,shift){if(S)req('/classic/key?s='+S+'&k='+uenc(k)+'&d='+(isDown?1:0)+'&sh='+(shift?1:0));}
 function tap(k){sendKey(k,1,0);sendKey(k,0,0);}
 document.onkeydown=function(e){e=e||window.event;if(typing||!inGame)return true;var c=e.keyCode,k;if(c==13){$('chatin').focus();typing=1;return false;}k=keyName(c);if(!k)return true;if(!down[k]){down[k]=1;sendKey(k,1,e.shiftKey);}return false;};
 document.onkeyup=function(e){e=e||window.event;if(typing||!inGame)return true;var k=keyName(e.keyCode);if(!k)return true;if(down[k]){down[k]=0;sendKey(k,0,e.shiftKey);}return false;};
 window.onblur=function(){var k;for(k in down)if(down[k]){down[k]=0;sendKey(k,0,0);}};
 
 /* Mouse on the picture: left = use / build / fire, right = dismantle. */
-$('view').onmousedown=$('view2').onmousedown=function(e){e=e||window.event;if(!S)return false;var x=e.offsetX,y=e.offsetY,b=0;
+$('view').onmousedown=$('view2').onmousedown=$('view3').onmousedown=$('view4').onmousedown=function(e){e=e||window.event;if(!S)return false;var x=e.offsetX,y=e.offsetY,b=0;
  if(x==null){var el=front,ox=0,oy=0;while(el){ox+=el.offsetLeft;oy+=el.offsetTop;el=el.offsetParent;}x=e.pageX-ox;y=e.pageY-oy;}
  if(e.which){b=e.which==3?2:0;}else{b=e.button==2?2:0;}
  req('/classic/click?s='+S+'&x='+x+'&y='+y+'&b='+b+'&w='+W+'&h='+H);return false;};
