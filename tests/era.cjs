@@ -72,10 +72,10 @@ console.log('PASS: 80% clear threshold, visible 10-minute countdown, fresh seed 
 
 // --- Flux, recipes and the stationary pusher (ℵ30) -------------------------------------------------------
 assert.ok(run('TYPES.includes("flux")&&TYPES.includes("pusher_block")'));assert.equal(run('stackLimit("flux")'),16);assert.equal(run('stackLimit("pusher_block")'),1);
-assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("pusher"))')),{iron:8,flux:2,silica:2});assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("pusher_block"))')),{iron:8,flux:2,silica:2});assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("ammo"))')),{iron:1,explosives:1});
-run('initialize();activeFab=[...terrain.values()].find(t=>t.type==="fabricator");activeFab.kind="engineering";activeFab.materials={iron:64,flux:1,silica:2};craft("pusher");tickFabricators(.1)');assert.equal(run('activeFab.job'),null,'needs 2 flux');
-run('activeFab.materials.flux=2;tickFabricators(.1)');assert.equal(run('activeFab.job.type'),'pusher');assert.equal(run('activeFab.materials.flux'),0);assert.equal(run('activeFab.materials.iron'),56);
-run('clearQueue()');assert.equal(run('inventory.flux'),2,'cancel refunds flux');assert.ok(run('inventory.iron>=8'));
+assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("pusher"))')),{flux:8},'handheld pusher: 8 flux');assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("pusher_block"))')),{iron:8,flux:2,silica:2});assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("ammo"))')),{iron:1,explosives:1});
+run('initialize();activeFab=[...terrain.values()].find(t=>t.type==="fabricator");activeFab.kind="engineering";activeFab.materials={iron:64,flux:7,silica:2};craft("pusher");tickFabricators(.1)');assert.equal(run('activeFab.job'),null,'needs 8 flux');
+run('activeFab.materials.flux=8;tickFabricators(.1)');assert.equal(run('activeFab.job.type'),'pusher');assert.equal(run('activeFab.materials.flux'),0);assert.equal(run('activeFab.materials.iron'),64,'no iron');
+run('clearQueue()');assert.equal(run('inventory.flux'),8,'cancel refunds the 8 flux');
 run('activeFab.kind="machine";activeFab.materials={iron:64,flux:4,silica:4};craft("pusher_block");for(let n=0;n<400;n++)tickFabricators(1/60)');assert.ok(run('items.some(i=>i.type==="pusher_block")'),'stationary pusher crafted');
 // Stationary pusher drives loose cargo along its beam and stops at solid tiles.
 const clear='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';

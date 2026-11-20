@@ -207,9 +207,10 @@ const BOT_DROPS = {
   seeker: [['silica', 4]]
 };
 
-// Ingredients beyond Iron (COST). ℵ30: pushers of both kinds are crafted with flux. Amounts PLACEHOLDER.
+// Ingredients beyond Iron (COST). ℵ30: pushers of both kinds are crafted with flux. The handheld pusher costs 8 flux and
+// nothing else (as in the 2019 builds); the stationary pusher's amounts are PLACEHOLDER.
 // Ammo: 1 iron + 1 explosive (wiki); trash is free (ℵ7+); breaker is cheaper but crafts 1 (ℵ14).
-const RECIPE_EXTRA = {fuel: {explosives: 1}, ammo: {explosives: 1}, scatter: {explosives: 1}, flak: {explosives: 1}, sniper: {explosives: 1}, punch: {explosives: 1}, yank: {explosives: 1}, breaker: {explosives: 1}, pusher: {flux: 2, silica: 2}, pusher_block: {flux: 2, silica: 2}, loader: {flux: 2}, glass: {silica: 1}};
+const RECIPE_EXTRA = {fuel: {explosives: 1}, ammo: {explosives: 1}, scatter: {explosives: 1}, flak: {explosives: 1}, sniper: {explosives: 1}, punch: {explosives: 1}, yank: {explosives: 1}, breaker: {explosives: 1}, pusher: {flux: 8}, pusher_block: {flux: 2, silica: 2}, loader: {flux: 2}, glass: {silica: 1}};
 // Ammo recipes craft 4 rounds (ℵ29+, 31 Aug 2019: "Ammo recipes that crafted 3 items now craft 4");
 // breaker and trash were never in that group (ℵ14: "All ammo types except trash and breaker…").
 const RECIPE_YIELD = {glass: 2, ammo: 4, scatter: 4, flak: 4, sniper: 4, punch: 4, yank: 4, breaker: 1, trash: 1};

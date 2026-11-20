@@ -189,7 +189,7 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 - **Turrets show their ammo by colour:** the X on an RC turret's action box (the arrows on burst and auto turrets) takes the loaded ammo's colour — standard orange, scattershot yellow, punch green, sniper blue, flak red, yank purple, slug white, trash grey — and keeps it after the turret runs dry. The count (`0/16`) sits right beside the box.
 - **Placeable machines use their packaged item icons** in the inventory and when dropped (RC, starter RC, burst and auto turrets, turret controller, thrusters, pusher), not the placed sprite.
 - New or reloaded ships never appear inside another ship (a second new ship used to land on top of the first).
-- Green bots drop a handheld pusher. Blue rammers are faster and shove ships back when they hit. Canary iron tiles drop 64 iron.
+- Green bots drop a handheld pusher (crafted at the engineering fabricator for 8 flux, as in the 2019 builds). Blue rammers are faster and shove ships back when they hit. Canary iron tiles drop 64 iron.
 - The server prints the **dev token** every time it starts. Without `DEV_TOKEN` it makes one on first run and keeps it in `data/dev-token.txt`.
 - Hull and rock tiles are cut out of their texture atlas once, fixing thin lines along tile edges in Safari.
 

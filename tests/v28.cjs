@@ -15,7 +15,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of [...terrain.values()])if(t.body){inside.destroyBody(t.body);terrain.delete(t.key);}else if(!isStarterTile(t)){if(t.f)interior.destroyFixture(t.f);terrain.delete(key(t.x,t.y));}for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];';
 // --- Silica and glass ------------------------------------------------------------------------------------------------
 {assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("glass"))')),{silica:1},'glass is made from silica');
- for(const t of ['pusher','pusher_block'])assert.ok(run(`recipeNeeds("${t}").silica`)>0,t+' needs silica');
+ assert.ok(run('recipeNeeds("pusher_block").silica')>0,'stationary pusher needs silica');assert.deepEqual(JSON.parse(run('JSON.stringify(recipeNeeds("pusher"))')),{flux:8},'the handheld pusher is 8 flux only');
  run('initialize();activeFab=[...terrain.values()].find(t=>t.type==="fabricator");activeFab.kind="engineering";activeFab.materials={silica:3};activeFab.queue=[];craft("glass");for(let n=0;n<200;n++)tickFabricators(1/60)');assert.equal(run('items.filter(i=>i.type==="glass").reduce((n,i)=>n+i.count,0)'),2,'one silica → two glass');
  // Icy: a crate slides much further on glass than on blocks, and so does a player letting go of the keys.
  const slide=floor=>{run(clr+`for(let x=-4;x<=4;x++){if(${floor==='glass'})addTerrain("glass",x,2);else addBlock(x,2);}globalThis.c=spawnItem("iron",V(-3.5,1.1),V(3,0),16)`);ticks(60);return run('c.body.getPosition().x');};
