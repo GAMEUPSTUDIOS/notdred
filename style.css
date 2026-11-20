@@ -115,3 +115,9 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 .playercode input{width:100%;font-family:monospace;font-size:11px}
 .playercode p{margin:4px 0}
 .playercode small{display:block;margin-top:4px}
+
+/* Dev menu → Live code */
+#dev .livecode textarea{width:100%;box-sizing:border-box;font:12px/1.4 ui-monospace,Consolas,monospace;background:#101418;color:#dfe8ef;border:1px solid #3a4652;border-radius:4px;padding:6px;resize:vertical;tab-size:2}
+#dev .livebar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+#dev .liveout{max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.35 ui-monospace,Consolas,monospace;background:#0c0f12;color:#cfd8df;border-radius:4px;padding:6px;margin:6px 0 0;min-height:1.4em}
+#dev .liveout.ok{border-left:3px solid #4fd16a}#dev .liveout.bad{border-left:3px solid #e0524a;color:#ffb3ad}
