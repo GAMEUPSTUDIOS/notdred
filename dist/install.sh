@@ -53,7 +53,8 @@ if ! node_ok; then
   # shellcheck disable=SC1091
   . "$NVM_DIR/nvm.sh"; nvm install 22 > /dev/null; nvm alias default 22 > /dev/null; nvm use 22 > /dev/null
   node_ok || die "Node.js 22 did not install."
-  grep -q 'NVM_DIR' "$HOME/.bashrc" 2>/dev/null || printf '\nexport NVM_DIR="$HOME/.nvm"\n[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"\n' >> "$HOME/.bashrc"
+  # bash, and zsh (macOS Terminal's default shell), so node/npm work in new Terminal windows too.
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do grep -q 'NVM_DIR' "$rc" 2>/dev/null || printf '\nexport NVM_DIR="$HOME/.nvm"\n[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"\n' >> "$rc"; done
 fi
 say "Node.js $(node -v)"
 
