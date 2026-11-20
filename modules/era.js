@@ -44,7 +44,7 @@ const ZONES = {
   freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 240, h: 150},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'sparrow', x: 0, y: -28}]},
-  finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: null,
+  finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: {},
     blurb: 'Red bots · mining caves', bg: '#447477', shotGravity: 10,
     // width/height/threshold/salt 117/67/.59/0 reproduce the original single Finch map exactly.
     gen: {width: 117, height: 67, threshold: .59, salt: 0, oreChance: .03},
@@ -69,7 +69,7 @@ const ZONES = {
     bots: {red: 6, blue: 6}, portalsTo: ['freeport', 'freeport2', 'freeport3']},
   // Canary: a tunneling mission. One giant square of rock (iron, turret ore, flux) with open space around it; flux
   // is rare at the edges and densest in the middle. Full of dormant seekers. Ends after 3 hours or once 90% is mined.
-  canary: {id: 'canary', name: 'Canary', kind: 'combat', mission: true, pvp: null, missionSeconds: 3 * 60 * 60, clearToEnd: .9,
+  canary: {id: 'canary', name: 'Canary', kind: 'combat', mission: true, pvp: {}, missionSeconds: 3 * 60 * 60, clearToEnd: .9,
     blurb: 'MISSION · tunneling · flux is richest in the middle · beware seekers', bg: '#3d5560', shotGravity: 10, tiles: 'canary',
     gen: {layout: 'block', width: 85, height: 85, ring: 8, salt: 314159, oreChance: 0, iron: .16, turretOre: .025, fluxEdge: .015, fluxCore: .6, coreRadius: .5, seekerChance: .03},
     bots: {red: 4}, portalsTo: ['freeport', 'freeport2', 'freeport3']}
@@ -86,8 +86,9 @@ const MISSIONS = {intervalSeconds: 45 * 60, durationSeconds: 20 * 60, rotation: 
 const TREASURE_LOOT = [['flux', 8], ['turret', 1], ['booster', 6], ['explosives', 16], ['sniper', 16], ['breaker', 8], ['iron', 16]];
 
 // PvP (ships sharing a zone can shoot each other with RC turrets):
-//   pvp: null                    no ship-to-ship damage — only bots can hurt ships (safe zones, Finch I).
-//   pvp: {}                      full damage for every ship (Sparrow I).
+//   pvp: null                    no ship-to-ship damage (safe zones; weapons are off there anyway).
+//   pvp: {}                      full damage for every ship (Finch I, Sparrow I, The Pits, Canary).
+//   Hitting your own ship (a ricochet, running into your own slug) always does full damage, in any combat zone.
 //   pvp: {sizeFull, sizeZero}    damage scales with the SHOOTER's hull size in tiles, (w+1)×(h+1):
 //                                full up to sizeFull, falling linearly to nothing at sizeZero (Finch II —
 //                                only small ships can effectively fight; the 2019 "combat rating" idea).
@@ -244,6 +245,9 @@ const RECYCLE_SWAP = {pusher: 'pusher_block'};
 const RECYCLE_SECONDS = 3;
 // Most fuel or explosives a loader will put into one thruster tank.
 const THRUSTER_TANK = 16;
+// Thruster force (N). Raised 1.5× from 900 / 1600 / 1100 so ships handle better; a ship's top speed is just force ÷
+// (mass × drag) — there is no speed cap.
+const THRUSTER_FORCE = {starter: 1350, fuel: 2400, explosives: 1650};
 // Comms station (ℵ14): talk to every ship in the zone. Ordinary chat stays aboard your own ship.
 const COMMS_RANGE = 2.5;
 // Spawn points (ℵ14): a joining player appears at a random spawn point set exactly to their rank, else at the helm.
@@ -310,4 +314,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {THRUSTER_FORCE, PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};

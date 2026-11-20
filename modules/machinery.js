@@ -13,7 +13,7 @@ function tickFabricators(dt){for(const f of terrain.values()){if(f.type!=='fabri
 
 function loadThruster(c,type){if(piloting)return toast('Leave the helm to load a thruster.');const m=mountHit(c);if(!m||m.type!=='thruster')return toast('Click a normal three-tile thruster. Starter thrusters do not need fuel.');if(!inventory[type])return toast('No '+NAMES[type]+' available.');inventory[type]--;const tank=type==='fuel'?'fuelItems':'explosiveItems';m[tank]=(m[tank]||0)+1;save(true);toast('Loaded '+NAMES[type]+'. Fuel: '+(m.fuelItems||0)+' / Explosives: '+(m.explosiveItems||0));}
 
-function burn(m,dt,power){if(m.type==='starter')return 900;if((m.burnRemaining||0)<=0){if(m.fuelItems>0){m.fuelItems--;m.burnKind='fuel';m.burnRemaining=120}else if(m.explosiveItems>0){m.explosiveItems--;m.burnKind='explosives';m.burnRemaining=60}else return 0}const used=Math.min(m.burnRemaining,dt*power);m.burnRemaining-=used;return (m.burnKind==='fuel'?1600:1100)*(used/(dt*power));}
+function burn(m,dt,power){if(m.type==='starter')return THRUSTER_FORCE.starter;if((m.burnRemaining||0)<=0){if(m.fuelItems>0){m.fuelItems--;m.burnKind='fuel';m.burnRemaining=120}else if(m.explosiveItems>0){m.explosiveItems--;m.burnKind='explosives';m.burnRemaining=60}else return 0}const used=Math.min(m.burnRemaining,dt*power);m.burnRemaining-=used;return (m.burnKind==='fuel'?THRUSTER_FORCE.fuel:THRUSTER_FORCE.explosives)*(used/(dt*power));}
 
 // Placed shredder tiles (pre-v13 saves; they become shredder items on load) no longer eat loose items: nothing takes
 // loose items by itself except loaders and pushers.
