@@ -39,3 +39,5 @@ devTick=dt=>{devDraw=[{type:'text',x:0,y:-3,text:'t='+clock.toFixed(1)}]}   // r
   for(const type of ['wedge','walkway_wedge']){const c=document.createElement('canvas');c.width=c.height=80;const g=c.getContext('2d');g.beginPath();g.moveTo(0,0);g.lineTo(80,80);g.lineTo(0,80);g.closePath();g.clip();g.drawImage(spriteImages[type==='wedge'?'block':'walkway'],0,0,80,80);g.strokeStyle='#151515';g.lineWidth=5;g.beginPath();g.moveTo(0,0);g.lineTo(80,80);g.stroke();const im=new Image();im.src=c.toDataURL();im.renderURL=im.src;spriteImages[type]=im;}
  });
 }
+// Graphics: WebGL (default when the browser has it) or the plain 2D canvas. Remembered per browser; switching reloads.
+{const b=el('rendererbtn');if(b){const gl=!!ctx.isWebGL;b.textContent='Graphics: '+(gl?'WebGL':'2D');b.onclick=()=>{try{localStorage.setItem('notdred-renderer',gl?'2d':'webgl');}catch{}const u=new URL(location.href);u.searchParams.delete('renderer');location.href=u.toString();};}}
