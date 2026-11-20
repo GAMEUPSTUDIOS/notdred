@@ -29,7 +29,7 @@ function viewFactory(root){const dist=path.join(root,'dist'),compiled=new Map();
    setInterval:(f,ms)=>{const t=setInterval(()=>{try{f();}catch{}},ms);timers.add(t);return t;},clearInterval:t=>{clearInterval(t);timers.delete(t);},
    requestAnimationFrame(){},innerWidth:640,innerHeight:400,devicePixelRatio:1,ZoneGenerator:require(path.join(dist,'zone-generator.js')),ShipCodec:require(path.join(dist,'modules/save-codec.js')),confirm:()=>false,prompt:()=>null,alert(){}};
   s.window=s;s.addEventListener=(t,f)=>{(listeners.window[t]??=[]).push(f);};s.removeEventListener=()=>{};s.location={protocol:'http:',host:'classic',hostname:'classic',search:''};s.navigator={userAgent:'notdred-classic'};
-  vm.createContext(s);const opts={timeout:5000};for(const f of SCRIPTS)script(f).runInContext(s,opts);
+  vm.createContext(s);/* generous: on a fresh Windows machine the first text drawn builds the font cache, which can take several seconds */const opts={timeout:60000};for(const f of SCRIPTS)script(f).runInContext(s,opts);
   vm.runInContext('initialize();inLobby=true;',s,opts);
   // The client's socket is this session: what it sends goes straight to the server's message handler.
   s.__toServer=str=>toServer(str);vm.runInContext('netSocket={readyState:1,send:str=>__toServer(str),close(){}};',s,opts);
