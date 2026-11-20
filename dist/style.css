@@ -109,3 +109,9 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 #dev .devtoggle{display:flex;align-items:center;gap:10px;background:none;border:0;color:#e6eee9;font-size:18px;cursor:pointer}
 #dev .devtoggle i{display:inline-block;width:30px;height:30px;border:4px solid #e2342d;border-radius:6px;background:#26333b}
 #dev .devtoggle.on i{border-color:#5fd45f;background:#5fd45f}
+
+/* Player code (lobby Account box) */
+.playercode{margin-top:8px}
+.playercode input{width:100%;font-family:monospace;font-size:11px}
+.playercode p{margin:4px 0}
+.playercode small{display:block;margin-top:4px}

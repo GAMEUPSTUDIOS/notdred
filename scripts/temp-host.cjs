@@ -37,6 +37,7 @@ function banner(url,again){console.log(`
   │  GitHub Pages link (if Pages is on):  ${pages.origin}${pages.path}?server=${url.replace('https://','')}`:''}
   │
   │  Testers: open the link, choose Connect, then create or join a ship.
+  │  The link changes on restart: players paste their player code (main menu → Account) to keep ranks and ships.
   │  Server address (filled in automatically): ${url.replace('https://','wss://')}/play
   │  Dev menu token, for you only:             ${DEV_TOKEN}
   │  Also on this computer: http://localhost:${PORT}

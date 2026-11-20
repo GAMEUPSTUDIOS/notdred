@@ -49,6 +49,7 @@ gh codespace ports visibility 8080:public -c "$CODESPACE_NAME" > /dev/null 2>&1 
 if [ -n "$TUNNEL_URL" ]; then cat <<MSG
 
   notdred.io is running. Temporary link (share this):  $TUNNEL_URL
+  The link changes on restart: players paste their player code (main menu → Account) to keep ranks and ships.
   GitHub Pages link (if Pages is on):  $PAGES_ORIGIN/${REPO}/?server=${TUNNEL_URL#https://}
   Also reachable through GitHub's address:  $URL
   Testers: open the link, choose Connect, then create or join a ship.
