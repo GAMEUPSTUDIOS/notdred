@@ -92,7 +92,8 @@ const TREASURE_LOOT = [['flux', 8], ['turret', 1], ['booster', 6], ['explosives'
 //                                full up to sizeFull, falling linearly to nothing at sizeZero (Finch II —
 //                                only small ships can effectively fight; the 2019 "combat rating" idea).
 //   The starter ship is 11×8 = 88 tiles; the largest legal hull is 29×21 = 609. Thresholds are PLACEHOLDERS.
-// Every ammo type in the game at ℵ30 (slug replaced breaker later, ℵ35; healing came in 2020).
+// Every ammo type in the game at ℵ30, plus slug (it came later, ℵ35, in place of breaker; both are kept here).
+// Slug: a heavy, very slow shell that hits hard and mines a rock tile in two (mine 250 → 562 per hit).
 // Sources (changelog): sniper "same as standard" (ℵ14) then 150/shot (ℵ28++) → standard ≈ 100; breaker
 // "twice standard" damage, faster, cheaper, and still destroys blocks in one hit (ℵ14, ℵ25); scatter −20% with
 // less spread and flak −30% (ℵ26); trash "same damage as standard" (ℵ10) but decays over time (wiki), is free
@@ -125,6 +126,7 @@ const AMMO = {
   punch:   {name: 'Punch ammo',    damage: 100,  speed: 90,  life: 2,   impulse: 1, trail: '#ff6ec7', head: '#ffd2f0'},
   yank:    {name: 'Yank ammo',     damage: 100,  speed: 90,  life: 2,   impulse: -1, trail: '#8d7bff', head: '#dcd6ff'},
   breaker: {name: 'Breaker ammo',  damage: 200, speed: 110, life: 2,   rockBreaker: true, trail: '#ff7a5c', head: '#ffd8cc'},
+  slug:    {name: 'Slug ammo',     damage: 400, mine: 250, speed: 38, life: 4.5, trail: '#a8754a', head: '#f0d2a8'},
   trash:   {name: 'Trash ammo',    damage: 100, speed: 75,  life: 1.2, itemDecay: 45, trail: '#8f9a6a', head: '#d9e0bf'}
 };
 const AMMO_TYPES = Object.keys(AMMO);
@@ -146,7 +148,7 @@ const TURRET_ORE_DROPS = ['turret', 'turret_burst', 'turret_auto'];
 const WORLD_TILE_HP = {rock: 1000, iron: 1000, ore: 1000, flux: 1000, treasure: 4000};
 const WORLD_DAMAGE_SCALE = 2.25;
 // ℵ10: every ammo type except standard waits twice as long between shots.
-const AMMO_RELOAD = {ammo: 1, scatter: 2, flak: 2, sniper: 2, punch: 2, yank: 2, breaker: 2, trash: 2};
+const AMMO_RELOAD = {ammo: 1, scatter: 2, flak: 2, sniper: 2, punch: 2, yank: 2, breaker: 2, slug: 2, trash: 2};
 function turretDef(m) { return TURRETS[m?.starterRC ? 'starter_rc' : m?.kind || 'turret'] || TURRETS.turret; }
 function turretReload(m) { return turretDef(m).reload * (AMMO_RELOAD[m?.ammoType] || 1); }
 function turretCapacity(m) { return turretDef(m).capacity || 16; }
@@ -214,10 +216,10 @@ const BOT_DROPS = {
 // Ingredients beyond Iron (COST). ℵ30: pushers of both kinds are crafted with flux. The handheld pusher costs 8 flux and
 // nothing else (as in the 2019 builds); the stationary pusher's amounts are PLACEHOLDER.
 // Ammo: 1 iron + 1 explosive (wiki); trash is free (ℵ7+); breaker is cheaper but crafts 1 (ℵ14).
-const RECIPE_EXTRA = {fuel: {explosives: 1}, ammo: {explosives: 1}, scatter: {explosives: 1}, flak: {explosives: 1}, sniper: {explosives: 1}, punch: {explosives: 1}, yank: {explosives: 1}, breaker: {explosives: 1}, pusher: {flux: 8}, pusher_block: {flux: 2, silica: 2}, loader: {flux: 2}, glass: {silica: 1}};
+const RECIPE_EXTRA = {fuel: {explosives: 1}, ammo: {explosives: 1}, scatter: {explosives: 1}, flak: {explosives: 1}, sniper: {explosives: 1}, punch: {explosives: 1}, yank: {explosives: 1}, breaker: {explosives: 1}, slug: {explosives: 2}, pusher: {flux: 8}, pusher_block: {flux: 2, silica: 2}, loader: {flux: 2}, glass: {silica: 1}};
 // Ammo recipes craft 4 rounds (ℵ29+, 31 Aug 2019: "Ammo recipes that crafted 3 items now craft 4");
 // breaker and trash were never in that group (ℵ14: "All ammo types except trash and breaker…").
-const RECIPE_YIELD = {glass: 2, ammo: 4, scatter: 4, flak: 4, sniper: 4, punch: 4, yank: 4, breaker: 1, trash: 1};
+const RECIPE_YIELD = {glass: 2, ammo: 4, scatter: 4, flak: 4, sniper: 4, punch: 4, yank: 4, breaker: 1, slug: 2, trash: 1};
 // Recipes with no ingredients at all (trash ammo, ℵ7+ / ℵ23 "it can now always be crafted").
 const FREE_RECIPES = ['trash'];
 
@@ -262,7 +264,7 @@ const FABRICATORS = {
   machine:     {name: 'Machine fabricator',     item: 'fab_machine',     badge: 'official-fab_t_machine',
                 recipes: ['hatch', 'ejector', 'loader', 'pusher_block', 'turret_controller', 'thruster', 'recycler', 'comms', 'fab_machine', 'fab_engineering', 'fab_munitions']},
   munitions:   {name: 'Munitions fabricator',   item: 'fab_munitions',   badge: 'official-fab_t_munitions',
-                recipes: ['ammo', 'scatter', 'flak', 'sniper', 'punch', 'yank', 'breaker', 'trash', 'fuel', 'booster']},
+                recipes: ['ammo', 'scatter', 'flak', 'sniper', 'punch', 'yank', 'breaker', 'slug', 'trash', 'fuel', 'booster']},
   legacy:      {name: 'Legacy fabricator',      item: 'fabricator',      badge: 'official-fab_t_legacy',
                 recipes: ['fab_starter', 'fab_machine', 'fab_engineering', 'fab_munitions', 'fabricator']}
 };
