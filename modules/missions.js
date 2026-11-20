@@ -10,12 +10,14 @@ const MISSION_PORTAL={x:-60,y:-28};
 function currentMission(){return typeof authoritativeMission==='function'?(authoritativeMission()||missionState):missionState;}
 function missionOpen(id){return currentMission().active===id;}
 // Extra portals a zone shows because of a running mission (safe zones only).
-function missionPortals(id=zone){const m=currentMission();return m.active&&zoneDef(id).kind==='safe'?[{to:m.active,x:MISSION_PORTAL.x,y:MISSION_PORTAL.y,mission:true}]:[];}
+// The gold mission portal opens only in Sparrow I (not in the Freeports or other zones), at the open spot kept for it.
+const MISSION_PORTAL_ZONE='sparrow';
+function missionPortals(id=zone,spot=null){const m=currentMission();return m.active&&id===MISSION_PORTAL_ZONE&&spot?[{to:m.active,x:spot.x,y:spot.y,mission:true}]:[];}
 function startMission(id){if(!ZONES[id]?.mission)id=MISSIONS.rotation[missionState.index%MISSIONS.rotation.length];
  if(typeof zoneEvent==='function')return zoneEvent({type:'missionStart',zone:id});
  missionState.index=(MISSIONS.rotation.indexOf(id)+1)%MISSIONS.rotation.length;missionState.active=id;missionState.endsIn=zoneDef(id).missionSeconds||MISSIONS.durationSeconds;missionState.cleared=0;missionState.elapsed=0;missionState.nextIn=MISSIONS.intervalSeconds;
  const old=zoneData[id];zoneData[id]={seed:freshSeed(old?.seed),mined:[],loot:[]};if(zone===id){setupZone(true);updateShipMass();}
- toastAll('Mission started: '+zoneDef(id).name+' is open for '+Math.round(MISSIONS.durationSeconds/60)+' minutes. Take the gold portal in any Freeport.');save(true);return true;}
+ toastAll('Mission started: '+zoneDef(id).name+' is open for '+Math.round(MISSIONS.durationSeconds/60)+' minutes. Take the gold portal in Sparrow I.');save(true);return true;}
 function endMission(){const id=missionState.active;if(!id)return;missionState.active=null;missionState.endsIn=0;if(zone===id)missionSendHome();else toastAll(zoneDef(id).name+' mission closed.');save(true);}
 // Called when the mission this ship is in closes (locally, or from the zone bus).
 function missionSendHome(){const was=zoneDef().name;snapshotZone();zone=START_ZONE;setupZone(true,'entry');updateShipMass();save(true);toastAll('The '+was+' mission closed. Your ship was returned to '+zoneDef().name+'.');}

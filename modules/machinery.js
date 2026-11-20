@@ -36,8 +36,21 @@ function ejectTurretAmmo(m){if(piloting||P.Vec2.distance(localPlayer(),mountPoin
 function hatchClear(t){const q=hatchOutput(t);if(q.x<bounds.l+.85||q.x>bounds.r-.85||q.y<bounds.t+.85||q.y>bounds.b-.85)return false;let clear=true;inside.queryAABB(new P.AABB(V(q.x-.34,q.y-.34),V(q.x+.34,q.y+.34)),f=>{if(!f.isSensor()&&f.getBody()!==player){clear=false;return false;}return true;});return clear;}
 
 // Takes the nearest allowed loose world item near a hatch (on a server, from the shared zone).
-function claimWorldLoot(hp,allow){const i=worldLoot.find(i=>allow(i.type)&&(i.grace||0)<=0&&P.Vec2.distance(i.body.getPosition(),hp)<9&&lootReachable(i));if(!i)return null;world.destroyBody(i.body);worldLoot.splice(worldLoot.indexOf(i),1);return {type:i.type,count:i.count};}
-function tickHatches(dt){const hatches=[...terrain.values()].filter(t=>['hatch','starter_hatch'].includes(t.type));for(const t of hatches){t.outputTimer=Math.max(0,(t.outputTimer||0)-dt);if(t.outputTimer>0||t.filterMode==='off'||!hatchClear(t))continue;const queued=t.cargo?.findIndex(i=>hatchAllows(t,i.type));let cargo=queued>=0?t.cargo.splice(queued,1)[0]:null;if(!cargo){cargo=claimWorldLoot(ship.getWorldPoint(V(t.x,t.y)),type=>hatchAllows(t,type));if(!cargo)continue;}spawnItem(cargo.type,hatchOutput(t),V(0,0),cargo.count);t.outputTimer=1.5;}}
+// Loot within LOOT_REACH of the ship's hull (any part of it, not just the hatch) can be drawn in; the one nearest
+// the hatch comes first. (It used to be 9 units from the hatch itself, so most of a big ship never collected.)
+const LOOT_REACH=7;
+function hullBox(){let box=null;for(let f=ship.getFixtureList();f;f=f.getNext()){const a=f.getAABB(0);if(!a)continue;if(!box)box={l:a.lowerBound.x,t:a.lowerBound.y,r:a.upperBound.x,b:a.upperBound.y};else{box.l=Math.min(box.l,a.lowerBound.x);box.t=Math.min(box.t,a.lowerBound.y);box.r=Math.max(box.r,a.upperBound.x);box.b=Math.max(box.b,a.upperBound.y);}}return box;}
+function nearHull(p,box){if(!box)return false;const dx=Math.max(box.l-p.x,0,p.x-box.r),dy=Math.max(box.t-p.y,0,p.y-box.b);return Math.hypot(dx,dy)<LOOT_REACH;}
+function claimWorldLoot(hp,allow){const box=hullBox();let i=null,best=Infinity;for(const c of worldLoot){if(!allow(c.type)||(c.grace||0)>0)continue;const p=c.body.getPosition();if(!nearHull(p,box)&&P.Vec2.distance(p,hp)>=9)continue;const d=P.Vec2.distance(p,hp);if(d<best&&lootReachable(c)){best=d;i=c;}}if(!i)return null;world.destroyBody(i.body);worldLoot.splice(worldLoot.indexOf(i),1);return {type:i.type,count:i.count};}
+// Where a hatch puts the next item: its outlet, or a tile or two further in when something sits on the outlet (an item
+// left there used to jam the hatch for good). A same-type stack on the outlet with room takes it instead.
+function hatchSpot(t,type,count){const a=(t.rotation||0)*Math.PI/2,n=V(-Math.sin(a),Math.cos(a)),q0=hatchOutput(t);
+ const there=items.find(i=>i.type===type&&i.count+count<=stackLimit(type)&&P.Vec2.distance(i.body.getPosition(),q0)<.6);if(there)return {merge:there};
+ for(const k of [0,1,2]){const q=V(q0.x+n.x*k,q0.y+n.y*k);if(q.x<bounds.l+.85||q.x>bounds.r-.85||q.y<bounds.t+.85||q.y>bounds.b-.85)break;let clear=true;inside.queryAABB(new P.AABB(V(q.x-.34,q.y-.34),V(q.x+.34,q.y+.34)),f=>{if(!f.isSensor()&&f.getBody()!==player){clear=false;return false;}return true;});if(clear)return {at:q};}return null;}
+function tickHatches(dt){const hatches=[...terrain.values()].filter(t=>['hatch','starter_hatch'].includes(t.type));for(const t of hatches){t.outputTimer=Math.max(0,(t.outputTimer||0)-dt);if(t.outputTimer>0||t.filterMode==='off')continue;const queued=t.cargo?.findIndex(i=>hatchAllows(t,i.type));let cargo=queued>=0?t.cargo.splice(queued,1)[0]:null;
+  if(!cargo){if(!hatchSpot(t,'',0))continue;cargo=claimWorldLoot(ship.getWorldPoint(V(t.x,t.y)),type=>hatchAllows(t,type));if(!cargo)continue;}
+  const spot=hatchSpot(t,cargo.type,cargo.count);if(!spot){(t.cargo??=[]).unshift(cargo);t.outputTimer=.4;continue;}
+  if(spot.merge){spot.merge.count+=cargo.count;wakeCargo(spot.merge.body);}else spawnItem(cargo.type,spot.at,V(0,0),cargo.count);t.outputTimer=.4;}}
 
 // ℵ30 stationary pusher. Its beam runs from the pusher in the facing direction (R rotates; 0 = right) with no
 // length limit: it passes through loose cargo, crew and every tile that lets a beam through (walkways, walkway

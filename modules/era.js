@@ -59,7 +59,7 @@ const ZONES = {
     bots: {red: 8, silver: 4, blue: 14, green: 2}, portalsTo: ['finch', 'finch2', 'freeport3']}, // green: 2 (ℵ25)
   // Mission zones (ℵ33, 8 Oct 2019: "a mission system which starts a new mission zone every 45 minutes",
   // "converted the pits to a mission zone", "added Canary, a mission zone dedicated to mining"). They are only
-  // reachable while their mission runs: a gold portal opens in every Freeport. The Pits keep their ℵ25
+  // reachable while their mission runs: a gold portal opens in Sparrow I. The Pits keep their ℵ25
   // treasure rule (a new treasure block every 5 minutes) and ℵ32's extra portals. Sizes/bots are PLACEHOLDERS.
   pits: {id: 'pits', name: 'The Pits', kind: 'combat', mission: true, pvp: {},
     blurb: 'MISSION · Buried treasure · dig through the boulders · full PvP', bg: '#3a2c27', shotGravity: 10, tiles: 'pits', arrival: 'entry',
@@ -116,7 +116,9 @@ const TREASURE_LOOT = [['flux', 8], ['turret', 1], ['booster', 6], ['explosives'
 // standard 5, punch/yank 5, trash 5, sniper 3, scatter 3–8 pellets' worth depending on range, breaker 1.
 // PLACEHOLDER (not published): scatter/flak per-pellet numbers, all speeds.
 const AMMO = {
-  ammo:    {name: 'Standard ammo', damage: 100, speed: 90,  life: 2,   trail: '#ffe08a', head: '#fff7c4'},
+  // Standard fires twice as often as every other ammo (AMMO_RELOAD), so at equal damage per round it out-damaged
+  // all of them: it does half per round (the same damage per second as punch/yank), while mining as before (mine).
+  ammo:    {name: 'Standard ammo', damage: 50, mine: 100, speed: 90,  life: 2,   trail: '#ffe08a', head: '#fff7c4'},
   scatter: {name: 'Scatter ammo',  damage: 32,  speed: 80,  life: .75, pellets: 5, spread: .2, decay: .35, trail: '#ffb36b', head: '#ffe2c4'},
   flak:    {name: 'Flak ammo',     damage: 70,  speed: 70,  life: 1.6, burst: {after: .45, count: 5, damage: 21, spread: 1.1, speed: 55, life: .5}, trail: '#c8c8c8', head: '#ffffff'},
   sniper:  {name: 'Sniper ammo',   damage: 150, speed: 140, life: 2.4, bounces: 2, trail: '#9fe8ff', head: '#e8fbff'},
@@ -189,7 +191,9 @@ const BOT_TYPES = {
   // Silver bots: shooters like the red raiders, found only in Finch II and Sparrow I; they carry iron.
   silver: {label: 'Silver bot', hp: 600, radius: 2.4, ranged: true, shots: 2, spread: .03, interval: 9, damage: 30, shotType: 'scatter', thrust: 7, minimap: '#d6dde3', tag: 'SLV', body: '#b9c2ca'},
   // Canary seekers: dormant as rock tiles until shot, then they wake and hunt the nearest ship (contact damage).
-  seeker: {label: 'Seeker', hp: 300, radius: 1.7, density: 45, smart: true, ranged: false, contact: 30, contactInterval: 1, knockback: 3, thrust: 16, minimap: '#cfefff', tag: 'SEK', body: '#a9d8f0', dormant: true},
+  // Seekers are square (bot_square from the asset pack, square body) and fast: top speed is thrust/2 (40 → 20, the
+  // quickest bot; blue rammers 13).
+  seeker: {label: 'Seeker', hp: 300, radius: 1.7, square: true, density: 45, smart: true, ranged: false, contact: 30, contactInterval: 1, knockback: 3, thrust: 40, minimap: '#cfefff', tag: 'SEK', body: '#a9d8f0', dormant: true},
   blue:  {label: 'Blue rammer', hp: 800,  radius: 3.0, saw: true, sawSpin: 7, ranged: false, contact: 60, contactInterval: 1.2, knockback: 14, shipKnock: 9, thrust: 26, minimap: '#4aa8ff', tag: 'BLU', body: '#4a8cff'}
 };
 
