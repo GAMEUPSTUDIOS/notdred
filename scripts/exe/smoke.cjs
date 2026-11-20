@@ -5,7 +5,7 @@
 const {spawn}=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{WebSocket}=require('ws');
 const exe=path.resolve(process.argv[2]),tunnel=process.argv.includes('--tunnel'),PORT=8000+Math.floor(Math.random()*900);
 const home=fs.mkdtempSync(path.join(os.tmpdir(),'notdred-smoke-'));let out='';
-const child=spawn(exe,[],{env:{...process.env,PORT:String(PORT),NOTDRED_HOME:home,NOTDRED_NO_BROWSER:'1',...(tunnel?{}:{NOTDRED_NO_TUNNEL:'1'})},stdio:['ignore','pipe','pipe']});
+const child=spawn(exe,[],{env:{...process.env,PORT:String(PORT),NOTDRED_HOME:home,NOTDRED_NO_BROWSER:'1',NOTDRED_NO_UPDATE:'1',...(tunnel?{}:{NOTDRED_NO_TUNNEL:'1'})},stdio:['ignore','pipe','pipe']});
 child.stdout.on('data',d=>{out+=d;process.stdout.write(d);});child.stderr.on('data',d=>{out+=d;process.stderr.write(d);});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const finish=code=>{try{child.kill();}catch{}setTimeout(()=>{try{fs.rmSync(home,{recursive:true,force:true});}catch{}process.exit(code);},1500);};

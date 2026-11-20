@@ -47,5 +47,5 @@ jobs:
         run: |
           $sha = "${{ github.sha }}".Substring(0, 7)
           gh release delete windows-latest --cleanup-tag --yes 2>$null
-          $notes = "notdred.exe built from $sha. Double-click it to host the game: it starts the server, prints a public link (Cloudflare) to share, and opens the game in your browser. Saves are kept in %LOCALAPPDATA%\notdred\data. Windows may warn that it's from an unknown publisher (it isn't signed): More info, Run anyway."
+          $notes = "notdred.exe built from $sha. Double-click it to host the game: it starts the server, prints a public link (Cloudflare) to share, and opens the game in your browser. Saves are kept in %LOCALAPPDATA%\notdred\data. It updates itself from this release each time it starts (asks once for a read-only GitHub token). Windows may warn that it's from an unknown publisher (it isn't signed): More info, Run anyway."
           gh release create windows-latest build/notdred.exe --title "notdred.exe (Windows, latest)" --notes "$notes" --target "${{ github.sha }}" --latest

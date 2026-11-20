@@ -25,8 +25,8 @@ else console.warn('No --cloudflared given: the executable will use a cloudflared
 // unpacks into its own folder and an unchanged build reuses the unpacked copy.
 let offset=0;const blobs=[],hash=crypto.createHash('sha256');
 for(const f of files){const b=fs.readFileSync(f.src);hash.update(f.path).update(b);blobs.push(b);f.offset=offset;f.size=b.length;offset+=b.length;}
-const pkg=JSON.parse(fs.readFileSync('package.json','utf8')),sha=(()=>{try{return execFileSync('git',['rev-parse','--short','HEAD'],{encoding:'utf8'}).trim();}catch{return '';}})();
-const head=Buffer.from(JSON.stringify({version:hash.digest('hex').slice(0,16),label:'v'+pkg.version+(sha?' ('+sha+')':''),files:files.map(({path,offset,size,exec})=>({path,offset,size,...(exec?{exec:true}:{})}))}));
+const pkg=JSON.parse(fs.readFileSync('package.json','utf8')),commit=(()=>{try{return execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();}catch{return '';}})(),sha=commit.slice(0,7);
+const head=Buffer.from(JSON.stringify({version:hash.digest('hex').slice(0,16),label:'v'+pkg.version+(sha?' ('+sha+')':''),commit,files:files.map(({path,offset,size,exec})=>({path,offset,size,...(exec?{exec:true}:{})}))}));
 const len=Buffer.alloc(4);len.writeUInt32LE(head.length);
 const work=path.join(root,'build','exe');fs.mkdirSync(work,{recursive:true});
 const bundle=path.join(work,'bundle.bin');fs.writeFileSync(bundle,Buffer.concat([len,head,...blobs]));
