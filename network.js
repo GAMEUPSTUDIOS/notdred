@@ -5,7 +5,7 @@ const netAge=()=>Math.min((performance.now()-netLast)/1000,.25);const ahead=(p,v
 const localMethods={edit,interact,removeAt,selectSlot,dropItem,rotateSelection,setTool,moveStack,craft,transferMaterial,clearQueue,configureHatch,recover,usePortal,leaveShip,devAction,save,drawCombatActors,drawBotMarkers};
 function networkSend(data){if(['create','join','import'].includes(data?.type)&&el('crewname'))data={...data,player:el('crewname').value};if(netSocket?.readyState===1)netSocket.send(JSON.stringify(data));}
 function netAction(action,data={}){const aim={x:(mouse.x-W/2)/zoom+cam.x,y:(mouse.y-H/2)/zoom+cam.y};networkSend({type:'action',action,seq:++netSeq,aim,...data});}
-edit=function(){if(netActive){{const d=terrainAt(cursorCell());if(d?.type==='door'&&['walk','empty'].includes(tool)&&!keys.shift){if(netCaptain||netRank==='captain')return openDoorMenu(d);if(tool==='empty')return toast('Only the captain can set who may use this door.');}if(d?.type==='comms'&&['walk','empty'].includes(tool)&&!keys.shift){if(P.Vec2.distance(localPlayer(),V(d.x,d.y+.5))>COMMS_RANGE)return toast('Stand at the comms station to use it.');return openChat(true);}if((d?.type==='sign'||d?.type==='paint')&&['walk','empty'].includes(tool)&&!keys.shift){if(d.type==='paint')return openPaintMenu(d);if(netRank!=='guest'||netCaptain)return openSignMenu(d);if(tool==='empty')return toast('Guests cannot edit signs.');}if(d?.type==='spawn'&&['walk','empty'].includes(tool)&&!keys.shift){if(netRank==='captain'||netCaptain)return openSpawnMenu(d);if(tool==='empty')return toast('Only the captain can change a spawn point.');}}const f=terrainAt(cursorCell());if(f?.type==='fabricator'&&nearFab()===f&&['empty','walk'].includes(tool)&&!keys.shift)openCraft(f);return netAction('edit');}return;};
+edit=function(){if(netActive){{const d=terrainAt(cursorCell());if(d?.type==='door'&&['walk','empty'].includes(tool)&&!keys.shift){if(netCaptain||netRank==='captain')return openDoorMenu(d);if(tool==='empty')return toast('Only the captain can set who may use this door.');}if(d?.type==='comms'&&['walk','empty'].includes(tool)&&!keys.shift){if(P.Vec2.distance(localPlayer(),V(d.x,d.y+.5))>COMMS_RANGE)return toast('Stand at the comms station to use it.');return openChat(true);}if((d?.type==='sign'||d?.type==='paint')&&['walk','empty'].includes(tool)&&!keys.shift){if(d.type==='paint')return openPaintMenu(d);if(netRank!=='guest'||netCaptain)return openSignMenu(d);if(tool==='empty')return toast('Guests cannot edit signs.');}if(d?.type==='spawn'&&['walk','empty'].includes(tool)&&!keys.shift){if(netRank==='captain'||netCaptain)return openSpawnMenu(d);if(tool==='empty')return toast('Only the captain can change a spawn point.');}}const f=terrainAt(cursorCell());if(fabReach(f)&&['empty','walk'].includes(tool)&&!keys.shift)openCraft(f);return netAction('edit');}return;};
 interact=function(){if(netActive){if(nearFab()){activeFab=nearFab();openCraft(activeFab);}return netAction('interact');}return;};
 removeAt=function(c){if(netActive)return netAction('remove');return;};secondaryAt=function(c){if(netActive)return netAction('remove');return;};
 selectSlot=function(n){if(netActive)return netAction('select',{slot:n});return;};
@@ -13,9 +13,11 @@ dropItem=function(half){if(netActive)return netAction('drop',{half});return;};
 rotateSelection=function(){if(netActive)return netAction('rotate');return;};
 setTool=function(t){if(netActive){if(t==='helm')netAction('helm');return;}return;};
 moveStack=function(from,to,half){if(netActive)return netAction('moveStack',{from,to,half});return;};
-craft=function(item,count=1){if(netActive)return netAction('craft',{item,count});return;};
-transferMaterial=function(item,eject=false){if(netActive)return netAction('material',{item,eject});return;};
-clearQueue=function(){if(netActive)return netAction('clearQueue');return;};
+// Fabricator actions name the fabricator whose window is open, so the server uses that one (not just any in reach).
+const fabID=()=>activeFab?.id||null;
+craft=function(item,count=1){if(netActive)return netAction('craft',{item,count,fab:fabID()});return;};
+transferMaterial=function(item,eject=false){if(netActive)return netAction('material',{item,eject,fab:fabID()});return;};
+clearQueue=function(){if(netActive)return netAction('clearQueue',{fab:fabID()});return;};
 configureHatch=function(cell,mode,items,opts={}){if(netActive)return netAction('hatch',{cell,mode,items,pull:!!opts.pull,requireOutput:!!opts.requireOutput});return;};
 recover=function(){if(netActive)return netAction('recover');return;};
 usePortal=function(){if(netActive)return netAction('portal');return;};
@@ -23,7 +25,7 @@ save=function(silent=false){if(netActive){if(!silent)networkSend({type:'export'}
 leaveShip=function(){if(netActive){networkSend({type:'leave'});netActive=false;inLobby=true;el('lobby').hidden=false;netState=null;keys={};return;}return;};
 devAction=function(op){if(netActive){if(!netAdmin)return toast('Server dev controls require the host’s DEV_TOKEN.');return netAction('dev',{op:op==='seed'?'regen':op,item:el('devitem').value,count:+el('devamount').value||stackLimit(el('devitem').value),species:el('devbot')?.value,zone:el('devmission')?.value});}return;};
 // Rebind direct function references installed before the network module.
-el('recover').onclick=()=>recover();el('clearqueue').onclick=()=>clearQueue();el('repeatqueue').onchange=e=>{if(netActive)netAction('repeat',{value:e.target.checked});else if(activeFab){activeFab.repeat=e.target.checked;save(true);}};
+el('recover').onclick=()=>recover();el('clearqueue').onclick=()=>clearQueue();el('repeatqueue').onchange=e=>{if(netActive)netAction('repeat',{value:e.target.checked,fab:activeFab?.id||null});else if(activeFab){activeFab.repeat=e.target.checked;save(true);}};
 const leaveButton=[...document.querySelectorAll('button')].find(b=>b.textContent==='Leave ship');if(leaveButton)leaveButton.onclick=()=>leaveShip();
 function layoutKey(s){return JSON.stringify([s.zone,s.zoneData[s.zone]?.seed,s.bounds,s.brokenHull,s.blocks.map(b=>[b.x,b.y,b.rotation]),s.terrain.map(t=>[t.type,t.x,t.y,t.rotation]),s.mounts.map(m=>[m.type,m.side,m.at,m.rotation]),s.helm]);}
 let netBlocks=[],netTerrainList=[],netMountList=[];
@@ -37,7 +39,7 @@ function receiveSnapshot(s,tick){if(tick<netTick)return;netTick=tick;/* tiles ar
  if(s.minedReset){const mined=new Set(netMined);for(const id of [...rocks.keys()])if(mined.has(id))removeRock(id,false);}else for(const id of s.minedAdd||[])removeRock(id,false);rebuildDirtyRockChunks();for(const [id,hp,max] of s.rockHp||[]){const r=rocks.get(id);if(r){r.hp=hp;r.maxhp=max;}}
  for(const b of s.zoneData[s.zone]?.boulders||[]){const o=boulders.find(x=>x.id===b.id);if(b.gone){if(o){world.destroyBody(o.body);boulders.splice(boulders.indexOf(o),1);}continue;}if(o)o.body.setTransform(V(b.x,b.y),b.a||0);else if(typeof addBoulder==='function')addBoulder(b.id,V(b.x,b.y),b.a||0,b.r||0);}
  const loot=s.zoneData[s.zone]?.loot||[];while(worldLoot.length>loot.length)world.destroyBody(worldLoot.pop().body);loot.forEach((i,n)=>{const w=worldLoot[n]??(worldLoot[n]=addWorldLoot(i.type,V(i.x,i.y),1,V(0,0)));w.type=i.type;w.count=i.count;w.body.setTransform(V(i.x,i.y),0);w.body.setLinearVelocity(V(i.vx||0,i.vy||0));});
- if(el('craft').open){activeFab=nearFab();if(activeFab)renderRecipes();else el('craft').close();}
+ if(el('craft').open){/* stay on the fabricator whose window is open while it's in reach */const id=activeFab?.id,same=id?[...terrain.values()].find(t=>t.id===id):null;activeFab=same&&fabReach(same)?same:null;if(activeFab)renderRecipes();else el('craft').close();}
  for(const n of s.notices||[])toast(n);
  netRank=s.self.rank||netRank;const crewKey=JSON.stringify(s.crew.map(c=>[c.id,c.name,c.rank]))+netCaptain;if(crewKey!==netCrewKey){netCrewKey=crewKey;el('netbadge').innerHTML='';const head=document.createElement('div');head.textContent=`Online · ${s.crew.length}/8 crew · you are ${netRank}`;el('netbadge').appendChild(head);for(const c of s.crew){const row=document.createElement('div');row.className='crewrow';const tag=document.createElement('span');tag.className='rank rank-'+(c.rank||'guest');tag.textContent=(c.rank||'guest').toUpperCase();row.append(tag,' '+(c.id===netID?'▸ ':'')+c.name);
   // Captains set each member's rank (captain, crew or guest) or kick them.
