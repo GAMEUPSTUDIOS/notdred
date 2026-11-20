@@ -227,6 +227,11 @@ Neither is ever switched on by itself; the page only offers them.
   - **Manage ship (v57):** the right-hand *Manage ship* box shows the ship name (captains rename it), who can join (public / private) with the invite links for classic and the full game, everyone who's been aboard with their rank (captains set ranks, kick, ban/unban; crew vote-kick guests), and the ship log.
   - **notdred.exe** includes classic mode and listens on your home network too: its window prints `http://<this PC's address>:8080/classic` for old computers in the house (Windows may ask to allow it through the firewall the first time — allow it on private networks).
 
+## Smooth tile surfaces and slow hosts (v60)
+- **No more catching on tile seams.** Every interior tile used to collide as its own 1×1 box, and Box2D bodies sliding across the joint between two boxes catch on the corner ("ghost collisions"): players hopped while running over blocks, cargo snagged in pusher streams, and the ladder stuck. Now each connected patch of tiles of the same kind (blocks and hull, walkways, nets, glass) collides through **one smooth outline** (a chain loop), rebuilt whenever tiles are built, removed or destroyed. The tile boxes are still there for building, damage and every lookup, they just don't collide. Wedges and doors keep their own shapes.
+- **Rubber banding on busy hosts.** When the hosting computer can't keep up, the server runs its world slower than real time; the page used to keep predicting (and playing back) at full speed, so ships ran ahead and were dragged back over and over. The page now measures how fast the server's clock is actually running and paces the pilot's prediction and everyone's playback to it. With a server at ~60% speed, a crewmate's view went from juddering in 33 of 52 half-second windows to 3 of 47.
+- The pilot's predicted ship also respects the 60 m/s speed limit the server uses.
+
 ## Turret waves (v59)
 - **Turrets fire in a very fast wave** instead of all on the same frame: when several RC turrets fire on one click, or a turret controller fires its burst/auto turrets, they go off one after another 0.03 s apart (the whole volley always within a quarter second), sweeping across the ship at right angles to the shot. Each turret keeps the point you aimed at and turns to it when its turn comes. Rate of fire and damage are unchanged.
 

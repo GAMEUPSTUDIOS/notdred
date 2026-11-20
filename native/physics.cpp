@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
+#include <vector>
 #include <cmath>
 using J=nlohmann::json;
 // fixtures: the last fixture list's signature; awake: awake after the last step; touched: sent this step.
@@ -26,8 +27,9 @@ static J call(const J& in){
   std::string signature=j.contains("fixtures")?j.at("fixtures").dump():record.fixtures;
   if(record.fixtures!=signature){while(b->GetFixtureList())b->DestroyFixture(b->GetFixtureList());for(auto& f:j.at("fixtures")){
    b2FixtureDef fd;fd.density=f.value("density",0.f);fd.friction=f.value("friction",.2f);fd.restitution=f.value("restitution",0.f);fd.isSensor=f.value("sensor",false);fd.filter.categoryBits=f.value("category",1);fd.filter.maskBits=f.value("mask",65535);fd.filter.groupIndex=f.value("group",0);
-   b2PolygonShape poly;b2CircleShape circle;
-   if(f.at("shape")=="circle"){circle.m_radius=f.at("radius");circle.m_p=vec(f.at("center"));fd.shape=&circle;}else{b2Vec2 vs[8];int count=0;for(auto& v:f.at("vertices")){if(count>=8)break;vs[count++]=vec(v);}if(count<3)continue;poly.Set(vs,count);fd.shape=&poly;}
+   b2PolygonShape poly;b2CircleShape circle;b2ChainShape chain;
+   if(f.at("shape")=="chain"){std::vector<b2Vec2> vs;for(auto& v:f.at("vertices"))vs.push_back(vec(v));if(vs.size()<3)continue;if(f.value("loop",true))chain.CreateLoop(vs.data(),(int)vs.size());else chain.CreateChain(vs.data(),(int)vs.size(),vs.front(),vs.back());fd.shape=&chain;}
+   else if(f.at("shape")=="circle"){circle.m_radius=f.at("radius");circle.m_p=vec(f.at("center"));fd.shape=&circle;}else{b2Vec2 vs[8];int count=0;for(auto& v:f.at("vertices")){if(count>=8)break;vs[count++]=vec(v);}if(count<3)continue;poly.Set(vs,count);fd.shape=&poly;}
    b->CreateFixture(&fd);
   }record.fixtures=signature;}
   b->SetType((b2BodyType)j.at("type").get<int>());b->SetEnabled(j.at("active"));b->SetFixedRotation(j.at("fixed"));b->SetBullet(j.at("bullet"));b->SetGravityScale(j.at("gravityScale"));b->SetLinearDamping(j.at("linearDamping"));b->SetAngularDamping(j.at("angularDamping"));b->SetSleepingAllowed(j.at("allowSleep"));

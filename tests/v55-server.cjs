@@ -21,7 +21,7 @@ const rankOf=(c,who)=>c.snap?.crew?.find(x=>x.id===who.snap?.self?.id)?.rank;
  assert.equal(rankOf(cap2,fin2),'crew','rank kept with the code');assert.equal(cap2.snap.self.rank,'captain');assert.equal(rankOf(cap2,stranger),'guest','same name without the code is a new guest');
  const ui=fs.readFileSync('dist/interface.js','utf8'),net=fs.readFileSync('dist/network.js','utf8'),game=fs.readFileSync('dist/game.js','utf8');
  assert.ok(ui.includes('id="playercode"')&&ui.includes('id="usecode"')&&/localStorage\.setItem\('freeport-session',v\)/.test(net),'player code in the lobby');
- assert.ok(/function clampToLadder\(\)/.test(game)&&/inside\.step\(dt\);clampToLadder\(\);/.test(net),'the browser\'s prediction keeps the ladder clamp');
+ assert.ok(/function clampToLadder\(\)/.test(game)&&/inside\.step\(p?dt\);clampToLadder\(\);/.test(net),'the browser\'s prediction keeps the ladder clamp');
  ok=true;console.log('PASS: player codes keep ranks and ship ownership across restarts and new links; ladder prediction clamped like the server.');
  for(const c of [cap2,fin2,stranger])c.ws.close();
 }catch(e){console.error(e);}finally{srv?.kill();await sleep(400);fs.rmSync(dataDir,{recursive:true,force:true,maxRetries:10,retryDelay:100});process.exit(ok?0:1);}})();
