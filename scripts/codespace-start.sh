@@ -5,6 +5,8 @@
 # NO_TUNNEL=1 bash scripts/codespace-start.sh   skips the Cloudflare address (GitHub's forwarded address only).
 set -uo pipefail
 cd "$(dirname "$0")/.."
+# Not in a Codespace (a Mac, a Linux box, a VPS…): host the same way through Cloudflare alone.
+if [ "${CODESPACES:-}" != "true" ] && [ -z "${CODESPACE_NAME:-}" ]; then exec node scripts/temp-host.cjs; fi
 URL="https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
 # The repository's GitHub Pages site (https://<owner>.github.io/<repo>/) may also connect to this server.
 OWNER="${GITHUB_REPOSITORY%%/*}";REPO="${GITHUB_REPOSITORY#*/}"
