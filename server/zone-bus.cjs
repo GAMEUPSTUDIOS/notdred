@@ -61,7 +61,7 @@ class ZoneBus{
   for(const sim of this.sims.values()){if(!sim.api.fleet.size)continue;try{sim.api.zsStep(dt);sim.devTick?.();}catch(e){console.error('Zone step failed',sim.id,e.stack);}}
   for(const [r,x] of ext){const p=this.simOf(r)?.api.zsShip(r.id);if(p&&!x.docked){try{r.game.zone.setPose(p.x,p.y,p.vx,p.vy,p.kx,p.ky);}catch{}}}
   // Shared worlds nobody has used for a while are dropped (their loose loot with them).
-  for(const [id,sim] of this.sims)if(!sim.api.fleet.size&&Date.now()-sim.emptySince>this.SIM_IDLE_MS)this.sims.delete(id);
+  for(const [id,sim] of this.sims)if(!sim.api.fleet.size&&Date.now()-sim.emptySince>this.SIM_IDLE_MS){try{sim.run('nativeStepDestroy(world)');}catch{}this.sims.delete(id);}
   // Mission schedule (ℵ33): one for the whole server. Ships left in a closed mission zone send themselves home.
   // Canary-style missions also end once enough of the zone is mined (clearToEnd), and report progress.
   const m=this.mission;m.nextIn-=dt;if(m.active){m.elapsed+=dt;m.endsIn-=dt;const def=era.ZONES[m.active],z=this.zones.get(m.active);

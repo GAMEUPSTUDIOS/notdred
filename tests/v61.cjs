@@ -16,6 +16,8 @@ const place=(id,x,y,vx=0,vy=0)=>sim.api.zsPlaceShip(id,{x,y,vx,vy});const hp=r=>
 // An open stretch (no rock within ±9 m of an 80 m line), so only ships are in the way.
 const p0=JSON.parse(sim.run(`(()=>{for(let y=-140;y<140;y+=6)for(let x=-300;x<220;x+=6){let clear=true;for(let dy=-9;dy<=9&&clear;dy+=3)world.rayCast(V(x-10,y+dy),V(x+80,y+dy),f=>{if(f.getBody().getUserData()?.rockChunk!=null||f.getBody().getType()==='static'){clear=false;return 0;}return 1;});if(clear)return JSON.stringify({x,y});}return 'null';})()`));
 assert.ok(p0,'found open space');
+// Bots out of the way (a bot wandering into a test round's path would take the hit).
+sim.run('botsPaused=true;for(const b of allBots()){b.body.setTransform(V(-5000,-5000),0);b.body.setLinearVelocity(V(0,0));}');
 // 1. A hits B in Finch I (was no PvP there).
 place('A',p0.x,p0.y);place('B',p0.x+30,p0.y);step(2);let b0=hp(B);
 sim.api.zsFire('A',[{type:'ammo',p:{x:p0.x+10,y:p0.y},v:{x:90,y:0},life:2,maxLife:2,bounces:0}]);step(20);

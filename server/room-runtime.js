@@ -111,7 +111,7 @@ function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount
 function serverRegenerate(seed){zonePlaced=true;snapshotZone();const old=zoneData[zone];zoneData[zone]={seed,mined:[],loot:old.loot||[]};originalSetupZone(true);ghosts=new Map();updateShipMass();save(true);toastAll(zoneDef().name+' regenerated with a new layout. Your ship is at the entry portal.');}
 function missionNotice(text){toastAll(text);}
 function setRegenTimer(t,reset){const st=zoneData[zone];if(!st)return;st.regenIn=t??undefined;st.resetIn=reset??undefined;}
-const DELTA_MIN=40;
+const DELTA_MIN=1;
 // Snapshots are built in two parts: what every crew member of this ship sees (built and encoded once per pass for
 // the whole ship), and each member's own part (their slots, notices, mined-tile catch-up, and the tile/machine lists
 // or deltas they haven't seen yet). Own fields come after the shared ones in the message, so they win.
@@ -123,6 +123,10 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
  data.items=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity(),o={type:i.type,count:i.count,x:p.x,y:p.y,angle:i.body.getAngle()};if(Math.abs(v.x)>.005||Math.abs(v.y)>.005)o.v=v;return o;});
  // The zone record (without its mined list, which each member catches up on separately).
  const zone0=snapshotZone()[zone]||{},zd={...zone0};delete zd.mined;zd.loot=(data.zoneLoot||zd.loot||[]).map(({type,count,x,y,vx,vy})=>({type,count,x,y,vx,vy}));if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;
+
+ // Bots go out compact — [species, index, hp, x, y, vx, vy] to 0.01 m — about 40 bytes each instead of ~95 (a combat
+ // zone's bots were half of every update). The page (network.js) and snapshot() unpack them.
+ data.bots=(data.bots||[]).map(b=>[b.color,b.index,Math.round(b.hp),Math.round(b.p.x*100)/100,Math.round(b.p.y*100)/100,Math.round(b.v.x*100)/100,Math.round(b.v.y*100)/100]);
  const json=JSON.stringify(data,roundReplacer);
  // Tiles, machines and turrets: encoded once here; each member gets the whole list or only what changed for them.
  const round=v=>JSON.parse(JSON.stringify(v,roundReplacer)),blocks=round(st.blocks),lists={};
@@ -139,7 +143,8 @@ function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
  for(const field of ['terrain','mounts']){const L=sh.lists[field];own[field]=L.list;if(!L.keys){m[field+'Sent']=null;continue;}const sent=m[field+'Sent'];if(sent&&sent.keys===L.keys){const d=[];L.json.forEach((j,i)=>{if(sent.json[i]!==j)d.push([i,L.list[i]]);});own[field]=null;own[field+'Delta']=d;}m[field+'Sent']={keys:L.keys,json:L.json};}
  return JSON.parse(JSON.stringify(own,roundReplacer));}
 // One member's whole snapshot (tests, tools). The server uses snapshotPass, which shares the common part.
-function snapshot(id){if(!crew.has(id))return null;const sh=snapshotShared(),own=snapshotOwn(id,sh);return Object.assign(JSON.parse(sh.json),own);}
+function unpackBots(list){return (list||[]).map(a=>Array.isArray(a)?{color:a[0],index:a[1],hp:a[2],p:{x:a[3],y:a[4]},v:{x:a[5],y:a[6]}}:a);}
+function snapshot(id){if(!crew.has(id))return null;const sh=snapshotShared(),own=snapshotOwn(id,sh),out=Object.assign(JSON.parse(sh.json),own);out.bots=unpackBots(out.bots);return out;}
 // Every listed member's snapshot for one pass: the shared part as encoded text, plus each member's own part.
 function snapshotPass(ids){const sh=snapshotShared();return {shared:sh.json,own:ids.map(id=>snapshotOwn(id,sh))};}
 function durableState(){storeCrew();const s=JSON.parse(JSON.stringify(state()));s.stacks=[null,null,null,null,null];s.inventory={};s.slots=[null,null,null,null,null];for(const m of crew.values())for(let i=0;i<5;i++)if(m.slots[i]&&m.slots[i]!=='wrench')s.items.push({type:m.slots[i],count:m.stackCounts[i],...m.player.getPosition()});return s;}

@@ -29,7 +29,7 @@ function zsForces(id,forces,impulses){const f=fleet.get(id);if(!f)return;f.force
 
 // Bind the single-ship globals to fleet ship f (or to nothing).
 function bindTarget(f){ship=f?f.body:dummyShip;docked=f?.docked?{side:'floor'}:null;currentTarget=f||null;}
-let currentTarget=null;
+let currentTarget=null,zsTick=0;const BOT_FAR=160;
 damageShip=function(amount,point,dir=null){const f=currentTarget;if(!f)return null;return zoneHost.damage(f.id,amount,{x:point.x,y:point.y},dir?{x:dir.x,y:dir.y}:null,null,null);};
 releaseDock=function(){};
 shipExtents=function(){return currentTarget?currentTarget.ext:{l:-1,r:1,t:-1,b:1};};
@@ -48,10 +48,18 @@ function zsStep(dt){clock+=dt;
  for(const f of fleet.values()){if(f.docked){f.forces=[];f.impulses=[];continue;}for(const a of f.forces)f.body.applyForce(V(a.fx,a.fy),f.body.getWorldPoint(V(a.px,a.py)),true);for(const a of f.impulses)f.body.applyLinearImpulse(V(a.fx,a.fy),f.body.getWorldPoint(V(a.px,a.py)),true);f.forces=[];f.impulses=[];}
  for(const i of worldLoot)i.grace=Math.max(0,(i.grace||0)-dt);mergeTouchingCargo(worldLoot,world);
  if(isCombatZone()){bindTarget(null);tickBotRespawn(dt);}
- world.step(dt,8,3);
+
+ // The shared world (hulls, rock, bots, boulders, loot) is solved by native Box2D (C++), like ship interiors; Planck
+ // keeps a mirror of it for the game's raycasts and lookups.
+ if(typeof nativeStep==='function')nativeStep(world,dt,{contacts:false});else world.step(dt,8,3);
  if(isCombatZone()){
   // Each bot hunts the nearest ship (bots ignore ships parked on a portal; see BOT_RULES).
-  if(!botsPaused)for(const bot of allBots()){const f=zsNearest(bot.body.getPosition());bindTarget(f);if(!f){bot.body.applyForceToCenter(V(0,0),false);continue;}botThink(bot,dt,nearPortal(f.body.getPosition(),BOT_RULES.portalKeepout));}
+  // Bots far from every ship (BOT_FAR) decide only every 6th step and keep their last heading in between; near ones
+  // think every step as before.
+  zsTick++;
+  if(!botsPaused)for(const bot of allBots()){const bp=bot.body.getPosition(),f=zsNearest(bp);bindTarget(f);if(!f){bot.body.applyForceToCenter(V(0,0),false);continue;}
+   if(P.Vec2.distance(bp,f.body.getPosition())>BOT_FAR&&(zsTick+bot.index)%6){const def=BOT_TYPES[bot.species];if(bot.best&&def)bot.body.applyForceToCenter(V(bot.best.x*bot.body.getMass()*def.thrust,bot.best.y*bot.body.getMass()*def.thrust),true);continue;}
+   botThink(bot,dt,nearPortal(f.body.getPosition(),BOT_RULES.portalKeepout));}
   bindTarget(null);
   tickShots(dt);scoreOwner=null;
   zsEnemyShots(dt);
