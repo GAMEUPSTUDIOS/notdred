@@ -59,7 +59,7 @@ class ZoneBus{
   }
   // 4. Step every shared world that has ships, then hand each ship back its position.
   for(const sim of this.sims.values()){if(!sim.api.fleet.size)continue;try{sim.api.zsStep(dt);}catch(e){console.error('Zone step failed',sim.id,e.stack);}}
-  for(const [r,x] of ext){const p=this.simOf(r)?.api.zsShip(r.id);if(p&&!x.docked){try{r.game.zone.setPose(p.x,p.y,p.vx,p.vy);}catch{}}}
+  for(const [r,x] of ext){const p=this.simOf(r)?.api.zsShip(r.id);if(p&&!x.docked){try{r.game.zone.setPose(p.x,p.y,p.vx,p.vy,p.kx,p.ky);}catch{}}}
   // Shared worlds nobody has used for a while are dropped (their loose loot with them).
   for(const [id,sim] of this.sims)if(!sim.api.fleet.size&&Date.now()-sim.emptySince>this.SIM_IDLE_MS)this.sims.delete(id);
   // Mission schedule (ℵ33): one for the whole server. Ships left in a closed mission zone send themselves home.

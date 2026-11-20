@@ -107,7 +107,7 @@ function syncGhosts(list,selfId){const seen=new Set();const me=ship.getPosition(
  for(const [id,h] of ghosts)if(!seen.has(id)){world.destroyBody(h.body);ghosts.delete(id);}}
 function remoteMined(id){if(!removeRock(id))return false;zoneData[zone].mined.push(id);return true;}
 let lastHitNotice=-99;
-function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp)ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);damageShip(amount,V(localPoint.x,localPoint.y),dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y)?V(dir.x,dir.y):null);if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll('Under fire from '+shooter+'!');}}
+function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp){ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);noteKick(dir.x*5*imp,dir.y*5*imp);}damageShip(amount,V(localPoint.x,localPoint.y),dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y)?V(dir.x,dir.y):null);if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll('Under fire from '+shooter+'!');}}
 function serverRegenerate(seed){zonePlaced=true;snapshotZone();const old=zoneData[zone];zoneData[zone]={seed,mined:[],loot:old.loot||[]};originalSetupZone(true);ghosts=new Map();updateShipMass();save(true);toastAll(zoneDef().name+' regenerated with a new layout. Your ship is at the entry portal.');}
 function missionNotice(text){toastAll(text);}
 function setRegenTimer(t,reset){const st=zoneData[zone];if(!st)return;st.regenIn=t??undefined;st.resetIn=reset??undefined;}
@@ -129,7 +129,7 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
  for(const [field,keyOf] of [['terrain',t=>t.type+':'+t.x+','+t.y+':'+(t.rotation||0)],['mounts',t=>t.type+':'+t.side+':'+t.at]]){const list=round(field==='mounts'?mounts.map(({f,...m})=>m):st[field]);lists[field]={list,keys:list.length<DELTA_MIN?null:list.map(keyOf).join('|'),json:list.length<DELTA_MIN?null:list.map(t=>JSON.stringify(t))};}
  return {json,zone:zd,mined:zone0.mined||[],seed:zone0.seed||0,blocks,blocksJSON:JSON.stringify(blocks),lists};}
 function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
- const own={zone,stacks:slots.map((type,i)=>type?{type,count:stackCounts[i]}:null),slots:[...slots],inventory:{},self:{id,selected,tool,piloting,facing,climbing,rotation:buildRotation,pusherPull,buildJob,manning,rank:m.rank||'guest',noclip:!!m.noclip,sandbox:!!m.sandbox,shipNoclip},notices:(m.notices||[]).splice(0)};
+ const own={zone,stacks:slots.map((type,i)=>type?{type,count:stackCounts[i]}:null),slots:[...slots],inventory:{},self:{id,selected,tool,piloting,facing,climbing,rotation:buildRotation,pusherPull,buildJob,manning,rank:m.rank||'guest',noclip:!!m.noclip,sandbox:!!m.sandbox,shipNoclip},notices:(m.notices||[]).splice(0),kick:shipKick};
  const zd={...sh.zone},sent=m.minedSent;if(sent&&sent.zone===zone&&sent.seed===sh.seed&&sent.count<=sh.mined.length)own.minedAdd=sh.mined.slice(sent.count);else{own.minedReset=true;zd.mined=sh.mined;}m.minedSent={zone,seed:sh.seed,count:sh.mined.length};own.zoneData={[zone]:zd};
  // The ship's tiles go to each crew member only when they change (built, removed, damaged, repaired): an 80×80
  // battleship has thousands of them, which would otherwise be resent 20 times a second. null = "same as before".
@@ -152,7 +152,10 @@ function hookShipBody(){if(!attachedToZone||ship.__zoneHooked)return;ship.__zone
  ship.applyLinearImpulse=function(f,p){const lp=ship.getLocalPoint(p);shipImpulses.push({fx:f.x,fy:f.y,px:lp.x,py:lp.y});};
  ship.applyForceToCenter=function(f){shipForces.push({fx:f.x,fy:f.y,px:0,py:0});};}
 function takeForces(){hookShipBody();const out={forces:shipForces,impulses:shipImpulses};shipForces=[];shipImpulses=[];return out;}
-function setPose(x,y,vx,vy){if(docked)return;ship.setTransform(V(x,y),0);ship.setLinearVelocity(V(vx,vy));}
+// Punch/yank knocks on the hull, added up: the pilot's screen predicts the ship, so it adds each new knock at once
+// instead of drifting into it over a second.
+const shipKick={n:0,x:0,y:0};function noteKick(dx,dy){shipKick.n++;shipKick.x+=dx;shipKick.y+=dy;}
+function setPose(x,y,vx,vy,kx,ky){if(kx||ky)noteKick(kx,ky);if(docked)return;ship.setTransform(V(x,y),0);ship.setLinearVelocity(V(vx,vy));}
 function zoneDamage(amount,lp,dir,ammo){const r=damageShip(amount,V(lp.x,lp.y),dir?V(dir.x,dir.y):null);return r?.exit?{x:r.exit.x,y:r.exit.y}:null;}
 function addZoneScore(n){addScore(n);}
 if(attachedToZone){hookShipBody();

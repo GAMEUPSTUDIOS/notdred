@@ -61,7 +61,7 @@ function zsStep(dt){clock+=dt;
 // Bot bullets against every hull in the zone (critical hulls let them through to the tiles behind).
 function zsEnemyShots(dt){for(const s of enemyShots){s.v.y+=10*dt;const next=V(s.p.x+s.v.x*dt,s.p.y+s.v.y*dt);let hit=null,point=null,fraction=1;
   world.rayCast(s.p,next,(f,p,n,t)=>{const b=f.getBody();if(b===s.owner||(s.through!=null&&b.getUserData()?.shipId===s.through))return -1;if(t<fraction){hit=b;point=p.clone();fraction=t;}return t;});
-  if(hit){const sid=hit.getUserData()?.shipId,f=sid!=null&&fleet.get(sid);if(f){const d=s.v.clone();d.normalize();const imp=AMMO[s.type]?.impulse||0;if(imp&&!f.docked)f.body.applyLinearImpulse(V(d.x*f.body.getMass()*5*imp,d.y*f.body.getMass()*5*imp),f.body.getWorldCenter(),true);
+  if(hit){const sid=hit.getUserData()?.shipId,f=sid!=null&&fleet.get(sid);if(f){const d=s.v.clone();d.normalize();const imp=AMMO[s.type]?.impulse||0;if(imp&&!f.docked){f.body.applyLinearImpulse(V(d.x*f.body.getMass()*5*imp,d.y*f.body.getMass()*5*imp),f.body.getWorldCenter(),true);f.kx=(f.kx||0)+d.x*5*imp;f.ky=(f.ky||0)+d.y*5*imp;}
     const lp=f.body.getLocalPoint(point),ld=f.body.getLocalVector(d),through=zoneHost.damage(f.id,s.damage??(AMMO[s.type]||AMMO.ammo).damage,{x:lp.x,y:lp.y},{x:ld.x,y:ld.y},s.type,null);
     if(through){s.through=f.id;s.p=f.body.getWorldPoint(V(through.x,through.y));s.life-=dt;continue;}}s.life=0;}
   s.p=next;s.life-=dt;}enemyShots=enemyShots.filter(s=>s.life>0);}
@@ -79,7 +79,7 @@ function zsDev(op,species,id){const f=fleet.get(id);scoreOwner=id;if(op==='killg
 // New layout for the whole zone: rebuild rock, bots, boulders and loot; ships stay where the rooms put them.
 function zsRegenerate(seed){const keep=[...fleet.entries()].map(([id,f])=>[id,{x:f.body.getPosition().x,y:f.body.getPosition().y,ext:f.ext,size:f.size,mass:f.mass,damping:f.damping,name:f.name}]);fleet.clear();
  zoneData[zone]={seed,mined:[],loot:[]};setupZone(false);dummyShip=ship;dummyShip.setActive(false);for(const [id,s] of keep)zsAddShip(id,s);}
-function zsShip(id){const f=fleet.get(id);if(!f)return null;const p=f.body.getPosition(),v=f.body.getLinearVelocity();return {x:p.x,y:p.y,vx:v.x,vy:v.y};}
+function zsShip(id){const f=fleet.get(id);if(!f)return null;const p=f.body.getPosition(),v=f.body.getLinearVelocity();const out={x:p.x,y:p.y,vx:v.x,vy:v.y,kx:f.kx||0,ky:f.ky||0};f.kx=f.ky=0;return out;}
 // Rocks that have taken damage, so every ship can show their health bars.
 const hurtRocks=new Set();function noteRockHurt(r){hurtRocks.add(r.id);}
 function rockHealth(){const out=[];for(const id of hurtRocks){const r=rocks.get(id);if(!r||r.hp>=r.maxhp){hurtRocks.delete(id);continue;}out.push([id,Math.max(0,Math.round(r.hp)),r.maxhp]);}return out;}

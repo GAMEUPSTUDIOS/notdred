@@ -227,6 +227,11 @@ Neither is ever switched on by itself; the page only offers them.
   - **Manage ship (v57):** the right-hand *Manage ship* box shows the ship name (captains rename it), who can join (public / private) with the invite links for classic and the full game, everyone who's been aboard with their rank (captains set ranks, kick, ban/unban; crew vote-kick guests), and the ship log.
   - **notdred.exe** includes classic mode and listens on your home network too: its window prints `http://<this PC's address>:8080/classic` for old computers in the house (Windows may ask to allow it through the firewall the first time — allow it on private networks).
 
+## Smooth ships and punch (v58)
+- **No more rubber banding** for crew who aren't piloting, and for other ships: they're drawn on the server's own tick timeline, smoothly curved between snapshots and a little behind real time (80–300 ms, adapting to the connection's jitter), instead of chasing a guessed position that jumped with every late packet. The pilot still predicts the ship as before.
+- **Punch ammo** shoves bots hard (about 30 m/s; they slide ~15 m), **yank** pulls them back toward you. Standard ammo barely moves them.
+- **Green bots' punch shots knock your ship** again where you can feel it: the shared zone already pushed the hull, but the pilot's screen eased into it over a second. Each knock is now sent to the crew and the pilot's ship takes it at once.
+
 ## Building permissions and doors (v39)
 - **Every rank can build and dismantle tiles** (captain, crew and guests). Guests still cannot take the helm, use fabricators or machines, set hatches or use portals. Dismantling needs a wrench (crafted for 4 iron at a fabricator; only the captain spawns with one).
 - **Doors** are built by the captain only. They're crafted for 4 iron at the starter or engineering fabricator and stand 1 wide × 2 tall, drawn with the original door frame and panel art.
