@@ -38,7 +38,7 @@ Freeport I ── Finch I ──┐               ┌── Finch II ── Free
 
 **Missions (ℵ33): The Pits and Canary.**
 - Every 45 minutes a mission zone opens for 20 minutes, alternating between The Pits and Canary, each time with a fresh layout.
-- While a mission runs, a gold portal stands in every Freeport. When it closes, ships still inside are sent home to Freeport I.
+- While a mission runs, a gold portal opens in Sparrow I (not in the Freeports or other zones). When it closes, ships still inside are sent home to Freeport I.
 - **The Pits** has full PvP, brown brick caves, red and blue bots, and 3 exits. It starts with 6 treasure blocks, and another appears every 5 minutes (ℵ25). Each treasure block drops one roll of `TREASURE_LOOT`.
 - **Canary** has no PvP and few bots. It is all about mining: its rock has rich iron seams and flux seams.
 - Dev menu (F2) → *Missions*:
@@ -185,6 +185,10 @@ PvP rules, missions, regeneration and the 3-hour reset work as before, decided o
 - **Stacks merge** whenever two stacks of the same item touch (the server's contact mirror only found new contacts when something spawned).
 - **Freeport docks**: every edge wall of a Freeport (floor, ceiling and both sides) docks ships, not just the central dock.
 - **Other ships are drawn live, in real time**: turret aim and recoil, thruster flames, ammo, doors, fabricators, loaders, pushers, recyclers, loose items, expando boxes and crew, for ships within about 240 world units (`LIVE_RANGE`). It's sent with every snapshot (20 a second) and kept cheap: each ship's live state is encoded once and shared by every viewer, resting loose items are only resent in the once-a-second full list (between those, only items that moved, changed or appeared, plus the ones that vanished), and the client glides items, boxes, crew and turret aim along their velocities between snapshots.
+- **Seekers** (Canary) are square — the asset pack's `bot_square`, with a square body — and the fastest bots (top speed 20; blue rammers 13).
+- **Standard ammo** does 50 per round (it fires twice as often as every other ammo, so it now matches punch/yank per second); it still mines rock as hard as before (5 rounds). Plain brown Canary rock drops nothing.
+- **Picking up loot:** item hatches draw in loot within 7 tiles of any part of the hull (nearest to the hatch first), one item every 0.4 s; an item left on a hatch's outlet no longer jams it (the next one stacks onto it or lands a tile further in).
+- **Burst and auto turrets** can be manned directly: click one (wrench or empty hand), aim with the mouse, hold to fire; move, jump or press E to let go. Shift+click ejects its ammo. Turret controllers work as before.
 - **Player code:** who you are on a server (your ranks and the ships you own) is a code your browser keeps for that web address. A throwaway hosting link changes on every restart, so copy your code from the main menu (Account → Player code → Copy) and, on the new link, paste it under *Use a player code*. Without it you join as a new player.
 - **Dev menu (F2, host token):** a searchable grid of every item — click an icon to give it (the Amount box, or one full stack when empty; to the inventory or as an exterior crate), with Clear Filters and a History of the last items given. Modes: **Noclip (Flight)** (fly with WASD/Space, Shift for speed, through walls and out of the hull; per player), **Sandbox Build Mode** (building is instant and doesn't use up the item you hold; per player) and **Ship Noclip** (the hull passes through rocks, bots, loot and other ships; whole ship).
 - **Turrets show their ammo by colour:** the X on an RC turret's action box (the arrows on burst and auto turrets) takes the loaded ammo's colour — standard orange, scattershot yellow, punch green, sniper blue, flak red, yank purple, slug white, trash grey — and keeps it after the turret runs dry. The count (`0/16`) sits right beside the box.

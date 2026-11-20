@@ -101,7 +101,7 @@ console.log('PASS: flux crystals, flux recipes (consume/cancel/refund), stationa
  // v21 saves stored shields as a percentage.
  const v21=JSON.parse(JSON.stringify(run('initialize();state()')));v21.schema=21;v21.shipHP=40;run(`initialize(${JSON.stringify(v21)})`);assert.equal(run('shipHP'),S.base*.4,'percentage saves migrate');
  // Damage numbers: standard 100, punch 50; tiles take a fraction once shields are down.
- assert.equal(era.AMMO.ammo.damage,100);assert.equal(era.AMMO.punch.damage,100,'ℵ7: punch/yank as strong as standard (halved only at ℵ33)');assert.equal(era.AMMO_RELOAD.ammo,1);for(const t of ['scatter','flak','sniper','punch','yank','breaker','trash'])assert.equal(era.AMMO_RELOAD[t],2,'ℵ10: '+t+' waits twice as long');
+ assert.equal(era.AMMO.ammo.damage,50,'standard: half a round, twice as often — same damage per second as punch/yank');assert.equal(era.AMMO.ammo.mine,100,'standard mines as before');assert.equal(era.AMMO.punch.damage,100);assert.equal(era.AMMO_RELOAD.ammo,1);for(const t of ['scatter','flak','sniper','punch','yank','breaker','trash'])assert.equal(era.AMMO_RELOAD[t],2,'ℵ10: '+t+' waits twice as long');
  run('initialize();shipHP=0;addBlock(0,1);damageShip(100,V(0,1))');assert.equal(run('blocks.get("0,1").hp'),100-100*era.TILE_DAMAGE_FACTOR);
  // Easier bots: slower, tighter, smaller volleys.
  const red=era.BOT_TYPES.red;assert.ok(red.interval>=6&&red.shots<=3&&red.spread<.075&&red.damage<era.AMMO.ammo.damage,'red bots are gentler than v22');

@@ -15,7 +15,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 {const A=era.AMMO;
  assert.deepEqual(Object.keys(A).sort(),['ammo','breaker','flak','punch','scatter','sniper','trash','yank'].sort(),'every ℵ30 ammo type');
  for(const t of Object.keys(A)){assert.ok(era.FABRICATORS.munitions.recipes.includes(t),'munitions makes '+t);assert.ok(run(`TYPES.includes("${t}")&&!!NAMES.${t}`));}
- assert.equal(A.sniper.damage,150,'ℵ28++ sniper 150');assert.equal(A.breaker.damage,2*A.ammo.damage,'ℵ14 breaker twice standard');
+ assert.equal(A.sniper.damage,150,'ℵ28++ sniper 150');assert.equal(A.breaker.damage,2*A.ammo.mine,'ℵ14 breaker twice the standard round (100; standard now does half per round, twice as often)');
  // Trash is free and crafts one; breaker crafts one; the rest craft four.
  run('initialize();activeFab=[...terrain.values()].find(t=>t.type==="fabricator");activeFab.kind="munitions";activeFab.materials={};activeFab.queue=[];craft("trash");for(let n=0;n<120;n++)tickFabricators(1/60)');
  assert.equal(run('items.filter(i=>i.type==="trash").reduce((n,i)=>n+i.count,0)'),1,'trash needs no materials');
@@ -33,7 +33,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  // Sniper ricochets off rock instead of stopping.
  run(zoneSetup+firstRock+'shots.push({type:"sniper",p:V(r.x-3.5,r.y),v:V(140,0),life:2,maxLife:2,bounces:2});for(let k=0;k<4;k++)tickShots(1/60)');assert.ok(run('shots.length===1&&shots[0].v.x<0&&shots[0].bounces===1'),'sniper bounced');
  // Trash decays: a late hit deals far less than a fresh one.
- assert.equal(run('shotDamage({type:"trash",life:.1,maxLife:1.2})'),run('shotDamage({type:"ammo",life:2,maxLife:2})'),'ℵ10: trash hits as hard as standard');run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("trash",V(0,1),V(0,0),16);{const mr=Math.random;Math.random=()=>0;try{tickTrashDecay(1/60);}finally{Math.random=mr;}}');assert.ok(run('(items.find(i=>i.type==="trash")?.count||0)')<16,'ℵ23: trash items decay');
+ assert.equal(run('shotDamage({type:"trash",life:.1,maxLife:1.2})'),2*run('shotDamage({type:"ammo",life:2,maxLife:2})'),'ℵ10: trash hits as hard as a standard round of 2019 (standard now does half per round, twice as often)');run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnItem("trash",V(0,1),V(0,0),16);{const mr=Math.random;Math.random=()=>0;try{tickTrashDecay(1/60);}finally{Math.random=mr;}}');assert.ok(run('(items.find(i=>i.type==="trash")?.count||0)')<16,'ℵ23: trash items decay');
  // Yank pulls a bot toward the shooter; punch pushes it away.
  for(const [type,sign] of [['yank',-1],['punch',1]]){run(zoneSetup+`const b=findBot("red",0);b.body.setTransform(V(30,0),0);b.body.setLinearVelocity(V(0,0));shots.push({type:"${type}",p:V(25,0),v:V(90,0),life:2,maxLife:2});for(let k=0;k<6;k++)tickShots(1/60)`);assert.ok(run('findBot("red",0).body.getLinearVelocity().x')*sign>0,type+' impulse direction');}
  // Saves keep every ammo type in a turret.
@@ -44,7 +44,9 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 {const M=era.MISSIONS;
  run('initialize();zone="freeport";setupZone(true);piloting=true;player.setActive(false)');assert.ok(!run('zonePortals().some(q=>q.mission)'),'no mission portal before a mission');
  run('travelZone("pits")');assert.equal(run('zone'),'freeport');
- run('startMission("pits")');const portal=run('zonePortals().find(q=>q.mission)');assert.equal(portal.to,'pits','gold portal in Freeport');
+ run('startMission("pits")');assert.ok(!run('zonePortals().some(q=>q.mission)'),'no gold portal in Freeport');for(const z of ['freeport2','freeport3','finch','finch2'])assert.ok(!run(`zonePortals("${z}").some(q=>q.mission)`),'none in '+z);
+ run('zone="sparrow";setupZone(true);for(const b of allBots())b.body.setTransform(V(9999,9999),0)');const portal=run('zonePortals().find(q=>q.mission)');assert.equal(portal.to,'pits','gold portal in Sparrow I');
+ assert.ok(run(`![...rocks.values()].some(r=>Math.hypot(r.x-(${portal.x}),r.y-(${portal.y}))<3)`),'in open space');
  run(`ship.setTransform(V(${portal.x},${portal.y}),0);usePortal()`);assert.equal(run('zone'),'pits');
  const treasure=()=>run('[...rocks.values()].filter(r=>r.kind==="treasure").length');assert.equal(treasure(),era.ZONES.pits.gen.treasure,'initial treasure blocks');
  run(`missionState.elapsed+=${M.treasureEverySeconds};tickMissions(1/60)`);assert.equal(treasure(),era.ZONES.pits.gen.treasure+1,'ℵ25: a new treasure block every 5 minutes');

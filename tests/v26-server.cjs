@@ -13,14 +13,14 @@ const {createRoom}=require('../server/room.cjs'),{ZoneBus}=require('../server/zo
  step(2);assert.equal(A.run('currentMission().active'),null);
  A.game.command('A-crew',{action:'dev',op:'mission',zone:'pits'});step(2);
  assert.equal(bus.mission.active,'pits');for(const r of ships)assert.equal(r.run('currentMission().active'),'pits','every ship sees the mission');
- assert.ok(B.run('zonePortals().some(q=>q.mission&&q.to==="pits")'),'gold portal in Freeport for other ships too');
+ assert.ok(!B.run('zonePortals().some(q=>q.mission)'),'no gold portal in Freeport');assert.ok(B.run('zonePortals("sparrow").some(q=>q.mission&&q.to==="pits")'),'gold portal in Sparrow I for other ships too');
  assert.ok(B.run('notices=[...crew.values()][0].notices||[];notices.some(n=>/Mission started/.test(n))'),'announced to every ship');
  for(const r of ships)r.run('piloting=true;player.setActive(false);travelZone("pits","entry")');step(2);
  assert.equal(A.run('zoneData.pits.seed'),B.run('zoneData.pits.seed'),'same mission layout');assert.equal(A.run('rocks.size'),B.run('rocks.size'));
  const t0=A.run('[...rocks.values()].filter(r=>r.kind==="treasure").length');A.game.command('A-crew',{action:'dev',op:'treasure'});step(3);
  assert.equal(B.run('[...rocks.values()].filter(r=>r.kind==="treasure").length'),t0+1,'new treasure appears for everyone');
  A.game.command('A-crew',{action:'dev',op:'endmission'});step(3);for(const r of ships)assert.equal(r.run('zone'),'freeport','ships sent home when it closes');
- assert.equal(B.run('zonePortals().some(q=>q.mission)'),false);
+ assert.equal(B.run('zonePortals("sparrow").some(q=>q.mission)'),false);
  console.log('PASS: zone bus — one mission schedule for all ships, dev spawn, shared layout and treasure, gold portals, everyone home on close.');}
 
 // ---- Real server ------------------------------------------------------------------------------------------

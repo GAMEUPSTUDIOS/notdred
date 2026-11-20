@@ -37,7 +37,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 
 // --- Bots -------------------------------------------------------------------------------------------------------
 {const B=era.BOT_TYPES,R=era.BOT_RULES;
- for(const sp of ['red','blue'])assert.ok(B[sp].hp<=8*era.AMMO.ammo.damage,sp+' dies to a handful of standard rounds');
+ for(const sp of ['red','blue'])assert.ok(B[sp].hp<=16*era.AMMO.ammo.damage,sp+' dies to a handful of standard rounds');
  // v33: green bots are huge tanks; red raiders are much larger than before.
  assert.ok(B.green.hp>=40*era.AMMO.ammo.damage&&B.green.radius>=2.5*B.blue.radius,'green bots are very big with a lot of health');assert.ok(B.red.radius>=4,'red raiders are large');
  // Volleys leave one shot at a time, then a long cooldown.

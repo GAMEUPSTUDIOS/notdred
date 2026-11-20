@@ -3,7 +3,7 @@ const BOULDER_KICK=9; // m/s a punch round adds to a boulder (yank: the same, to
 // What a mined rock gives: plain rock sometimes iron; diamond ore an RC turret (2019); Canary seams iron or
 // flux; Pits treasure blocks one roll of TREASURE_LOOT. Each also adds leaderboard score.
 function mineRock(id,roll=Math.random()){const r=rocks.get(id);if(!r)return;removeRock(id);zoneData[zone].mined.push(id);if(typeof zoneEvent==='function')zoneEvent({type:'mined',zone,seed:zoneData[zone].seed||0,id});const kind=r.kind||(r.ore?'ore':'rock');
- if(kind==='rock'){if(roll<.25)addWorldLoot('iron',V(r.x,r.y),16);addScore(SCORE.rock);}
+ if(kind==='rock'){/* plain (brown) Canary rock drops nothing; elsewhere 1 in 4 drops iron */if(roll<.25&&zoneDef().tiles!=='canary')addWorldLoot('iron',V(r.x,r.y),16);addScore(SCORE.rock);}
  else if(kind==='ore'){addWorldLoot(TURRET_ORE_DROPS[Math.floor(roll*3)%3],V(r.x+.8,r.y),1);addScore(SCORE.ore);}
  else if(kind==='iron'){addWorldLoot('iron',V(r.x,r.y),zoneDef().tiles==='canary'?CANARY_IRON_DROP:16);addScore(SCORE.ore);}
  else if(kind==='flux'){addWorldLoot('flux',V(r.x,r.y),4);addScore(SCORE.ore);}
@@ -21,13 +21,21 @@ function nearController(){const p=localPlayer();let best=null,bd=TURRET_CONTROLL
 function controllerAssignments(side){const ctrls=mounts.filter(m=>m.type==='turret_controller'&&m.side===side).sort((a,b)=>a.at-b.at),free=mounts.filter(m=>m.type==='turret'&&m.side===side&&!m.starterRC&&(m.kind==='burst'||m.kind==='auto')),out=new Map();
  for(const c of ctrls){free.sort((a,b)=>Math.abs(a.at-c.at)-Math.abs(b.at-c.at));out.set(c,free.splice(0,TURRET_CONTROLLER.turrets));}return out;}
 function controlledTurrets(c){return c?controllerAssignments(c.side).get(c)||[]:[];}
-function toggleController(){if(manning){manning=null;toast('Left the turret controller.');return true;}const t=nearController();if(!t)return false;manning=ctrlKey(t);const n=controlledTurrets(t).length,all=mounts.filter(m=>m.type==='turret'&&m.side===t.side&&(m.kind==='burst'||m.kind==='auto')).length;
+function toggleController(){if(manning){const direct=!!mannedTurret(manning);manning=null;toast(direct?'Left the turret.':'Left the turret controller.');return true;}const t=nearController();if(!t)return false;manning=ctrlKey(t);const n=controlledTurrets(t).length,all=mounts.filter(m=>m.type==='turret'&&m.side===t.side&&(m.kind==='burst'||m.kind==='auto')).length;
  toast(n?'Manning the '+t.side+' turret controller: aim with the mouse, click to fire ('+n+' turret'+(n>1?'s':'')+(all>n?'; '+(all-n)+' more on this wall need another controller':'')+'). E or move to leave.':'No burst or auto turret on this wall for this controller to work.');return true;}
 function turretAim(m,aim){const at=ship.getWorldPoint(mountPoint(m)),dir=V(aim.x-at.x,aim.y-at.y),out=inward(m).clone().neg();if(dir.length()<.1)return null;dir.normalize();if(P.Vec2.dot(dir,out)<.12)return null;return {at,dir};}
 function fireMountRound(m,dir){const at=ship.getWorldPoint(mountPoint(m));m.ammo--;m.recoilUntil=clock+.12;m.aim=Math.atan2(dir.y,dir.x);fireRound(m.ammoType||'ammo',V(at.x+dir.x*2,at.y+dir.y*2),dir);}
-function controllerFire(){const t=manning&&controllerByKey(manning);if(!t||P.Vec2.distance(localPlayer(),mountPoint(t))>TURRET_CONTROLLER.reach+1.5){manning=null;return;}if(!isCombatZone())return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);
- for(const m of controlledTurrets(t)){if((m.ammo||0)<=0||(m.reload||0)>0||m.burstLeft>0)continue;const a=turretAim(m,aim);if(!a)continue;const def=turretDef(m);
-  if(m.kind==='burst'){m.burstLeft=def.burst;m.burstTimer=0;m.burstDir={x:a.dir.x,y:a.dir.y};m.reload=turretReload(m);}else{fireMountRound(m,a.dir);m.reload=turretReload(m);}}}
+// Manning a burst or auto turret directly: click it (wrench or empty hand) to take it, aim with the mouse, hold the
+// mouse to fire; moving, jumping or E lets go. Shift+click still ejects its ammo. (Controllers still work as before.)
+function turretKey(m){return 'T:'+m.side+':'+m.at;}
+function mannedTurret(k){return typeof k==='string'&&k.startsWith('T:')?mounts.find(m=>m.type==='turret'&&turretKey(m)===k)||null:null;}
+const MAN_REACH=4;
+function manTurret(m){if(!(m.kind==='burst'||m.kind==='auto'))return false;if(piloting)return false;if(P.Vec2.distance(localPlayer(),mountPoint(m))>MAN_REACH){toast('Move closer to man the turret.');return true;}manning=turretKey(m);toast('Manning the '+(m.kind==='burst'?'burst':'auto')+' turret: aim with the mouse, hold to fire. Move to let go.');return true;}
+function pullTrigger(m,aim){if((m.ammo||0)<=0||(m.reload||0)>0||m.burstLeft>0)return;const a=turretAim(m,aim);if(!a)return;const def=turretDef(m);
+ if(m.kind==='burst'){m.burstLeft=def.burst;m.burstTimer=0;m.burstDir={x:a.dir.x,y:a.dir.y};m.reload=turretReload(m);}else{fireMountRound(m,a.dir);m.reload=turretReload(m);}}
+function controllerFire(){const mt=mannedTurret(manning);if(mt){if(P.Vec2.distance(localPlayer(),mountPoint(mt))>MAN_REACH+1.5){manning=null;return;}if(!isCombatZone())return;pullTrigger(mt,V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y));return;}
+ const t=manning&&controllerByKey(manning);if(!t||P.Vec2.distance(localPlayer(),mountPoint(t))>TURRET_CONTROLLER.reach+1.5){manning=null;return;}if(!isCombatZone())return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);
+ for(const m of controlledTurrets(t))pullTrigger(m,aim);}
 // Burst turrets finish their bursts on their own; a held trigger keeps auto turrets firing.
 function tickTurrets(dt){for(const m of mounts){if(m.reload>0)m.reload=Math.max(0,m.reload-dt);if(m.burstLeft>0){m.burstTimer-=dt;if(m.burstTimer<=0){if((m.ammo||0)>0&&isCombatZone())fireMountRound(m,V(m.burstDir.x,m.burstDir.y));m.burstLeft=(m.ammo||0)>0?m.burstLeft-1:0;m.burstTimer=TURRETS.burst.gap;}}}}
 function crewManning(k){if(typeof crew!=='undefined'&&crew.size)return [...crew.values()].some(c=>c.manning===k)||manning===k;return manning===k;}
@@ -35,6 +43,9 @@ function crewManning(k){if(typeof crew!=='undefined'&&crew.size)return [...crew.
 function fireRound(type,at,dir){const def=AMMO[type]||AMMO.ammo,n=def.pellets||1,base=Math.atan2(dir.y,dir.x),v=ship.getLinearVelocity();
  for(let k=0;k<n;k++){const a=base+(n>1?(k/(n-1)-.5)*def.spread:0),d=V(Math.cos(a),Math.sin(a));shots.push({type:AMMO[type]?type:'ammo',p:at.clone(),v:V(d.x*def.speed+v.x*.2,d.y*def.speed+v.y*.2),life:def.life,maxLife:def.life,bounces:def.bounces||0});}}
 // Damage a shot deals now: trash decays over its flight; flak fragments carry their own number.
+// Damage a round does to world tiles (mining): standard ammo mines with its full 2019 round (mine) though it hits
+// ships and bots for half.
+function rockDamage(def,dmg){return (def.mine?dmg*def.mine/def.damage:dmg)*WORLD_DAMAGE_SCALE;}
 function shotDamage(s){const def=AMMO[s.type]||AMMO.ammo;if(s.damage!=null)return s.damage;if(def.decay!=null){const f=1-Math.max(0,s.life)/(s.maxLife||def.life);return def.damage*(1-(1-def.decay)*f);}return def.damage;}
 function shotImpulse(s,body,mass,scale){const def=AMMO[s.type];if(!def?.impulse||s.damage!=null)return;const d=s.v.clone();d.normalize();const k=def.impulse*mass*scale;body.applyLinearImpulse(V(d.x*k,d.y*k),body.getWorldCenter(),true);}
 function tickShots(dt){const add=[];for(const s of shots){s.v.y+=zoneDef().shotGravity*dt;const def=AMMO[s.type]||AMMO.ammo;
@@ -47,7 +58,7 @@ function tickShots(dt){const add=[];for(const s of shots){s.v.y+=zoneDef().shotG
     if(b){const imp=AMMO[s.type]?.impulse||0,k=b.body.getMass()*(imp?imp*BOULDER_KICK:.25);b.body.applyLinearImpulse(V(d.x*k,d.y*k),at,true);b.body.setAwake(true);}s.life=0;}
    else if(hit.startsWith('ghost:')){const amount=dmg*(typeof shotPvp==='function'?shotPvp(s):pvpMultiplier());const d=s.v.clone();d.normalize();if(typeof zoneEvent==='function')zoneEvent({type:'hit',target:hit.slice(6),zone,amount,ammo:s.frag?'flak':s.type||'ammo',point:{x:at.x,y:at.y},dir:{x:d.x,y:d.y}});if(amount>0)addScore(amount/100*SCORE.pvpPer100);s.life=0;}
    else if(hit.startsWith('bot:')){const [,species,ix]=hit.split(':'),index=Number(ix),bot=findBot(species,index);if(bot)shotImpulse(s,bot.body,bot.body.getMass(),8);damageBot(dmg,species,index);s.life=0;}
-   else {const r=rocks.get(hit);if(r.kind==='hazard'){s.life=0;continue;}if(r.kind==='seeker'){wakeSeeker(hit);s.life=0;continue;}if(def.rockBreaker&&s.damage==null)r.hp=0;else r.hp-=dmg*WORLD_DAMAGE_SCALE;if(typeof noteRockHurt==='function')noteRockHurt(r);if(r.hp<=0)mineRock(hit);
+   else {const r=rocks.get(hit);if(r.kind==='hazard'){s.life=0;continue;}if(r.kind==='seeker'){wakeSeeker(hit);s.life=0;continue;}if(def.rockBreaker&&s.damage==null)r.hp=0;else r.hp-=rockDamage(def,dmg);if(typeof noteRockHurt==='function')noteRockHurt(r);if(r.hp<=0)mineRock(hit);
     // Sniper rounds ricochet off rock.
     if(s.bounces>0&&normal){s.bounces--;const vn=s.v.x*normal.x+s.v.y*normal.y;s.v=V(s.v.x-2*vn*normal.x,s.v.y-2*vn*normal.y);s.p=V(at.x+normal.x*.05,at.y+normal.y*.05);s.life-=dt;continue;}s.life=0;}}
   s.p=next;s.life-=dt;}
@@ -88,7 +99,7 @@ function damageBot(amount,species='green',index=0){const bot=findBot(species,ind
 }
 // Canary seeker tiles: a shot turns the tile into a live seeker bot at that spot (the tile counts as mined).
 function wakeSeeker(id){const r=rocks.get(id);if(!r)return;removeRock(id);zoneData[zone].mined.push(id);if(typeof zoneEvent==='function')zoneEvent({type:'mined',zone,seed:zoneData[zone].seed||0,id});const index=1000+bots.filter(b=>b.species==='seeker').length+Math.floor(Math.random()*1e5);spawnBotAt('seeker',V(r.x,r.y),index).fire=0;toastAll('A seeker woke up!');}
-function spawnBotAt(species,p,index){const def=BOT_TYPES[species],body=world.createDynamicBody({position:p,gravityScale:0,linearDamping:2,fixedRotation:true,userData:{bot:true,species,botIndex:index}});body.createFixture(P.Circle(def.radius),{density:def.density||2,friction:.3});const bot={body,species,color:species,index,hp:def.hp,maxhp:def.hp,home:p.clone(),fire:1,path:[],pathTimer:0,contactCd:0};bots.push(bot);return bot;}
+function spawnBotAt(species,p,index){const def=BOT_TYPES[species],body=world.createDynamicBody({position:p,gravityScale:0,linearDamping:2,fixedRotation:true,userData:{bot:true,species,botIndex:index}});body.createFixture(def.square?P.Box(def.radius*.9,def.radius*.9):P.Circle(def.radius),{density:def.density||2,friction:.3});const bot={body,species,color:species,index,hp:def.hp,maxhp:def.hp,home:p.clone(),fire:1,path:[],pathTimer:0,contactCd:0};bots.push(bot);return bot;}
 function tickBotRespawn(dt){const st=zoneData[zone];if(!st?.bots||!isCombatZone())return;
  for(const [sp,list] of Object.entries(st.bots))for(let i=0;i<list.length;i++){const r=list[i];if(!r?.dead)continue;r.respawn=Math.max(0,(r.respawn??BOT_RESPAWN_SECONDS)-dt);if(r.respawn===0){if(spawnBot(sp,null,i))list[i]={dead:false};else r.respawn=1;}}
 }

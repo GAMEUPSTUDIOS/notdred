@@ -27,11 +27,13 @@ function zoneSolid(x,y,id=zone){const g=zoneGrid(id),ix=Math.round((x-g.minX)/g.
 // Portals. Safe zones use the fixed list in era.js. Combat-zone portals follow the cave seed: the first
 // destination sits on the entry cavern at (0,0); the rest go in roomy caverns, spread as far apart as possible.
 const portalCache={};
-function zonePortals(id=zone){const def=zoneDef(id);if(def.portals)return typeof missionPortals==='function'?[...def.portals,...missionPortals(id)]:def.portals;const g=zoneGrid(id),k=id+':'+g.seed;if(portalCache[id]?.k===k)return portalCache[id].list;
+function zonePortals(id=zone){const def=zoneDef(id);if(def.portals)return typeof missionPortals==='function'?[...def.portals,...missionPortals(id)]:def.portals;const g=zoneGrid(id),k=id+':'+g.seed;const withMission=c=>typeof missionPortals==='function'?[...c.list,...missionPortals(id,c.missionSpot)]:c.list;if(portalCache[id]?.k===k)return withMission(portalCache[id]);
  const roomy=[];for(let y=3;y<g.height-3;y++)for(let x=4;x<g.width-4;x++){if(g.pit&&(y<g.pit.hall.y0+2||y>g.pit.hall.y1-2))continue;let ok=true;for(let dy=-1;dy<=1&&ok;dy++)for(let dx=-2;dx<=2;dx++)if(!g.centers[(y+dy)*g.width+x+dx]){ok=false;break;}if(ok)roomy.push(V(g.minX+x*g.cell,g.minY+y*g.cell));}
  const list=[{to:def.portalsTo[0],x:g.entry?.x||0,y:g.entry?.y||0}];
  for(const to of def.portalsTo.slice(1)){let best=null,score=-1;for(const p of roomy){const d=Math.min(...list.map(q=>Math.hypot(p.x-q.x,p.y-q.y)));if(d>score){score=d;best=p;}}if(!best)best=V(0,0);list.push({to,x:best.x,y:best.y});}
- portalCache[id]={k,list};return list;}
+ // The open spot farthest from the regular portals is kept for the mission portal (Sparrow I, while a mission runs).
+ let missionSpot=null,ms=-1;for(const p of roomy){const d=Math.min(...list.map(q=>Math.hypot(p.x-q.x,p.y-q.y)));if(d>ms){ms=d;missionSpot={x:p.x,y:p.y};}}
+ portalCache[id]={k,list,missionSpot};return withMission(portalCache[id]);}
 function portalPosition(){const q=zonePortals()[0];return V(q.x,q.y);}
 function nearestPortal(p=ship.getPosition()){let best=null;for(const q of zonePortals()){const distance=Math.hypot(q.x-p.x,q.y-p.y);if(!best||distance<best.distance)best={...q,distance};}return best;}
 

@@ -14,9 +14,9 @@ run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;spawnIt
 assert.equal(run('JSON.stringify(items.map(i=>i.type+i.count).sort())'),JSON.stringify(['ammo8','block6']),'stacks merged on contact');
 
 // ---- Ammo (changelog ℵ7/ℵ10/ℵ26): standard reloads fastest; punch/yank/trash hit like standard; scatter and flak 5 pellets.
-assert.equal(era.AMMO.punch.damage,era.AMMO.ammo.damage);assert.equal(era.AMMO.trash.damage,era.AMMO.ammo.damage);assert.equal(era.AMMO.scatter.pellets,5);assert.equal(era.AMMO.flak.burst.count,5);
+assert.equal(era.AMMO.punch.damage,era.AMMO.ammo.mine);assert.equal(era.AMMO.trash.damage,era.AMMO.ammo.mine);assert.equal(era.AMMO.scatter.pellets,5);assert.equal(era.AMMO.flak.burst.count,5);
 assert.ok(Object.entries(era.AMMO_RELOAD).every(([t,k])=>k===(t==='ammo'?1:2)),'reload: standard 1×, all others 2×');
-const hitsToBreak=t=>Math.ceil(era.WORLD_TILE_HP.rock/(era.AMMO[t].damage*era.WORLD_DAMAGE_SCALE));assert.equal(hitsToBreak('ammo'),5);assert.equal(hitsToBreak('sniper'),3);
+const hitsToBreak=t=>Math.ceil(era.WORLD_TILE_HP.rock/((era.AMMO[t].mine||era.AMMO[t].damage)*era.WORLD_DAMAGE_SCALE));assert.equal(hitsToBreak('ammo'),5);assert.equal(hitsToBreak('sniper'),3);
 
 // ---- Machines: the game's own sprites, sizes, recipes.
 for(const [t,f] of [['recycler','recycler'],['anchor','anchor'],['comms','comms_station'],['spawn','spawn']])assert.ok(fs.existsSync('dist/sprites/official-'+f+'.png'),t+' sprite');
