@@ -42,14 +42,16 @@ function manTurret(m){if(!(m.kind==='burst'||m.kind==='auto'))return false;if(pi
 function canPull(m,aim){return (m.ammo||0)>0&&!((m.reload||0)>0)&&!(m.burstLeft>0)&&m.waveIn==null&&!!turretAim(m,aim);}
 function pullTrigger(m,aim,delay=0){if(!canPull(m,aim))return;const a=turretAim(m,aim),def=turretDef(m);
  if(m.kind==='burst'){m.burstLeft=def.burst;m.burstTimer=delay;m.burstDir={x:a.dir.x,y:a.dir.y};m.reload=turretReload(m)+delay;}else if(delay>0){m.waveIn=delay;m.waveAim={x:aim.x,y:aim.y};m.reload=turretReload(m)+delay;}else{fireMountRound(m,a.dir);m.reload=turretReload(m);}}
-function controllerFire(){const mt=mannedTurret(manning);if(mt){if(P.Vec2.distance(localPlayer(),mountPoint(mt))>MAN_REACH+1.5){manning=null;return;}if(!isCombatZone())return;pullTrigger(mt,V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y));return;}
+// Connected to a server, the page only predicts movement: turrets fire on the server (they used to fire here too,
+// leaving frozen copies of the rounds on screen).
+function controllerFire(){if(typeof netActive!=='undefined'&&netActive)return;const mt=mannedTurret(manning);if(mt){if(P.Vec2.distance(localPlayer(),mountPoint(mt))>MAN_REACH+1.5){manning=null;return;}if(!isCombatZone())return;pullTrigger(mt,V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y));return;}
  const t=manning&&controllerByKey(manning);if(!t||P.Vec2.distance(localPlayer(),mountPoint(t))>TURRET_CONTROLLER.reach+1.5){manning=null;return;}if(!isCombatZone())return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);
  for(const {m,delay} of waveOrder(controlledTurrets(t).filter(m=>canPull(m,aim)),aim))pullTrigger(m,aim,delay);}
 // Burst turrets finish their bursts on their own; a held trigger keeps auto turrets firing.
 function tickTurrets(dt){for(const m of mounts){if(m.reload>0)m.reload=Math.max(0,m.reload-dt);if(m.waveIn!=null){m.waveIn-=dt;if(m.waveIn<=0){const a=m.waveAim&&turretAim(m,V(m.waveAim.x,m.waveAim.y));m.waveIn=null;m.waveAim=null;if(a&&(m.ammo||0)>0&&isCombatZone()){fireMountRound(m,a.dir);if(!m.kind)m.recoilUntil=clock+.14;}}}if(m.burstLeft>0){m.burstTimer-=dt;if(m.burstTimer<=0){if((m.ammo||0)>0&&isCombatZone())fireMountRound(m,V(m.burstDir.x,m.burstDir.y));m.burstLeft=(m.ammo||0)>0?m.burstLeft-1:0;m.burstTimer=TURRETS.burst.gap;}}}}
 function crewManning(k){if(typeof crew!=='undefined'&&crew.size)return [...crew.values()].some(c=>c.manning===k)||manning===k;return manning===k;}
 // One round of any ammo type (era.js AMMO): scatter fires a fan of pellets, everything else one projectile.
-function fireRound(type,at,dir){const def=AMMO[type]||AMMO.ammo,n=def.pellets||1,base=Math.atan2(dir.y,dir.x),v=ship.getLinearVelocity();
+function fireRound(type,at,dir){if(typeof netActive!=='undefined'&&netActive)return;const def=AMMO[type]||AMMO.ammo,n=def.pellets||1,base=Math.atan2(dir.y,dir.x),v=ship.getLinearVelocity();
  for(let k=0;k<n;k++){const a=base+(n>1?(k/(n-1)-.5)*def.spread:0),d=V(Math.cos(a),Math.sin(a));shots.push({type:AMMO[type]?type:'ammo',p:at.clone(),v:V(d.x*def.speed+v.x*.2,d.y*def.speed+v.y*.2),life:def.life,maxLife:def.life,bounces:def.bounces||0});}}
 // Damage a shot deals now: trash decays over its flight; flak fragments carry their own number.
 // Damage a round does to world tiles (mining): standard ammo mines with its full 2019 round (mine) though it hits
