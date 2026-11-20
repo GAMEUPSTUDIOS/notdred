@@ -22,7 +22,7 @@ arena('sparrow');assert.equal(sim('sparrow').api.fleet.size,2,'both hulls in one
 fire();assert.equal(B.run('shipHP'),B.run('shipMaxHP()')-era.AMMO.ammo.damage,'Sparrow: full PvP');assert.equal(A.run('shots.length'),0,'shot stops on the hull');
 assert.ok(B.run('notices=[...crew.values()][0].notices||[];notices.some(n=>n.includes("Alpha"))'),'target crew told who is shooting');
 const vBefore=B.run('ship.getLinearVelocity().x');fire('punch');assert.ok(B.run('ship.getLinearVelocity().x')>vBefore+1,'punch ammo knocks the target');
-arena('finch');fire();assert.equal(B.run('shipMaxHP()')-B.run('shipHP'),era.AMMO.ammo.damage,'Finch I: ships can shoot each other now (v61)');B.run('shipHP=shipMaxHP()');assert.equal(A.run('shots.length'),0,'…but shots still stop on ships');
+arena('finch');fire();assert.equal(B.run('shipHP'),B.run('shipMaxHP()'),'Finch I: no PvP damage');assert.equal(A.run('shots.length'),0,'…but shots still stop on ships');
 arena('finch2');fire();assert.equal(B.run('shipHP'),B.run('shipMaxHP()')-era.AMMO.ammo.damage,'Finch II: starter-size ship deals full damage');
 A.run('bounds={l:-7,r:7,t:-5,b:4};rebuildShell();rebuildMounts();updateShipMass()');assert.equal(A.run('shipSize()'),150);arena('finch2');fire();
 assert.ok(Math.abs(B.run('shipHP')-(B.run('shipMaxHP()')-era.AMMO.ammo.damage*era.pvpMultiplier(150,'finch2')))<1e-6,'Finch II: 150-tile ship deals reduced damage');

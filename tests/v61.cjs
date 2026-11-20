@@ -3,7 +3,9 @@
 // ship once the round has cleared your hull (a sniper ricochet, flying into your own slow slug). Thrusters 1.5×.
 const assert=require('node:assert/strict'),path=require('node:path');process.chdir(path.resolve(__dirname,'..'));
 const {createRoom}=require('../server/room.cjs'),{ZoneBus}=require('../server/zone-bus.cjs'),era=require('../dist/modules/era.js');
-for(const z of ['finch','finch2','sparrow','pits','canary'])assert.ok(era.ZONES[z].pvp,z+': ships can shoot each other');
+for(const z of ['finch2','sparrow','pits','canary'])assert.ok(era.ZONES[z].pvp,z+': ships can shoot each other');assert.equal(era.ZONES.finch.pvp,null,'Finch I: no ship-on-ship damage');
+// Silver (iron) bots: Finch II, not Finch I.
+assert.ok(era.ZONES.finch2.bots.silver>0&&!era.ZONES.finch.bots.silver,'silver bots in Finch II only');
 assert.deepEqual(era.THRUSTER_FORCE,{starter:1350,fuel:2400,explosives:1650},'thrusters 1.5×');
 const bus=new ZoneBus(),rooms=[];const mk=id=>{const r={id,name:'Ship '+id};r.game=createRoom(null,bus.hooksFor(r));r.game.join(id+'c',id,true,'captain');rooms.push(r);return r;};
 const step=n=>{for(let i=0;i<n;i++){for(const r of rooms)r.game.tick(1/60);bus.step(rooms,1/60);}};
@@ -17,7 +19,7 @@ assert.ok(p0,'found open space');
 // 1. A hits B in Finch I (was no PvP there).
 place('A',p0.x,p0.y);place('B',p0.x+30,p0.y);step(2);let b0=hp(B);
 sim.api.zsFire('A',[{type:'ammo',p:{x:p0.x+10,y:p0.y},v:{x:90,y:0},life:2,maxLife:2,bounces:0}]);step(20);
-assert.equal(b0-hp(B),era.AMMO.ammo.damage,'another ship takes full damage in Finch I');
+assert.equal(b0-hp(B),0,'another ship takes no damage in Finch I (bots only there)');assert.ok(!Number(sim.run('shots.length')),'…the round still stops on the ship');
 // 2. Your own round, fired from just outside your hull straight out: never hits you on the way out.
 B.game.run('shipHP=shipMaxHP()');place('B',p0.x+400,p0.y);let a0=hp(A);
 sim.api.zsFire('A',[{type:'ammo',p:{x:p0.x+6,y:p0.y},v:{x:90,y:0},life:1,maxLife:1,bounces:0}]);step(70);assert.equal(hp(A),a0,'a round leaving your hull does not hit you');
@@ -29,4 +31,4 @@ A.game.run('shipHP=shipMaxHP()');place('A',p0.x,p0.y);step(1);a0=hp(A);sim.api.z
 assert.equal(a0-hp(A),era.AMMO.sniper.damage,'your own sniper round coming back hits you');
 // 5. Flak fragments remember who fired them.
 assert.ok(/frag:true,bounces:0,owner:s\.owner/.test(require('node:fs').readFileSync('dist/modules/combat.js','utf8')),'flak fragments keep their owner');
-console.log('PASS: every round hurts ships (PvP in every combat zone, your own rounds once clear of your hull); thrusters 1.5×.');
+console.log('PASS: every round hurts ships (PvP where the zone allows it, never in Finch I; your own rounds once clear of your hull); silver bots in Finch II only; thrusters 1.5×.');

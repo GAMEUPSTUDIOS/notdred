@@ -1,5 +1,5 @@
 'use strict';
-const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom,showValue}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
 const root=path.resolve(__dirname,'..'),dataDir=path.resolve(process.env.DATA_DIR||path.join(root,'data'));fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
 // The dev menu token. Set DEV_TOKEN to choose one; otherwise one is made on first run and kept in data/dev-token.txt
 // so it stays the same across restarts. It is printed every time the server starts.
@@ -139,6 +139,11 @@ function onConnection(ws){clients.add(ws);ws.uid=id();ws.name='Crew';ws.actions=
   if(m.report)send(ws,crewReport(r,ws));return;}
  if(m.type==='kick'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');if(!mayManage(r,ws,target.owner))throw Error('You cannot kick the ship\'s owner or another captain.');logEvent(r,ws,'kicked '+shortId(target.owner)+' ('+target.name+').','kick');leave(target);send(target,{type:'error',message:'You were removed from the ship by the captain.'});send(target,{type:'rooms',rooms:list(target)});if(m.report)send(ws,crewReport(r,ws));return;}
  if(m.type==='export'){return send(ws,{type:'export',data:codec.encode(ws.room.game.run('durableState()'))});}
+ // Dev live code (host token only): run in this ship's simulation or in its shared zone; the answer goes back to the sender.
+ if(m.type==='eval'){const r=ws.room,id=Number.isSafeInteger(m.id)?m.id:0;if(!ws.admin){send(ws,{type:'evalResult',id,ok:false,error:'Live code needs the host token.'});return;}if(!r?.game){send(ws,{type:'evalResult',id,ok:false,error:'Join a ship first.'});return;}
+  const code=String(m.code||'').slice(0,200000);let out;try{if(m.target==='zone'){const sim=bus.simOf(r);if(!sim)throw Error('This ship is not in a shared zone right now.');out=showValue(sim.evalCode(code));}else out=r.game.evalCode(ws.uid,code);send(ws,{type:'evalResult',id,ok:true,result:out});}
+  catch(e){send(ws,{type:'evalResult',id,ok:false,error:String(e?.stack||e).split('\n').slice(0,6).join('\n').slice(0,2000)});}
+  console.log('[live code] '+(ws.name||'?')+' ran '+code.length+' chars on '+(m.target==='zone'?'the zone':'ship '+r.id));return;}
  if(m.type==='action'){if(!Number.isSafeInteger(m.seq)||m.seq<=ws.seq)return;ws.seq=m.seq;ws.room.game.command(ws.uid,m);}
  }catch(e){send(ws,{type:'error',message:String(e.message).slice(0,180)});}});
  ws.on('close',()=>{leave(ws);clients.delete(ws);if(sessions.get(ws.token)===ws)sessions.delete(ws.token);});ws.on('error',()=>{});send(ws,{type:'hello',protocol:1});}

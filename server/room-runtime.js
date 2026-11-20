@@ -116,10 +116,10 @@ const DELTA_MIN=40;
 // the whole ship), and each member's own part (their slots, notices, mined-tile catch-up, and the tile/machine lists
 // or deltas they haven't seen yet). Own fields come after the shared ones in the message, so they win.
 const OWN_FIELDS=['stacks','slots','inventory','blocks','terrain','mounts','zoneData'];
-function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k of OWN_FIELDS)delete data[k];data.clock=clock;
+function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k of OWN_FIELDS)delete data[k];data.clock=clock;data.devDraw=cleanDevShapes(devDraw);
  data.crew=[...crew.values()].map(c=>({id:c.id,name:c.name,rank:c.rank||'guest',p:c.player.getPosition(),v:c.player.getLinearVelocity(),facing:c.facing,piloting:c.piloting,tool:c.tool,climbing:c.climbing,selected:c.selected,held:c.slots[c.selected],beam:handBeam(c.pusherVisual)}));
  data.velocity=ship.getLinearVelocity();data.mission=currentMission();data.criticalFor=+criticalFor.toFixed(2);data.effects=effects;
- if(attachedToZone){const z=zoneLink.snapshot();data.bots=z?.bots||[];data.rockHp=z?.rockHp||[];data.projectiles=z?.projectiles||[];data.zoneLoot=z?.loot||[];data.zoneBoulders=z?.boulders||[];}else{data.bots=allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:b.body.getPosition(),v:b.body.getLinearVelocity()}));data.projectiles=[...shots.map(s=>({...s,owner:undefined})),...enemyShots.map(s=>({...s,owner:undefined}))];}
+ if(attachedToZone){const z=zoneLink.snapshot();data.bots=z?.bots||[];data.rockHp=z?.rockHp||[];data.projectiles=z?.projectiles||[];data.zoneLoot=z?.loot||[];data.zoneDevDraw=z?.devDraw;data.zoneBoulders=z?.boulders||[];}else{data.bots=allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:b.body.getPosition(),v:b.body.getLinearVelocity()}));data.projectiles=[...shots.map(s=>({...s,owner:undefined})),...enemyShots.map(s=>({...s,owner:undefined}))];}
  data.items=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity(),o={type:i.type,count:i.count,x:p.x,y:p.y,angle:i.body.getAngle()};if(Math.abs(v.x)>.005||Math.abs(v.y)>.005)o.v=v;return o;});
  // The zone record (without its mined list, which each member catches up on separately).
  const zone0=snapshotZone()[zone]||{},zd={...zone0};delete zd.mined;zd.loot=(data.zoneLoot||zd.loot||[]).map(({type,count,x,y,vx,vy})=>({type,count,x,y,vx,vy}));if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;

@@ -84,7 +84,7 @@ function zsShip(id){const f=fleet.get(id);if(!f)return null;const p=f.body.getPo
 // Rocks that have taken damage, so every ship can show their health bars.
 const hurtRocks=new Set();function noteRockHurt(r){hurtRocks.add(r.id);}
 function rockHealth(){const out=[];for(const id of hurtRocks){const r=rocks.get(id);if(!r||r.hp>=r.maxhp){hurtRocks.delete(id);continue;}out.push([id,Math.max(0,Math.round(r.hp)),r.maxhp]);}return out;}
-function zsSnapshot(){return {rockHp:rockHealth(),bots:allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:{x:+b.body.getPosition().x.toFixed(3),y:+b.body.getPosition().y.toFixed(3)},v:{x:+b.body.getLinearVelocity().x.toFixed(3),y:+b.body.getLinearVelocity().y.toFixed(3)}})),
+function zsSnapshot(){return {devDraw:cleanDevShapes(devDraw,'world'),rockHp:rockHealth(),bots:allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:{x:+b.body.getPosition().x.toFixed(3),y:+b.body.getPosition().y.toFixed(3)},v:{x:+b.body.getLinearVelocity().x.toFixed(3),y:+b.body.getLinearVelocity().y.toFixed(3)}})),
  projectiles:[...shots,...enemyShots].map(s=>({type:s.type,p:{x:+s.p.x.toFixed(3),y:+s.p.y.toFixed(3)},v:{x:+s.v.x.toFixed(3),y:+s.v.y.toFixed(3)},life:+(s.life||0).toFixed(3),frag:s.frag||undefined})),
  loot:worldLoot.map(i=>({type:i.type,count:i.count,x:+i.body.getPosition().x.toFixed(3),y:+i.body.getPosition().y.toFixed(3),vx:+i.body.getLinearVelocity().x.toFixed(3),vy:+i.body.getLinearVelocity().y.toFixed(3)})),
  boulders:boulderState()};}

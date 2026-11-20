@@ -12,5 +12,9 @@ function createZoneSim(zoneId,host){const element=()=>({style:{},classList:{togg
  vm.createContext(s);const opts={timeout:5000};for(const f of MODULES)script(path.join(root,'dist/modules/'+f+'.js')).runInContext(s,opts);script(path.join(root,'dist/game.js')).runInContext(s,opts);
  s.zoneId=zoneId;vm.runInContext('initialize();zone=zoneId;zoneData={};setupZone(false)',s,opts);script(path.join(__dirname,'zone-runtime.js')).runInContext(s,opts);
  const api=vm.runInContext('({zsAddShip,zsRemoveShip,zsUpdateShip,zsPlaceShip,zsForces,zsStep,zsFire,zsAddLoot,zsClaimLoot,zsDev,zsRegenerate,zsShip,zsSnapshot,fleet})',s,opts);
- return {id:zoneId,api,ships:()=>[...api.fleet.keys()],run:c=>vm.runInContext(c,s,opts),emptySince:Date.now(),snap:null};}
+ const tickScript=new vm.Script('devTick(1/60)',{filename:'devTick'});
+ return {id:zoneId,api,ships:()=>[...api.fleet.keys()],run:c=>vm.runInContext(c,s,opts),emptySince:Date.now(),snap:null,
+  // Dev live code in the shared zone (bots, rock, loot, every ship's hull), at most 1 s; devTick(dt) runs every step.
+  evalCode:c=>vm.runInContext(String(c),s,{timeout:1000,filename:'live-code'}),
+  devTick:()=>{if(typeof s.devTick!=='function')return;try{tickScript.runInContext(s,{timeout:100});}catch(e){s.devTick=null;console.error('zone devTick stopped',e?.message);}}};}
 module.exports={createZoneSim};

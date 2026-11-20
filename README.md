@@ -227,12 +227,20 @@ Neither is ever switched on by itself; the page only offers them.
   - **Manage ship (v57):** the right-hand *Manage ship* box shows the ship name (captains rename it), who can join (public / private) with the invite links for classic and the full game, everyone who's been aboard with their rank (captains set ranks, kick, ban/unban; crew vote-kick guests), and the ship log.
   - **notdred.exe** includes classic mode and listens on your home network too: its window prints `http://<this PC's address>:8080/classic` for old computers in the house (Windows may ask to allow it through the firewall the first time — allow it on private networks).
 
+## Dev live code; smooth noclip (v63)
+- **Live code** (dev menu, host token only): type JavaScript and run it in **this ship** (the server's simulation of your ship, as you: `me`, `player`, your inventory), in **this zone** (the shared zone: bots, rock, loot, every ship's hull), or on **my screen only**. The result (or the error) shows under the box. It runs with the game's own functions — `giveItem('iron',16)`, `spawnItem(...)`, `addBlock(x,y)`, `toastAll('hi')`, `allBots()`, `spawnBot(...)`, `addWorldLoot(...)`…
+  - `devTick = dt => {…}` runs every tick until you set `devTick = null` (or it throws).
+  - `devDraw = [{type:'circle', x, y, r, color}, {type:'rect', x, y, w, h, fill:true}, {type:'line', x, y, x2, y2, width}, {type:'text', x, y, text, size}]` is drawn for everyone aboard — in tile coordinates inside the ship by default, or `space:'world'` (the default for zone code). *Clear drawings* empties it and stops `devTick`.
+  - Each run is stopped after 1 s and each `devTick` after 100 ms, so a mistake can't freeze the server. Every run is logged in the server window.
+- **Dev noclip no longer rubber-bands.** The page now predicts noclip flight the way the server does it (no collisions or gravity, WASD/Space at 12 m/s, Shift for double), and the server no longer pulls a noclipping player back inside the hull every tick. Flying through the ship and out: 0 snaps (was 12).
+- **Finch I has no PvP** (ships still fight bots there); Canary, Sparrow I and The Pits do. Silver (iron) bots: Finch II only, as before.
+
 ## No reaching through walls; fabricators set items down (v62)
 - **Nothing is used through a solid tile.** Building and dismantling already checked this; now so do the settings windows (doors, pushers, loaders, item hatches, signs, paint, spawn points, comms) and fabricators: the browser won't open them (*A solid tile blocks your reach.*) and the server refuses changes sent anyway.
 - **Fabricators no longer fling what they make.** Each finished item is set down, at rest, at the fabricator's item doors (the little hatch at its bottom left). A matching stack already sitting there is topped up; if something else is in the way (or the stack is full) the finished job waits until the doors are clear (*Done — take the finished item from the fabricator's doors to continue*). Items still fall through walkways, so a fabricator standing on walkways drops them to the floor below.
 
 ## Every round hurts ships; stronger thrusters (v61)
-- **Ships can shoot each other in every combat zone** — Finch I and Canary now too (Sparrow I and The Pits already had full damage; Finch II keeps its shooter-size rule). Safe zones still have weapons off.
+- **Ships can shoot each other** in Sparrow I, The Pits and now Canary (Finch II keeps its shooter-size rule). **Finch I stays PvP-free** — ships only fight bots there. Safe zones still have weapons off.
 - **You can hit your own ship.** A round can't hit your hull on its way out, but once it has cleared your ship it's live: a sniper round ricocheting back off rock, or a slow slug your ship flies into, does its full damage to you (any combat zone). The toast says *Hit by your own shot!*; it scores nothing.
 - Flak fragments now remember who fired them (they used to count as nobody's, so their PvP hits had no shooter).
 - **Thrusters push 1.5× harder:** starter 1350 N, fuel 2400 N, explosives 1650 N (`THRUSTER_FORCE` in `era.js`). The starting ship's top speed goes from about 30 to about 45 m/s; there is no speed cap, so bigger ships with more thrusters go as fast as their thrust allows.

@@ -44,7 +44,7 @@ const ZONES = {
   freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 240, h: 150},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'sparrow', x: 0, y: -28}]},
-  finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: {},
+  finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: null,
     blurb: 'Red bots · mining caves', bg: '#447477', shotGravity: 10,
     // width/height/threshold/salt 117/67/.59/0 reproduce the original single Finch map exactly.
     gen: {width: 117, height: 67, threshold: .59, salt: 0, oreChance: .03},
@@ -86,8 +86,8 @@ const MISSIONS = {intervalSeconds: 45 * 60, durationSeconds: 20 * 60, rotation: 
 const TREASURE_LOOT = [['flux', 8], ['turret', 1], ['booster', 6], ['explosives', 16], ['sniper', 16], ['breaker', 8], ['iron', 16]];
 
 // PvP (ships sharing a zone can shoot each other with RC turrets):
-//   pvp: null                    no ship-to-ship damage (safe zones; weapons are off there anyway).
-//   pvp: {}                      full damage for every ship (Finch I, Sparrow I, The Pits, Canary).
+//   pvp: null                    no ship-to-ship damage (safe zones, Finch I — ships still fight bots there).
+//   pvp: {}                      full damage for every ship (Sparrow I, The Pits, Canary).
 //   Hitting your own ship (a ricochet, running into your own slug) always does full damage, in any combat zone.
 //   pvp: {sizeFull, sizeZero}    damage scales with the SHOOTER's hull size in tiles, (w+1)×(h+1):
 //                                full up to sizeFull, falling linearly to nothing at sizeZero (Finch II —
