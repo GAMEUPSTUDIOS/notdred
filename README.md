@@ -227,6 +227,10 @@ Neither is ever switched on by itself; the page only offers them.
   - **Manage ship (v57):** the right-hand *Manage ship* box shows the ship name (captains rename it), who can join (public / private) with the invite links for classic and the full game, everyone who's been aboard with their rank (captains set ranks, kick, ban/unban; crew vote-kick guests), and the ship log.
   - **notdred.exe** includes classic mode and listens on your home network too: its window prints `http://<this PC's address>:8080/classic` for old computers in the house (Windows may ask to allow it through the firewall the first time — allow it on private networks).
 
+## No reaching through walls; fabricators set items down (v62)
+- **Nothing is used through a solid tile.** Building and dismantling already checked this; now so do the settings windows (doors, pushers, loaders, item hatches, signs, paint, spawn points, comms) and fabricators: the browser won't open them (*A solid tile blocks your reach.*) and the server refuses changes sent anyway.
+- **Fabricators no longer fling what they make.** Each finished item is set down, at rest, at the fabricator's item doors (the little hatch at its bottom left). A matching stack already sitting there is topped up; if something else is in the way (or the stack is full) the finished job waits until the doors are clear (*Done — take the finished item from the fabricator's doors to continue*). Items still fall through walkways, so a fabricator standing on walkways drops them to the floor below.
+
 ## Every round hurts ships; stronger thrusters (v61)
 - **Ships can shoot each other in every combat zone** — Finch I and Canary now too (Sparrow I and The Pits already had full damage; Finch II keeps its shooter-size rule). Safe zones still have weapons off.
 - **You can hit your own ship.** A round can't hit your hull on its way out, but once it has cleared your ship it's live: a sniper round ricocheting back off rock, or a slow slug your ship flies into, does its full damage to you (any combat zone). The toast says *Hit by your own shot!*; it scores nothing.

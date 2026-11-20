@@ -63,10 +63,10 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  else if(a==='material'&&TYPES.includes(msg.item)){activeFab=fabFor(msg);if(activeFab)transferMaterial(msg.item,!!msg.eject);}
  else if(a==='clearQueue'){activeFab=fabFor(msg);if(activeFab)clearQueue();}
  else if(a==='repeat'){activeFab=fabFor(msg);if(activeFab)activeFab.repeat=!!msg.value;}
- else if(a==='door'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='door'&&setDoorAccess(t,msg.access))toast('Door: '+({captain:'captain only',crew:'crew and captain',guest:'everyone'})[msg.access]+'.');}
- else if(a==='spawnrank'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='spawn'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&setSpawnRank(t,msg.rank))toast('Spawn point: '+({captain:'captain',crew:'crew',guest:'guests'})[msg.rank]+' spawn here.');}
- else if(a==='sign'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='sign'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8){t.text=cleanSign(msg.text);}}
- else if(a==='paint'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell),c=cleanColor(msg.color);if(t?.type==='paint'&&c&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8){t.color=c;}}
+ else if(a==='door'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='door'&&tileInReach(t)&&setDoorAccess(t,msg.access))toast('Door: '+({captain:'captain only',crew:'crew and captain',guest:'everyone'})[msg.access]+'.');}
+ else if(a==='spawnrank'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='spawn'&&tileInReach(t)&&setSpawnRank(t,msg.rank))toast('Spawn point: '+({captain:'captain',crew:'crew',guest:'guests'})[msg.rank]+' spawn here.');}
+ else if(a==='sign'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='sign'&&tileInReach(t)){t.text=cleanSign(msg.text);}}
+ else if(a==='paint'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell),c=cleanColor(msg.color);if(t?.type==='paint'&&c&&tileInReach(t)){t.color=c;}}
  else if(a==='pusher'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)&&msg.settings&&typeof msg.settings==='object')configurePusher(msg.cell,msg.settings);
  else if(a==='hatch'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y))configureHatch(msg.cell,msg.mode,msg.items,{pull:!!msg.pull,requireOutput:!!msg.requireOutput});
  else if(a==='recover'){recover();}
@@ -155,6 +155,8 @@ function takeForces(){hookShipBody();const out={forces:shipForces,impulses:shipI
 // Punch/yank knocks on the hull, added up: the pilot's screen predicts the ship, so it adds each new knock at once
 // instead of drifting into it over a second.
 const shipKick={n:0,x:0,y:0};function noteKick(dx,dy){shipKick.n++;shipKick.x+=dx;shipKick.y+=dy;}
+// Settings windows (doors, signs, paint, spawn points) only apply within reach and not through a solid tile.
+function tileInReach(t){return P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&!buildBlocked({x:t.x,y:t.y},t.f);}
 function setPose(x,y,vx,vy,kx,ky){if(kx||ky)noteKick(kx,ky);if(docked)return;ship.setTransform(V(x,y),0);ship.setLinearVelocity(V(vx,vy));}
 function zoneDamage(amount,lp,dir,ammo){const r=damageShip(amount,V(lp.x,lp.y),dir?V(dir.x,dir.y):null);return r?.exit?{x:r.exit.x,y:r.exit.y}:null;}
 function addZoneScore(n){addScore(n);}

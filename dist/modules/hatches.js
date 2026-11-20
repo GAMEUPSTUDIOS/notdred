@@ -13,7 +13,7 @@ const MACHINE_TEXT={
  starter_hatch:['Starter hatch','One stack every 1.5 seconds. Output must be clear.'],
  loader:['Item loader','Moves one stack per cycle from the tile behind it to the tile in front (R rotates). Turrets load slowly.'],
  pusher_block:['Pusher','Its beam drives cargo, boxes and crew along the arrow (R rotates).']};
-function openHatchMenu(c){const t=terrainAt(c);if(!t||!CONFIGURABLE.includes(t.type))return false;if(t.type==='pusher_block')return openPusherMenu(t);const [title,blurb]=MACHINE_TEXT[t.type];if(P.Vec2.distance(localPlayer(),V(t.x,t.y))>8)return toast('Move closer to configure the '+title.toLowerCase()+'.');
+function openHatchMenu(c){const t=terrainAt(c);if(!t||!CONFIGURABLE.includes(t.type))return false;if(buildBlocked({x:t.x,y:t.y},t.f)){toast('A solid tile blocks your reach.');return true;}if(t.type==='pusher_block')return openPusherMenu(t);const [title,blurb]=MACHINE_TEXT[t.type];if(P.Vec2.distance(localPlayer(),V(t.x,t.y))>8)return toast('Move closer to configure the '+title.toLowerCase()+'.');
  let dialog=el('hatchmenu');if(!dialog){dialog=document.createElement('dialog');dialog.id='hatchmenu';document.body.appendChild(dialog);}
  const extra=t.type==='loader'?`<label class="hatchoption"><input type="checkbox" id="requireoutput" ${t.requireOutput?'checked':''}> Require output inventory — only deliver into something that holds items (fabricator, box, turret, ejector); never drop on the floor</label>`
   :t.type==='pusher_block'?`<label class="hatchoption">Direction <select id="pushermode"><option value="push">Push — away from the pusher</option><option value="pull">Pull — toward the pusher</option></select></label>`:'';
