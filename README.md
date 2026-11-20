@@ -227,6 +227,9 @@ Neither is ever switched on by itself; the page only offers them.
   - **Manage ship (v57):** the right-hand *Manage ship* box shows the ship name (captains rename it), who can join (public / private) with the invite links for classic and the full game, everyone who's been aboard with their rank (captains set ranks, kick, ban/unban; crew vote-kick guests), and the ship log.
   - **notdred.exe** includes classic mode and listens on your home network too: its window prints `http://<this PC's address>:8080/classic` for old computers in the house (Windows may ask to allow it through the firewall the first time — allow it on private networks).
 
+## Turret waves (v59)
+- **Turrets fire in a very fast wave** instead of all on the same frame: when several RC turrets fire on one click, or a turret controller fires its burst/auto turrets, they go off one after another 0.03 s apart (the whole volley always within a quarter second), sweeping across the ship at right angles to the shot. Each turret keeps the point you aimed at and turns to it when its turn comes. Rate of fire and damage are unchanged.
+
 ## Smooth ships and punch (v58)
 - **No more rubber banding** for crew who aren't piloting, and for other ships: they're drawn on the server's own tick timeline, smoothly curved between snapshots and a little behind real time (80–300 ms, adapting to the connection's jitter), instead of chasing a guessed position that jumped with every late packet. The pilot still predicts the ship as before.
 - **Punch ammo** shoves bots hard (about 30 m/s; they slide ~15 m), **yank** pulls them back toward you. Standard ammo barely moves them.

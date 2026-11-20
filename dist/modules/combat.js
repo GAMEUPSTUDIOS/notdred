@@ -11,7 +11,14 @@ function mineRock(id,roll=Math.random()){const r=rocks.get(id);if(!r)return;remo
  else if(kind==='treasure'){const [type,count]=TREASURE_LOOT[Math.floor(roll*TREASURE_LOOT.length)%TREASURE_LOOT.length];addWorldLoot(type,V(r.x,r.y),count);addScore(SCORE.treasure);toastAll('Treasure block cracked: '+count+' '+NAMES[type]+'!');}}
 function addScore(n){if(Number.isFinite(n)&&n>0)shipScore=Math.min(999999,shipScore+Math.round(n));}
 
-function fireRC(){if(!isCombatZone())return toast('Weapons disabled in '+zoneDef().name+'.');if(fireCooldown>0)return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);let fired=0,reloading=0;for(const m of mounts.filter(m=>m.type==='turret'&&!m.kind&&(m.ammo||0)>0)){if((m.reload||0)>0){reloading++;continue;}const at=ship.getWorldPoint(mountPoint(m)),dir=V(aim.x-at.x,aim.y-at.y),out=inward(m).clone().neg();if(dir.length()<.1)continue;dir.normalize();if(P.Vec2.dot(dir,out)<.12)continue;m.ammo--;m.reload=turretReload(m);m.recoilUntil=clock+.14;m.aim=Math.atan2(dir.y,dir.x);fireRound(m.ammoType||'ammo',V(at.x+dir.x*2,at.y+dir.y*2),dir);fired++;}fireCooldown=.05;if(!fired&&!reloading)toast('Load ammo into an RC on the side facing the target.');}
+// Several turrets don't all fire on the same frame: they go off in a very fast wave (TURRET_WAVE seconds apart, the
+// whole volley within TURRET_WAVE_MAX), sweeping across the ship at right angles to the shot. Each keeps the aim point
+// it was given and turns to it from wherever it is when its turn comes.
+const TURRET_WAVE=.03,TURRET_WAVE_MAX=.25;
+function waveOrder(list,aim){if(list.length<2)return list.map(m=>({m,delay:0}));const c=ship.getPosition(),d=V(aim.x-c.x,aim.y-c.y);if(d.length()<.1)d.set(1,0);d.normalize();const side=m=>{const p=ship.getWorldPoint(mountPoint(m));return (p.x-c.x)*-d.y+(p.y-c.y)*d.x;};const gap=Math.min(TURRET_WAVE,TURRET_WAVE_MAX/(list.length-1));return list.map(m=>({m,k:side(m)})).sort((a,b)=>a.k-b.k).map((e,i)=>({m:e.m,delay:i*gap}));}
+function fireRC(){if(!isCombatZone())return toast('Weapons disabled in '+zoneDef().name+'.');if(fireCooldown>0)return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);let reloading=0;const ready=[];for(const m of mounts.filter(m=>m.type==='turret'&&!m.kind&&(m.ammo||0)>0)){if((m.reload||0)>0||m.waveIn!=null){reloading++;continue;}if(turretAim(m,aim))ready.push(m);}
+ for(const {m,delay} of waveOrder(ready,aim)){m.reload=turretReload(m)+delay;if(delay>0){m.waveIn=delay;m.waveAim={x:aim.x,y:aim.y};}else{const a=turretAim(m,aim);fireMountRound(m,a.dir);m.recoilUntil=clock+.14;}}
+ fireCooldown=.05;if(!ready.length&&!reloading)toast('Load ammo into an RC on the side facing the target.');}
 // Turret controllers (ℵ21) sit in the hull wall. Each works the burst/auto turrets on its own wall, up to
 // TURRET_CONTROLLER.turrets of them (the nearest along the wall); more turrets on that wall need another controller.
 // Stand by one inside the ship and press E to man it; the mouse aims, a click fires (bursts per click, autos while
@@ -32,13 +39,14 @@ function turretKey(m){return 'T:'+m.side+':'+m.at;}
 function mannedTurret(k){return typeof k==='string'&&k.startsWith('T:')?mounts.find(m=>m.type==='turret'&&turretKey(m)===k)||null:null;}
 const MAN_REACH=4;
 function manTurret(m){if(!(m.kind==='burst'||m.kind==='auto'))return false;if(piloting)return false;if(P.Vec2.distance(localPlayer(),mountPoint(m))>MAN_REACH){toast('Move closer to man the turret.');return true;}manning=turretKey(m);toast('Manning the '+(m.kind==='burst'?'burst':'auto')+' turret: aim with the mouse, hold to fire. Move to let go.');return true;}
-function pullTrigger(m,aim){if((m.ammo||0)<=0||(m.reload||0)>0||m.burstLeft>0)return;const a=turretAim(m,aim);if(!a)return;const def=turretDef(m);
- if(m.kind==='burst'){m.burstLeft=def.burst;m.burstTimer=0;m.burstDir={x:a.dir.x,y:a.dir.y};m.reload=turretReload(m);}else{fireMountRound(m,a.dir);m.reload=turretReload(m);}}
+function canPull(m,aim){return (m.ammo||0)>0&&!((m.reload||0)>0)&&!(m.burstLeft>0)&&m.waveIn==null&&!!turretAim(m,aim);}
+function pullTrigger(m,aim,delay=0){if(!canPull(m,aim))return;const a=turretAim(m,aim),def=turretDef(m);
+ if(m.kind==='burst'){m.burstLeft=def.burst;m.burstTimer=delay;m.burstDir={x:a.dir.x,y:a.dir.y};m.reload=turretReload(m)+delay;}else if(delay>0){m.waveIn=delay;m.waveAim={x:aim.x,y:aim.y};m.reload=turretReload(m)+delay;}else{fireMountRound(m,a.dir);m.reload=turretReload(m);}}
 function controllerFire(){const mt=mannedTurret(manning);if(mt){if(P.Vec2.distance(localPlayer(),mountPoint(mt))>MAN_REACH+1.5){manning=null;return;}if(!isCombatZone())return;pullTrigger(mt,V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y));return;}
  const t=manning&&controllerByKey(manning);if(!t||P.Vec2.distance(localPlayer(),mountPoint(t))>TURRET_CONTROLLER.reach+1.5){manning=null;return;}if(!isCombatZone())return;const aim=V((mouse.x-W/2)/zoom+cam.x,(mouse.y-H/2)/zoom+cam.y);
- for(const m of controlledTurrets(t))pullTrigger(m,aim);}
+ for(const {m,delay} of waveOrder(controlledTurrets(t).filter(m=>canPull(m,aim)),aim))pullTrigger(m,aim,delay);}
 // Burst turrets finish their bursts on their own; a held trigger keeps auto turrets firing.
-function tickTurrets(dt){for(const m of mounts){if(m.reload>0)m.reload=Math.max(0,m.reload-dt);if(m.burstLeft>0){m.burstTimer-=dt;if(m.burstTimer<=0){if((m.ammo||0)>0&&isCombatZone())fireMountRound(m,V(m.burstDir.x,m.burstDir.y));m.burstLeft=(m.ammo||0)>0?m.burstLeft-1:0;m.burstTimer=TURRETS.burst.gap;}}}}
+function tickTurrets(dt){for(const m of mounts){if(m.reload>0)m.reload=Math.max(0,m.reload-dt);if(m.waveIn!=null){m.waveIn-=dt;if(m.waveIn<=0){const a=m.waveAim&&turretAim(m,V(m.waveAim.x,m.waveAim.y));m.waveIn=null;m.waveAim=null;if(a&&(m.ammo||0)>0&&isCombatZone()){fireMountRound(m,a.dir);if(!m.kind)m.recoilUntil=clock+.14;}}}if(m.burstLeft>0){m.burstTimer-=dt;if(m.burstTimer<=0){if((m.ammo||0)>0&&isCombatZone())fireMountRound(m,V(m.burstDir.x,m.burstDir.y));m.burstLeft=(m.ammo||0)>0?m.burstLeft-1:0;m.burstTimer=TURRETS.burst.gap;}}}}
 function crewManning(k){if(typeof crew!=='undefined'&&crew.size)return [...crew.values()].some(c=>c.manning===k)||manning===k;return manning===k;}
 // One round of any ammo type (era.js AMMO): scatter fires a fan of pellets, everything else one projectile.
 function fireRound(type,at,dir){const def=AMMO[type]||AMMO.ammo,n=def.pellets||1,base=Math.atan2(dir.y,dir.x),v=ship.getLinearVelocity();
