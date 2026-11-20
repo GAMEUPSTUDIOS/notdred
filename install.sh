@@ -8,6 +8,7 @@
 # starts the server with a temporary public https link (Cloudflare quick tunnel, no account needed).
 # Run the same command again later to update and restart. Options (environment variables):
 #   NOTDRED_DIR=~/somewhere   where the code goes (default ~/notdred)
+#   GH_TOKEN=github_pat_…     a GitHub token that can read the repository (skips the GitHub CLI sign-in)
 #   NOTDRED_LOCAL=1           no public link: serve on http://localhost:8080 only
 #   DEV_TOKEN=secret          your dev-menu token (default: a random one, printed at start)
 # This file holds no game code; it is safe to publish.
@@ -61,7 +62,11 @@ say "Node.js $(node -v)"
 # ---- 3. GitHub sign-in (the repository is private) -----------------------------------------------------------------
 # Skipped when this machine can already read the repository (saved Git credentials, or an earlier run).
 URL="https://github.com/$REPO.git"
-can_read(){ GIT_TERMINAL_PROMPT=0 git ls-remote "$URL" HEAD > /dev/null 2>&1; }
+can_read(){ GIT_TERMINAL_PROMPT=0 git ${AUTH[@]+"${AUTH[@]}"} ls-remote "$URL" HEAD > /dev/null 2>&1; }
+# A GitHub token in GH_TOKEN (a fine-grained one with read-only Contents access to the repository is enough) is used
+# directly by git, so no GitHub CLI or Homebrew is needed. It's saved only in the downloaded folder's .git/config.
+AUTH=()
+if [ -n "${GH_TOKEN:-}" ]; then B64="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"; AUTH=(-c "http.https://github.com/.extraheader=AUTHORIZATION: basic $B64"); fi
 if [ -d "$DIR/.git" ] || can_read; then :; else
 if ! have gh; then
   say "Installing the GitHub CLI"
@@ -92,10 +97,12 @@ fi
 # ---- 4. Code: download, or update an earlier download --------------------------------------------------------------
 if [ -d "$DIR/.git" ]; then
   say "Updating $DIR"
+  [ -n "${B64:-}" ] && git -C "$DIR" config http.https://github.com/.extraheader "AUTHORIZATION: basic $B64"
   git -C "$DIR" fetch origin && git -C "$DIR" reset --hard origin/main
 else
   say "Downloading $REPO into $DIR"
-  git clone "$URL" "$DIR" || die "couldn't download $REPO. Is this GitHub account allowed to see it?"
+  git ${AUTH[@]+"${AUTH[@]}"} clone "$URL" "$DIR" || die "couldn't download $REPO. Is this GitHub account allowed to see it?"
+  [ -n "${B64:-}" ] && git -C "$DIR" config http.https://github.com/.extraheader "AUTHORIZATION: basic $B64"
 fi
 cd "$DIR"
 
