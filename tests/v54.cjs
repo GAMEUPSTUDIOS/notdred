@@ -20,5 +20,8 @@ g.command('a',{action:'edit',aim:aimAt('en')});let n=JSON.parse(notices());asser
 g.command('a',{action:'edit',aim:aimAt('mu')});n=JSON.parse(notices());assert.ok(n.some(t=>/^Loaded 8 Explosives into the munitions fabricator\.$/.test(t)),JSON.stringify(n));assert.equal(run('mu.materials.explosives'),27,'19 left after the ammo job + 8');
 // The browser keeps the open window on its fabricator, and sends its id with crafting actions.
 const net=fs.readFileSync('dist/network.js','utf8');assert.ok(/netAction\('craft',\{item,count,fab:fabID\(\)\}\)/.test(net)&&!/activeFab=nearFab\(\);if\(activeFab\)renderRecipes/.test(net));
+// Placed fabricators are named by their kind (hover label, dismantle label, messages), never "Legacy fabricator".
+assert.deepEqual(JSON.parse(run('JSON.stringify([mu,en,[...terrain.values()].find(t=>t.kind==="starter")].map(placedName))')),['Munitions fabricator','Engineering fabricator','Starter fabricator']);
+const game=fs.readFileSync('dist/game.js','utf8'),cons=fs.readFileSync('dist/modules/construction.js','utf8');assert.ok(/label=placedName\(t\)/.test(game)&&/actionEffect\(c\.x,c\.y,'red',placedName\(b\)\)/.test(cons));
 console.log('PASS: fabricators side by side each work (nearest one, or the one whose window is open), accurate loading messages.');
 process.exit(0);
