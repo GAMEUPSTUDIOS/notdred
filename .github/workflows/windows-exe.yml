@@ -23,7 +23,7 @@ jobs:
       - name: Install packages
         run: npm ci --omit=optional --no-audit --no-fund
       - name: Build the physics engine (Visual Studio)
-        run: npx --yes node-gyp@10 rebuild --directory native
+        run: npx --yes node-gyp@12 rebuild --directory native
       - name: Get cloudflared for Windows
         shell: pwsh
         run: |
