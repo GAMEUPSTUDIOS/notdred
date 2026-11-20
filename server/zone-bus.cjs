@@ -30,7 +30,7 @@ class ZoneBus{
  sim(id){let sim=this.sims.get(id);if(sim)return sim;const bus=this,zoneOf=()=>id;
   sim=createZoneSim(id,{authoritativeZone:zid=>{const z=bus.zone(zid);return z&&{seed:z.seed,grid:z.grid,mined:[...z.mined],regenIn:z.regenIn,resetIn:z.resetIn};},authoritativeMission:()=>bus.mission,
    damage:(sid,amount,lp,dir,ammo)=>{const r=bus.roomById(sid);if(!r?.game)return null;try{return r.game.zone.zoneDamage(amount,lp,dir,ammo);}catch(e){console.error('zone damage failed',e.message);return null;}},
-   pvpHit:(target,amount,lp,dir,ammo,shooter)=>{if(!era.ZONES[id]?.pvp)return;const r=bus.roomById(target),from=bus.roomById(shooter);if(!r?.game)return;amount=Math.min(Number(amount)||0,Math.max(...Object.values(era.AMMO).map(a=>a.damage)));if(amount>0)r.game.zone.pvpHit(amount,lp,dir,ammo,from?.name||'another ship');},
+   pvpHit:(target,amount,lp,dir,ammo,shooter)=>{const self=target===shooter;if(!self&&!era.ZONES[id]?.pvp)return;const r=bus.roomById(target),from=bus.roomById(shooter);if(!r?.game)return;amount=Math.min(Number(amount)||0,Math.max(...Object.values(era.AMMO).map(a=>a.damage)));if(amount>0)r.game.zone.pvpHit(amount,lp,dir,ammo,self?null:from?.name||'another ship');},
    score:(sid,n)=>{const r=bus.roomById(sid);try{r?.game?.zone.addZoneScore(n);}catch{}},
    toast:m=>{for(const r of bus.lastRooms||[])if(sim.api.fleet.has(r.id)){try{r.game.zone.missionNotice(m);}catch{}}},
    mined:(rid,seed)=>{const z=bus.zone(id);if(!z||z.seed!==seed||z.mined.has(rid))return;z.mined.add(rid);bus.dirty=true;for(const r of bus.lastRooms||[])if(sim.api.fleet.has(r.id)){try{r.game.zone.remoteMined(rid);}catch{}}}});

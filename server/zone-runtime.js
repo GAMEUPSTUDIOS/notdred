@@ -34,8 +34,10 @@ damageShip=function(amount,point,dir=null){const f=currentTarget;if(!f)return nu
 releaseDock=function(){};
 shipExtents=function(){return currentTarget?currentTarget.ext:{l:-1,r:1,t:-1,b:1};};
 nearAnyShip=function(q,r){for(const f of fleet.values())if(P.Vec2.distance(q,f.body.getPosition())<r)return true;return false;};
-// Player shots: credit the shooter, never hit their own hull, and scale PvP damage by the SHOOTER's size.
+// Player shots: credit the shooter, hit their own hull only once they've cleared it, and scale PvP damage by the
+// SHOOTER's size (hitting yourself always does full damage).
 onShotStart=function(s){scoreOwner=s.owner??null;};
+shotLeftOwner=function(s){const f=fleet.get(s.owner);if(!f)return true;const q=f.body.getLocalPoint(s.p),e=f.ext;return q.x<e.l-1||q.x>e.r+1||q.y<e.t-1||q.y>e.b+1;};
 shotPvp=function(s){const f=fleet.get(s.owner);return pvpMultiplierFor(f?.size||0,zone);};
 addScore=function(n){if(scoreOwner!=null&&Number.isFinite(n)&&n>0)zoneHost.score(scoreOwner,n);};
 zoneEvent=function(e){if(e.type==='hit'){const t=fleet.get(e.target);if(!t)return;const lp=t.body.getLocalPoint(V(e.point.x,e.point.y));zoneHost.pvpHit(e.target,e.amount,{x:lp.x,y:lp.y},e.dir,e.ammo,scoreOwner);}else if(e.type==='mined')zoneHost.mined(e.id,e.seed);};
