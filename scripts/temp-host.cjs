@@ -26,27 +26,33 @@ process.on('SIGINT',()=>{stop();process.exit(0);});process.on('SIGTERM',()=>{sto
 
 // The GitHub Pages copy of the client may connect too (its origin is allowed and its link printed).
 const pages=(()=>{const r=spawnSync('git',['remote','get-url','origin'],{cwd:root,encoding:'utf8'}),m=String(r.stdout||'').match(/github\.com[:/]([^/]+)\/([^/.\s]+)/);return m?{origin:`https://${m[1].toLowerCase()}.github.io`,path:`/${m[2]}/`}:null;})();
-let server=null;
-function startServer(url){server=spawn(process.execPath,['server/server.cjs','--port',String(PORT)],{cwd:root,stdio:['ignore','inherit','inherit'],env:{...process.env,HOST:'127.0.0.1',DEV_TOKEN,ALLOWED_ORIGINS:[process.env.ALLOWED_ORIGINS,url,pages?.origin].filter(Boolean).join(',')}});
- children.push(server);server.on('exit',code=>{console.error('Game server stopped (exit '+code+').');stop();process.exit(code||1);});}
+// The game server starts first and keeps running; the tunnel is (re)opened in front of it. Every quick tunnel gets a
+// new random address, so the server accepts any https://*.trycloudflare.com page (plus the GitHub Pages site).
+const server=spawn(process.execPath,['server/server.cjs','--port',String(PORT)],{cwd:root,stdio:['ignore','inherit','inherit'],env:{...process.env,HOST:'127.0.0.1',DEV_TOKEN,ALLOWED_ORIGINS:[process.env.ALLOWED_ORIGINS,'https://*.trycloudflare.com',pages?.origin].filter(Boolean).join(',')}});
+children.push(server);server.on('exit',code=>{console.error('Game server stopped (exit '+code+').');stop();process.exit(code||1);});
 
-// The tunnel opens first (its address is random), then the game server starts, told to accept players arriving through it.
-(async()=>{
- const tunnel=spawn(CLOUDFLARED,['tunnel','--no-autoupdate','--url',`http://127.0.0.1:${PORT}`],{stdio:['ignore','pipe','pipe']});children.push(tunnel);
- let shown=false;const watch=chunk=>{const m=!shown&&String(chunk).match(/https:\/\/(?!api\.)[-a-z0-9]+\.trycloudflare\.com/);if(!m)return;shown=true;const url=m[0];startServer(url);
-  (async()=>{for(let i=0;;i++){try{const r=await fetch(`http://127.0.0.1:${PORT}/health`);if(r.ok)break;}catch{}if(i>50)fail('The game server did not start on port '+PORT+'.');await new Promise(r=>setTimeout(r,200));}
-  console.log(`
+function banner(url,again){console.log(`
   ┌─────────────────────────────────────────────────────────────────
-  │  Game is live (temporary):  ${url}${pages?`
+  │  ${again?'Reconnected — NEW public link':'Game is live (public, temporary)'}:  ${url}${pages?`
   │  GitHub Pages link (if Pages is on):  ${pages.origin}${pages.path}?server=${url.replace('https://','')}`:''}
   │
   │  Testers: open the link, choose Connect, then create or join a ship.
   │  Server address (filled in automatically): ${url.replace('https://','wss://')}/play
   │  Dev menu token, for you only:             ${DEV_TOKEN}
+  │  Also on this computer: http://localhost:${PORT}
   │  Stop hosting: Ctrl+C. The link dies with it, and it changes every run.
   └─────────────────────────────────────────────────────────────────
-`);})();};
+`);}
+
+// Cloudflare quick tunnel, reopened whenever it fails to start or drops (waiting a little longer each time, up to a
+// minute). The game keeps running meanwhile, and on this computer at http://localhost:PORT.
+let attempt=0,links=0;
+function openTunnel(){const tunnel=spawn(CLOUDFLARED,['tunnel','--no-autoupdate','--url',`http://127.0.0.1:${PORT}`],{stdio:['ignore','pipe','pipe']});children.push(tunnel);
+ let shown=false;const watch=chunk=>{const m=!shown&&String(chunk).match(/https:\/\/(?!api\.)[-a-z0-9]+\.trycloudflare\.com/);if(!m)return;shown=true;attempt=0;banner(m[0],links++>0);};
  tunnel.stdout.on('data',watch);tunnel.stderr.on('data',watch);
- tunnel.on('exit',code=>{console.error('Tunnel closed (exit '+code+').');stop();process.exit(code||1);});
- setTimeout(()=>{if(!shown)console.error('Still waiting for Cloudflare to assign a URL… (check your internet connection)');},20000);
-})();
+ const slow=setTimeout(()=>{if(!shown)console.error('Still waiting for Cloudflare to hand out a public link… (check this computer\'s internet connection)');},20000);
+ tunnel.on('exit',code=>{clearTimeout(slow);children.splice(children.indexOf(tunnel),1);const wait=Math.min(60,5*2**Math.min(attempt++,4));
+  console.error(`Cloudflare tunnel ${shown?'dropped':'could not start'} (exit ${code}); trying again in ${wait} s. The game is still running at http://localhost:${PORT}`);setTimeout(openTunnel,wait*1000);});}
+
+(async()=>{for(let i=0;;i++){try{const r=await fetch(`http://127.0.0.1:${PORT}/health`);if(r.ok)break;}catch{}if(i>100)fail('The game server did not start on port '+PORT+'.');await new Promise(r=>setTimeout(r,200));}
+ openTunnel();})();

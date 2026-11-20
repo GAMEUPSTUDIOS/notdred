@@ -394,7 +394,7 @@ To host on your own machine with a throwaway public address:
 1. Run `npm ci`, then `npm run build:native`.
 2. Run `npm run host`.
 
-On Linux and macOS it installs `cloudflared` itself the first time (Windows: `winget install --id Cloudflare.cloudflared` first). It opens a Cloudflare quick tunnel, starts the server set to accept players arriving through it (and from the GitHub Pages site, whose link it also prints), and prints a link like `https://random-words.trycloudflare.com`. Testers open the link and choose **Connect**; the server address fills in automatically.
+On Linux and macOS it installs `cloudflared` itself the first time (Windows: `winget install --id Cloudflare.cloudflared` first). It starts the server, then opens a Cloudflare quick tunnel in front of it (reopened automatically if it can't start or drops, printing the new link; the game keeps running at `http://localhost:8080` meanwhile), with the server set to accept players arriving through any `*.trycloudflare.com` link (and from the GitHub Pages site, whose link it also prints), and prints a link like `https://random-words.trycloudflare.com`. Testers open the link and choose **Connect**; the server address fills in automatically.
 
 The link changes every run and stops when you press Ctrl+C. Anyone with the link can play, so share it only with testers. The dev-menu token printed alongside it is for you.
 
