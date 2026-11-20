@@ -378,6 +378,12 @@ Push this repo to GitHub, a private repo works. Then:
 
 The links live while the codespace runs and stop after GitHub's idle timeout (30 minutes by default; adjustable in your Codespaces settings). If GitHub's address asks testers to sign in to GitHub, set port 8080 to **Public** in the **PORTS** tab. Logs: `/tmp/freeport.log` (server), `/tmp/freeport-tunnel.log` (tunnel).
 
+## Windows: notdred.exe (all in one)
+
+Download **notdred.exe** from the repository's *windows-latest* release (Releases → notdred.exe (Windows, latest)) and double-click it. Nothing else to install: Node, the game, the physics engine and Cloudflare's tunnel are all inside. It starts the server, prints a temporary public link to share (a Cloudflare quick tunnel, reopened if it drops), and opens the game in your browser at `http://localhost:8080`. Saves (ships, ranks, the dev token) are kept in `%LOCALAPPDATA%\notdred\data` across versions; close the window to stop hosting. The file isn't signed, so Windows SmartScreen may warn the first time: **More info → Run anyway**.
+
+Every push to `main` that changes the game rebuilds it (`.github/workflows/windows-exe.yml`: Visual Studio builds the physics engine from `native/binding.gyp`, `scripts/build-exe.cjs` packs a Node single executable application, and `scripts/exe/smoke.cjs` tests the server, joining a ship and the public link before publishing). Options, as environment variables: `PORT`, `DEV_TOKEN`, `NOTDRED_NO_TUNNEL=1`, `NOTDRED_NO_BROWSER=1`.
+
 ## One-line setup on a new machine
 
 On any Linux or macOS machine (Windows: inside WSL), this installs what's missing, downloads the code and starts the server with a temporary public link:
