@@ -47,7 +47,6 @@ function zsStep(dt){clock+=dt;
  for(const i of worldLoot)i.grace=Math.max(0,(i.grace||0)-dt);mergeTouchingCargo(worldLoot,world);
  if(isCombatZone()){bindTarget(null);tickBotRespawn(dt);}
  world.step(dt,8,3);
- for(const f of fleet.values()){const v=f.body.getLinearVelocity();if(v.length()>60){v.mul(60/v.length());f.body.setLinearVelocity(v);}}
  if(isCombatZone()){
   // Each bot hunts the nearest ship (bots ignore ships parked on a portal; see BOT_RULES).
   if(!botsPaused)for(const bot of allBots()){const f=zsNearest(bot.body.getPosition());bindTarget(f);if(!f){bot.body.applyForceToCenter(V(0,0),false);continue;}botThink(bot,dt,nearPortal(f.body.getPosition(),BOT_RULES.portalKeepout));}
