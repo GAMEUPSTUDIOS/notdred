@@ -20,6 +20,8 @@ let shipNoclip=false;
 function devToggles(m){if(!piloting&&m.noclip){if(!m.noclipMask){m.noclipMask=[];for(let f=player.getFixtureList();f;f=f.getNext()){m.noclipMask.push(f.getFilterMaskBits());f.setFilterData({groupIndex:f.getFilterGroupIndex(),categoryBits:f.getFilterCategoryBits(),maskBits:0});}}
   player.setGravityScale(0);climbing=false;const fast=keys.shift?2:1,s=12*fast;player.setLinearVelocity(V(((keys.d||keys.arrowright)?1:0)-((keys.a||keys.arrowleft)?1:0),((keys.s||keys.arrowdown)?1:0)-((keys.w||keys.arrowup||keys[' '])?1:0)).mul(s));player.setAwake(true);}
  else if(m.noclipMask){let k=0;for(let f=player.getFixtureList();f;f=f.getNext())f.setFilterData({groupIndex:f.getFilterGroupIndex(),categoryBits:f.getFilterCategoryBits(),maskBits:m.noclipMask[k++]??0xffff});m.noclipMask=null;if(!piloting)player.setGravityScale(1);}}
+// The fabricator a crafting/loading action is for: the one named (its window is open) when it's in reach, else the nearest.
+function fabFor(msg){if(typeof msg.fab==='string'){for(const t of terrain.values())if(t.id===msg.fab&&fabReach(t))return t;}return nearFab();}
 let crashNextTick=false; // admin-only test hook: proves the server restores a ship after a simulation error
 function serverCrewStep(dt){if(crashNextTick){crashNextTick=false;throw Error('Injected test crash');}storeCrew();for(const m of crew.values()){bindCrew(m.id);actor=m;if(Date.now()-m.inputAt>500){keys={};pusherHeld=false;}ladderCooldown=Math.max(0,ladderCooldown-dt);if(m.sandbox&&buildJob)buildJob.elapsed=buildJob.duration;tickBuild(dt);if(pusherHeld&&tool==='pusher'&&!piloting)pushAt(localMouse(),dt);stepController(dt);devToggles(m);storeCrew();}actor=null;}
 function serverCrewAfterStep(){for(const m of crew.values()){bindCrew(m.id);if(!piloting){if(!finiteVec(player.getPosition())||!finiteVec(player.getLinearVelocity()))recover();else clampSpeed(player,SAFETY.maxCrewSpeed);const p=localPlayer();/* noclip flight may leave the hull */if(!m.noclip)player.setTransform(V(clamp(p.x,bounds.l+.75,bounds.r-.75),clamp(p.y,bounds.t+1.13,bounds.b-1.13)),0);}storeCrew();}}
@@ -57,10 +59,10 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  else if(a==='select'&&Number.isInteger(msg.slot)&&msg.slot>=0&&msg.slot<5)selectSlot(msg.slot);
  else if(a==='interact')interact();else if(a==='edit')edit();else if(a==='remove')secondaryAt(cursorCell());else if(a==='rotate')rotateSelection();else if(a==='helm')setTool('helm');else if(a==='drop')dropItem(!!msg.half);else if(a==='portal')usePortal();
  else if(a==='moveStack'&&[msg.from,msg.to].every(n=>Number.isInteger(n)&&n>=0&&n<5))moveStack(msg.from,msg.to,!!msg.half);
- else if(a==='craft'&&recipeNeeds(msg.item)&&Number.isInteger(msg.count)&&msg.count>=1&&msg.count<=8){activeFab=nearFab();if(activeFab)craft(msg.item,msg.count);}
- else if(a==='material'&&TYPES.includes(msg.item)){activeFab=nearFab();if(activeFab)transferMaterial(msg.item,!!msg.eject);}
- else if(a==='clearQueue'){activeFab=nearFab();if(activeFab)clearQueue();}
- else if(a==='repeat'){activeFab=nearFab();if(activeFab)activeFab.repeat=!!msg.value;}
+ else if(a==='craft'&&recipeNeeds(msg.item)&&Number.isInteger(msg.count)&&msg.count>=1&&msg.count<=8){activeFab=fabFor(msg);if(activeFab)craft(msg.item,msg.count);}
+ else if(a==='material'&&TYPES.includes(msg.item)){activeFab=fabFor(msg);if(activeFab)transferMaterial(msg.item,!!msg.eject);}
+ else if(a==='clearQueue'){activeFab=fabFor(msg);if(activeFab)clearQueue();}
+ else if(a==='repeat'){activeFab=fabFor(msg);if(activeFab)activeFab.repeat=!!msg.value;}
  else if(a==='door'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='door'&&setDoorAccess(t,msg.access))toast('Door: '+({captain:'captain only',crew:'crew and captain',guest:'everyone'})[msg.access]+'.');}
  else if(a==='spawnrank'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='spawn'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&setSpawnRank(t,msg.rank))toast('Spawn point: '+({captain:'captain',crew:'crew',guest:'guests'})[msg.rank]+' spawn here.');}
  else if(a==='sign'&&msg.cell&&Number.isInteger(msg.cell.x)&&Number.isInteger(msg.cell.y)){const t=terrainAt(msg.cell);if(t?.type==='sign'&&P.Vec2.distance(localPlayer(),V(t.x,t.y))<8){t.text=cleanSign(msg.text);}}
