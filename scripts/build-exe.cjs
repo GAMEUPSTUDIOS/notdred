@@ -15,6 +15,8 @@ if(!fs.existsSync(physics))throw Error('No native physics module at '+physics+' 
 const files=[];
 function walk(dir,skip=()=>false){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(skip(p))continue;if(e.isDirectory())walk(p,skip);else files.push({src:p,path:path.relative(root,p).split(path.sep).join('/')});}}
 walk('dist',p=>/source\.zip$/.test(p));walk('server');walk('node_modules/ws');walk('node_modules/fflate');
+// Classic mode's renderer (node-canvas, with its own libraries) when it's installed; without it classic mode says so.
+if(fs.existsSync('node_modules/canvas/build/Release'))walk('node_modules/canvas',p=>/[\\/](src|prebuilds)$/.test(p)||/\.(cc|h|gyp|md)$/.test(p));else console.warn('node-canvas is not installed: the executable will have no classic mode.');
 files.push({src:'package.json',path:'package.json'},{src:physics,path:'build/physics.node'});
 if(cloudflared)files.push({src:cloudflared,path:'bin/'+(win?'cloudflared.exe':'cloudflared'),exec:true});
 else console.warn('No --cloudflared given: the executable will use a cloudflared on PATH (or have no public link).');

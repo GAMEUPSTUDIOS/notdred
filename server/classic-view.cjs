@@ -54,7 +54,7 @@ function viewFactory(root){const dist=path.join(root,'dist'),compiled=new Map();
      const m=currentMission();return {ship:shipName,zone:zoneDef().name,blurb:zoneDef().blurb,hp:Math.round(shipHP),maxHp:shipMaxHP(),critical:shipHP<=0&&isCombatZone()?Math.ceil(RETURN_SECONDS-criticalFor):0,piloting,rank:netRank,captain:netCaptain,
       slots:slots.map((t,i)=>t?{type:t,name:NAMES[t]||t,count:stackCounts[i]}:null),selected,crew:netState.crew.map(c=>({name:c.name,rank:c.rank||'guest'})),
       mission:m.active?'Mission: '+zoneDef(m.active).name+' · closes in '+missionClock(m.endsIn):'Next mission: '+zoneDef(MISSIONS.rotation[(m.index||0)%MISSIONS.rotation.length]).name+' in '+missionClock(m.nextIn),fab};})()`);},
-   craft(item,count){s.__i=item;s.__n=count;run('if(activeFab)craft(__i,__n)');},
+   craft(item,count){s.__i=item;s.__n=count;run('if(activeFab)craft(__i,__n)');},rename(name){s.__nm=String(name||'');run('netAction("rename",{name:__nm})');},
    insert(){run('if(activeFab&&TYPES.includes(tool))transferMaterial(tool)');},
    closeFab(){run("el('craft').close();activeFab=null;");},
    dispose(){for(const t of timers){clearTimeout(t);clearInterval(t);}timers.clear();try{run('netActive=false;');}catch{}}};}

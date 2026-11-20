@@ -35,13 +35,15 @@ function createClassic({onConnection,root}){
    toServer(obj){session.ws.emit('message',typeof obj==='string'?obj:JSON.stringify(obj));},
    close(){if(!sessions.has(id))return;sessions.delete(id);try{session.ws.close();}catch{}for(const w of session.waiters.splice(0))w(null);worker.terminate().catch(()=>{});}};
   worker.on('message',m=>{if(m.t==='out')session.ws.emit('message',m.str);
-   else if(m.t==='frame'){session.latest={seq:m.seq,buf:Buffer.from(m.buf)};session.frameMs=session.frameMs*.9+m.ms*.1;for(const w of session.waiters.splice(0))w(session.latest);}
+   else if(m.t==='frame'){session.latest={seq:m.seq,buf:Buffer.from(m.buf)};session.frameMs=session.frameMs*.9+m.ms*.1;/* one waiting request per new frame: the page keeps several in flight, and each gets its own frame */const w=session.waiters.shift();if(w){session.served=m.seq;w(session.latest);}}
    else if(m.t==='status')session.status=m.st;
    else if(m.t==='error')console.error('Classic view error:',m.message);});
   worker.on('error',e=>{console.error('Classic worker failed:',e.message);session.close();});
   session.ws=new ClassicSocket(session);sessions.set(id,session);onConnection(session.ws);return session;}
  // The newest frame this player hasn't seen yet, waiting up to `ms` for one.
- function nextFrame(s,ms){if(s.latest&&s.latest.seq>s.served)return Promise.resolve(s.latest);return new Promise(res=>{const t=setTimeout(()=>{const i=s.waiters.indexOf(done);if(i>=0)s.waiters.splice(i,1);res(s.latest);},ms);function done(f){clearTimeout(t);res(f);}s.waiters.push(done);});}
+ // The page keeps 2–3 frame requests in flight (so its frame rate isn't capped at one picture per round trip); each
+ // gets a different, newer frame, handed out in order.
+ function nextFrame(s,ms){if(s.latest&&s.latest.seq>s.served){s.served=s.latest.seq;return Promise.resolve(s.latest);}return new Promise(res=>{const t=setTimeout(()=>{const i=s.waiters.indexOf(done);if(i>=0)s.waiters.splice(i,1);res(s.latest);},ms);function done(f){clearTimeout(t);res(f);}s.waiters.push(done);});}
  const sweep=setInterval(()=>{const now=Date.now();for(const s of [...sessions.values()])if(now-s.last>SESSION_IDLE_MS)s.close();},5000);sweep.unref?.();
 
  // ---- HTTP -----------------------------------------------------------------------------------------------------------
@@ -58,7 +60,9 @@ function createClassic({onConnection,root}){
     const t=Date.now();const wait=()=>{if(s.welcome)return js(res,{session:s.id,token:s.welcome.token,admin:!!s.welcome.admin,rooms:s.welcome.rooms});if(Date.now()-t>6000)return js(res,{error:'The server did not answer.'});setTimeout(wait,20);};return wait();}
    const s=sessions.get(q.get('s')||'');if(!s)return op==='frame'?reply(res,410,'Session ended'):js(res,{error:'Your classic session has ended. Reload the page.',ended:true});s.last=Date.now();
    if(op==='send'){let m;try{m=JSON.parse(q.get('m')||'');}catch{return js(res,{error:'Bad message'});}
-    if(!m||typeof m!=='object'||!['create','join','leave','list','chat','comms','leaderboard','rename','delete','motd'].includes(m.type))return js(res,{error:'Not allowed'});s.toServer(m);return js(res,{ok:true});}
+    if(!m||typeof m!=='object'||!['create','join','leave','list','chat','comms','leaderboard','delete','motd','crew','shipsettings','rank','kick','ban','votekick','privacy','newinvite'].includes(m.type))return js(res,{error:'Not allowed'});s.toServer(m);return js(res,{ok:true});}
+   // Renaming is a game action, sent by the player's own headless client (it numbers the actions).
+   if(op==='rename'){s.post({t:'rename',name:String(q.get('name')||'').slice(0,40)});return js(res,{ok:true});}
    if(op==='key'){s.post({t:'key',type:q.get('d')==='1'?'keydown':'keyup',key:String(q.get('k')||'').slice(0,12),shift:q.get('sh')==='1',repeat:q.get('r')==='1'});return js(res,{ok:true});}
    if(op==='click'){const w=num(q.get('w'),160,1280,640),h=num(q.get('h'),120,960,400);s.post({t:'mouse',x:num(q.get('x'),0,w,0),y:num(q.get('y'),0,h,0),button:q.get('b')==='2'?2:0,w,h});return js(res,{ok:true});}
    if(op==='craft'){s.post({t:'craft',item:String(q.get('item')||''),n:num(q.get('n'),1,8,1)});return js(res,{ok:true});}
@@ -67,7 +71,7 @@ function createClassic({onConnection,root}){
    if(op==='poll'){return js(res,{messages:s.queue.splice(0),status:s.status,renderMs:Math.round(s.frameMs)});}
    if(op==='frame'){const w=num(q.get('w'),160,1280,640),h=num(q.get('h'),120,960,400),z=num(q.get('z'),4,64,24),quality=num(q.get('q'),.3,.9,.6);
     s.post({t:'want',w,h,z,q:quality});
-    nextFrame(s,s.latest?250:4000).then(f=>{if(!f)return reply(res,503,'No picture yet');s.served=f.seq;res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':f.buf.length,'Cache-Control':'no-cache, no-store','Pragma':'no-cache','Expires':'0'});res.end(f.buf);});return;}
+    nextFrame(s,s.latest?250:4000).then(f=>{if(!f)return reply(res,503,'No picture yet');res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':f.buf.length,'Cache-Control':'no-cache, no-store','Pragma':'no-cache','Expires':'0'});res.end(f.buf);});return;}
    if(op==='quit'){s.close();return js(res,{ok:true});}
    return reply(res,404,'Not found');
   }catch(e){return js(res,{error:String(e.message).slice(0,180)});}}

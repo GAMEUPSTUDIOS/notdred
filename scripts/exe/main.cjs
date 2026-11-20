@@ -39,7 +39,9 @@ console.log(`
 
 // The game server, in this process: players arriving through any Cloudflare quick-tunnel link or the GitHub Pages copy
 // of the page are allowed.
-Object.assign(process.env,{DATA_DIR:DATA,PORT:String(PORT),HOST:process.env.HOST||'127.0.0.1',ALLOWED_ORIGINS:[process.env.ALLOWED_ORIGINS,'https://*.trycloudflare.com','https://gameupstudios.github.io'].filter(Boolean).join(',')});
+// It also listens on the home network, so old computers in the house can play in classic mode (Internet Explorer 5/6
+// can't use the https Cloudflare link).
+Object.assign(process.env,{DATA_DIR:DATA,PORT:String(PORT),HOST:process.env.HOST||'0.0.0.0',ALLOWED_ORIGINS:[process.env.ALLOWED_ORIGINS,'https://*.trycloudflare.com','https://gameupstudios.github.io'].filter(Boolean).join(',')});
 const serverFile=path.join(app.dir,'server','server.cjs');
 if(!fs.existsSync(serverFile))fatal('the game files are missing from '+app.dir);
 process.argv=[process.argv[0],serverFile,'--port',String(PORT)];
@@ -55,13 +57,15 @@ function openBrowser(url){if(process.env.NOTDRED_NO_BROWSER==='1')return;try{con
 function cloudflaredPath(){const own=path.join(app.dir,'bin',win?'cloudflared.exe':'cloudflared');return fs.existsSync(own)?own:'cloudflared';}
 
 let links=0,attempt=0;
-function banner(url){const again=links++>0;console.log(`
+const lanURLs=()=>{const out=[];for(const list of Object.values(os.networkInterfaces()))for(const a of list||[])if(a.family==='IPv4'&&!a.internal)out.push(`http://${a.address}:${PORT}/classic`);return out;};
+function banner(url){const again=links++>0,lan=lanURLs();console.log(`
   ┌─────────────────────────────────────────────────────────────────
   │  ${again?'Reconnected — NEW public link':'Game is live (public, temporary)'}:  ${url}
   │  Share this link. Players choose Connect, then create or join a ship.
   │  The link changes each time notdred starts: players paste their player code
   │  (main menu → Account) to keep their ranks and ships.
-  │  On this computer: http://localhost:${PORT}
+  │  On this computer: http://localhost:${PORT}${lan.length?`
+  │  Old computers on your home network (classic mode, Internet Explorer 5+): ${lan.join('  or  ')}`:''}
   │  Stop hosting: close this window (or Ctrl+C).
   └─────────────────────────────────────────────────────────────────
 `);}

@@ -21,7 +21,7 @@ parentPort.on('message',m=>{try{
  else if(m.t==='key')view.key(m.type,m.key,m.shift,m.repeat);
  else if(m.t==='mouse')view.mouse(m.x,m.y,m.button,m.w,m.h);
  else if(m.t==='craft')view.craft(m.item,m.n);
- else if(m.t==='insert')view.insert();
+ else if(m.t==='insert')view.insert();else if(m.t==='rename')view.rename(m.name);
  else if(m.t==='closefab')view.closeFab();
 }catch(e){parentPort.postMessage({t:'error',message:String(e.message)});}});
 parentPort.postMessage({t:'ready'});
