@@ -386,6 +386,14 @@ On any Linux or macOS machine (Windows: inside WSL), this installs what's missin
 curl -fsSL https://gameupstudios.github.io/notdred/install.sh | bash
 ```
 
+On **Windows 10/11**, in PowerShell:
+
+```
+irm https://gameupstudios.github.io/notdred/install.ps1 | iex
+```
+
+It runs the game inside WSL (Windows' built-in Linux): it installs WSL with Ubuntu if needed (then asks you to restart if Windows wants to, open Ubuntu once to pick a Linux username and password, and run the command again), and then does the same setup as below. A GitHub sign-in made on Windows is handed to WSL so you sign in once. The game is also at `http://localhost:8080` on that PC. Options: `$env:NOTDRED_LOCAL='1'` or `$env:DEV_TOKEN='…'` before the command.
+
 The repository is private, so the first run asks you to sign in to GitHub once (it shows a code to approve in the browser), and it may ask for your password to install system packages (git, a C++ compiler, the GitHub CLI). Node.js 22 goes into `~/.nvm`, the code into `~/notdred`. Run the same command again to update and restart. `NOTDRED_LOCAL=1` serves on `http://localhost:8080` without a public link; `DEV_TOKEN=…` sets your dev-menu token. The script (`dist/install.sh`, published with the play page) contains no game code.
 
 ## Temporary public test link

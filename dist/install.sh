@@ -79,6 +79,8 @@ if ! have gh; then
   elif have apk; then $SUDO apk add github-cli < "$TTY"
   else die "install the GitHub CLI (https://cli.github.com), then run this again."; fi
 fi
+# A token handed over from Windows (install.ps1) becomes this machine's saved GitHub login.
+if [ -n "${GH_TOKEN:-}" ] && ! env -u GH_TOKEN gh auth status > /dev/null 2>&1; then printf '%s' "$GH_TOKEN" | env -u GH_TOKEN gh auth login --hostname github.com --git-protocol https --with-token > /dev/null 2>&1 || true; fi
 if ! gh auth status > /dev/null 2>&1; then
   say "Sign in to GitHub (an account that can see $REPO). Copy the code it shows, press Enter, and approve it in the browser."
   gh auth login --hostname github.com --git-protocol https --web < "$TTY"
