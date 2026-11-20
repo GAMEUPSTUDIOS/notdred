@@ -27,4 +27,14 @@ for(const [type,knocked] of [['ammo',false],['punch',true]]){sim.api.zsPlaceShip
 const own=JSON.parse(JSON.stringify(A.game.run('snapshotOwn("Ac",snapshotShared())')));assert.ok(own.kick&&own.kick.n>=1,'crew snapshot carries the knock');
 for(const [type,sign] of [['ammo',0],['punch',1],['yank',-1]]){const vx=Number(sim.run(`(()=>{const b=allBots().find(b=>b.species==="green");globalThis._b=b;b.body.setLinearVelocity(V(0,0));const q=b.body.getPosition();zsFire("A",[{type:"${type}",p:{x:q.x-12,y:q.y},v:{x:90,y:0},life:2,maxLife:2,bounces:0}]);return 0;})()`));
  step(10);const v=Number(sim.run('_b.body.getLinearVelocity().x'));if(sign>0)assert.ok(v>15,'punch shoves a bot ('+v.toFixed(1)+')');else if(sign<0)assert.ok(v<-10,'yank pulls a bot ('+v.toFixed(1)+')');else assert.ok(Math.abs(v)<5,'standard ammo barely moves a bot');}
+// Slug ammo: heavy, very slow, mines rock in two; breaker still breaks a tile in one and has its own icon.
+{const era=require('../dist/modules/era.js'),S=era.AMMO.slug,hit=(S.mine*era.WORLD_DAMAGE_SCALE);
+ assert.ok(S&&S.damage>=4*era.AMMO.ammo.damage&&S.speed<era.AMMO.ammo.speed/2,'slug hits hard and flies slowly');
+ assert.ok(hit<era.WORLD_TILE_HP.rock&&2*hit>=era.WORLD_TILE_HP.rock,'slug mines a rock tile in exactly two hits');
+ assert.ok(era.AMMO.breaker.rockBreaker,'breaker kept: one hit per tile');
+ assert.ok(era.FABRICATORS?Object.values(era.FABRICATORS).some(f=>f.recipes?.includes('slug')):/'breaker', 'slug'/.test(fs.readFileSync('dist/modules/era.js','utf8')),'munitions fabricator makes slug');
+ const g=fs.readFileSync('dist/game.js','utf8');assert.ok(/slug:\['item-ammo_slug'\]/.test(g)&&/breaker:\['item-ammo_b_slug'\]/.test(g)&&fs.existsSync('dist/sprites/item-ammo_slug.png')&&fs.existsSync('dist/sprites/item-ammo_b_slug.png'),'slug and breaker icons from the game art');
+ assert.ok(/'breaker','slug','trash'/.test(g)&&/'breaker','slug','trash'/.test(fs.readFileSync('dist/modules/save-codec.js','utf8')),'slug is an item that saves');
+ const bot=JSON.parse(sim.run(`(()=>{const b=allBots().find(b=>b.species==="green");const q=b.body.getPosition();const hp=b.hp;zsFire("A",[{type:"slug",p:{x:q.x-12,y:q.y},v:{x:38,y:0},life:4.5,maxLife:4.5,bounces:0}]);globalThis._s=b;return JSON.stringify({hp});})()`));
+ step(40);assert.equal(bot.hp-Number(sim.run('_s.hp')),S.damage,'a slug round hits a bot for its full damage');}
 console.log('v58 PASS');process.exit(0);

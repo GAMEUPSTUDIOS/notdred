@@ -232,6 +232,9 @@ Neither is ever switched on by itself; the page only offers them.
 - **Punch ammo** shoves bots hard (about 30 m/s; they slide ~15 m), **yank** pulls them back toward you. Standard ammo barely moves them.
 - **Green bots' punch shots knock your ship** again where you can feel it: the shared zone already pushed the hull, but the pilot's screen eased into it over a second. Each knock is now sent to the crew and the pilot's ship takes it at once.
 
+- **No rubber banding at top speed (pilot):** the pilot's predicted ship eases out small disagreements with the server (a brush with rock or a bot it saw a little differently) instead of snapping back, with more slack the faster it goes; and dev *ship noclip* now applies on the pilot's screen too (before, the predicted hull kept hitting rock and snapping forward every few frames).
+- **Slug ammo:** a heavy, very slow shell (400 damage, 38 m/s, 4.5 s range) that mines a rock tile in **two** hits. Made at the munitions fabricator (2 iron + 2 explosives → 2 rounds), reload 2× like the other special ammo. **Breaker ammo stays** (one hit per tile) and now has its own icon from the game art (`item-ammo_b_slug`); slug uses `item-ammo_slug`.
+
 ## Building permissions and doors (v39)
 - **Every rank can build and dismantle tiles** (captain, crew and guests). Guests still cannot take the helm, use fabricators or machines, set hatches or use portals. Dismantling needs a wrench (crafted for 4 iron at a fabricator; only the captain spawns with one).
 - **Doors** are built by the captain only. They're crafted for 4 iron at the starter or engineering fabricator and stand 1 wide × 2 tall, drawn with the original door frame and panel art.

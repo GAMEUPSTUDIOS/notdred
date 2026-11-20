@@ -13,7 +13,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
 
 // --- Ammo ---------------------------------------------------------------------------------------------------
 {const A=era.AMMO;
- assert.deepEqual(Object.keys(A).sort(),['ammo','breaker','flak','punch','scatter','sniper','trash','yank'].sort(),'every ℵ30 ammo type');
+ assert.deepEqual(Object.keys(A).sort(),['ammo','breaker','flak','punch','scatter','slug','sniper','trash','yank'].sort(),'every ℵ30 ammo type, plus slug');
  for(const t of Object.keys(A)){assert.ok(era.FABRICATORS.munitions.recipes.includes(t),'munitions makes '+t);assert.ok(run(`TYPES.includes("${t}")&&!!NAMES.${t}`));}
  assert.equal(A.sniper.damage,150,'ℵ28++ sniper 150');assert.equal(A.breaker.damage,2*A.ammo.mine,'ℵ14 breaker twice the standard round (100; standard now does half per round, twice as often)');
  // Trash is free and crafts one; breaker crafts one; the rest craft four.
