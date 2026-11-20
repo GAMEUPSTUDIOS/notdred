@@ -26,5 +26,7 @@ assert.ok(/if\(m\.type==='eval'\)\{[^]*?if\(!ws\.admin\)/.test(srv),'live code n
 assert.ok(/drawDevShapes\('world'\)/.test(game)&&/drawDevShapes\('ship'\)/.test(game),'shapes drawn in the world and inside the ship');
 assert.ok(/function netNoclip\(on\)/.test(net)&&/if\(netNoclip\(predictCrew\)\)inside\.step\(pdt\)/.test(net),'the page predicts noclip flight');
 assert.ok(/if\(!piloting&&!\(typeof currentCrew!=='undefined'&&currentCrew\?\.noclip\)\)\{const p=localPlayer\(\),x=clamp/.test(game),'noclip flight may leave the hull (no clamp)');
-console.log('PASS: dev live code (ship, zone, screen; devTick; devDraw for everyone, cleaned; time limits) and smooth dev noclip.');
+// Frozen bullets: a connected page never fires (manned turrets used to make stuck local copies of the rounds).
+const cb=fs.readFileSync('dist/modules/combat.js','utf8');assert.ok(/function controllerFire\(\)\{if\(typeof netActive!=='undefined'&&netActive\)return;/.test(cb)&&/function fireRound\(type,at,dir\)\{if\(typeof netActive!=='undefined'&&netActive\)return;/.test(cb)&&/if\(!\(typeof netActive!=='undefined'&&netActive\)\)for\(const s of shots\)drawProjectile/.test(game),'connected pages don\'t fire or draw local rounds');
+console.log('PASS: no frozen bullets; dev live code (ship, zone, screen; devTick; devDraw for everyone, cleaned; time limits) and smooth dev noclip.');
 process.exit(0);

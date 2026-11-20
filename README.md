@@ -233,6 +233,7 @@ Neither is ever switched on by itself; the page only offers them.
   - `devDraw = [{type:'circle', x, y, r, color}, {type:'rect', x, y, w, h, fill:true}, {type:'line', x, y, x2, y2, width}, {type:'text', x, y, text, size}]` is drawn for everyone aboard — in tile coordinates inside the ship by default, or `space:'world'` (the default for zone code). *Clear drawings* empties it and stops `devTick`.
   - Each run is stopped after 1 s and each `devTick` after 100 ms, so a mistake can't freeze the server. Every run is logged in the server window.
 - **Dev noclip no longer rubber-bands.** The page now predicts noclip flight the way the server does it (no collisions or gravity, WASD/Space at 12 m/s, Shift for double), and the server no longer pulls a noclipping player back inside the hull every tick. Flying through the ship and out: 0 snaps (was 12).
+- **Fix: frozen bullets.** Holding fire on a manned auto/burst turret or a turret controller also ran the firing code in your own page, which made copies of the rounds that never moved (only the server moves rounds) and took ammo off the turret on your screen only. A connected page now never fires or draws rounds of its own; the server's rounds are the only ones shown.
 - **Finch I has no PvP** (ships still fight bots there); Canary, Sparrow I and The Pits do. Silver (iron) bots: Finch II only, as before.
 
 ## No reaching through walls; fabricators set items down (v62)
