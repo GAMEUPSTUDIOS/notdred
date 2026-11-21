@@ -1,6 +1,6 @@
 # notdred.io one-line setup for Windows 10/11 (PowerShell):
 #
-#   irm https://gameupstudios.github.io/notdred/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.ps1 | iex
 #
 # The game server runs inside WSL (Windows' built-in Linux), using the same setup as the Mac/Linux script
 # (install.sh): it installs what's missing, signs in to GitHub once (the repository is private), downloads or updates
@@ -33,7 +33,7 @@ if (-not ($distros -contains $Distro)) {
 # From this site; if the site isn't published, from the private repository through the GitHub CLI on Windows.
 Say 'Getting the setup script'
 $script = $null
-try { $r = Invoke-WebRequest -UseBasicParsing -ErrorAction Stop 'https://gameupstudios.github.io/notdred/install.sh'; $script = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()); if ($script -notmatch '^#!') { $script = $null } } catch {}
+try { $r = Invoke-WebRequest -UseBasicParsing -ErrorAction Stop 'https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh'; $script = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()); if ($script -notmatch '^#!') { $script = $null } } catch {}
 if (-not $script) {
   if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Stop-Setup 'install the GitHub CLI from https://cli.github.com, then run this again.' }
