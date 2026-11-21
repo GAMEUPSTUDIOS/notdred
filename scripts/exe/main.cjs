@@ -33,7 +33,7 @@ function unpack(){const {head,data}=bundleHead(),buf=bundleBuf;
  return {dir,label:head.label};}
 
 // ---- Updates ---------------------------------------------------------------------------------------------------------
-// The repository is private, so GitHub only answers with a token: GH_TOKEN, the one saved in <home>\github-token.txt,
+// A public repository needs no token. A private one only answers with a token: GH_TOKEN, the one saved in <home>\github-token.txt,
 // the GitHub CLI's (gh auth token), or one pasted here the first time (a fine-grained token with read-only access to
 // the repository's Contents). No token, no internet or any error: this copy just runs.
 const REPO='GAMEUPSTUDIOS/notdred',API=process.env.NOTDRED_UPDATE_API||'https://api.github.com',ASSET=win?'notdred.exe':'notdred';
@@ -43,6 +43,8 @@ function ghToken(){try{return require('node:child_process').execFileSync('gh',['
 async function gh(url,token,ms=8000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{signal:c.signal,headers:{Accept:'application/vnd.github+json','User-Agent':'notdred-exe',...(token?{Authorization:'Bearer '+token}:{})}});}finally{clearTimeout(t);}}
 async function latestRelease(){
  const saved=(()=>{try{return fs.readFileSync(tokenFile,'utf8').trim();}catch{return '';}})();
+ // A public repository answers without a token; a private one needs one.
+ {const r=await gh(`${API}/repos/${REPO}/releases/tags/windows-latest`,'');if(r.ok)return {release:await r.json(),token:''};}
  for(const token of [process.env.GH_TOKEN||process.env.GITHUB_TOKEN,saved,ghToken()].filter(Boolean)){const r=await gh(`${API}/repos/${REPO}/releases/tags/windows-latest`,token);if(r.ok)return {release:await r.json(),token};if(r.status!==401&&r.status!==403&&r.status!==404)throw Error('GitHub answered '+r.status);if(token===saved)try{fs.rmSync(tokenFile);}catch{}}
  if(!process.stdin.isTTY||fs.existsSync(path.join(home,'no-updates')))return null;
  console.log(`  notdred can update itself each time it starts, but the game's GitHub repository is private, so it needs a
@@ -64,7 +66,7 @@ async function update(current){
  // If this folder can't be written to, the new copy is kept in <home> instead.
  let target=process.execPath;try{fs.accessSync(path.dirname(target),fs.constants.W_OK);}catch{target=path.join(home,ASSET);}
  const part=target+'.download';
- try{const r=await fetch(`${API}/repos/${REPO}/releases/assets/${asset.id}`,{headers:{Accept:'application/octet-stream','User-Agent':'notdred-exe',Authorization:'Bearer '+token}});if(!r.ok||!r.body)throw Error('GitHub answered '+r.status);
+ try{const r=await fetch(`${API}/repos/${REPO}/releases/assets/${asset.id}`,{headers:{Accept:'application/octet-stream','User-Agent':'notdred-exe',...(token?{Authorization:'Bearer '+token}:{})}});if(!r.ok||!r.body)throw Error('GitHub answered '+r.status);
   const out=fs.createWriteStream(part);let got=0,shown=0;for await(const chunk of r.body){got+=chunk.length;if(!out.write(chunk))await new Promise(res=>out.once('drain',res));const pct=Math.floor(got/asset.size*10);if(pct>shown){shown=pct;process.stdout.write('  '+pct*10+'%');}}
   await new Promise((res,rej)=>out.end(e=>e?rej(e):res()));process.stdout.write('\n');if(got!==asset.size)throw Error('download incomplete');
   if(target===process.execPath){fs.renameSync(target,target+'.old');try{fs.renameSync(part,target);}catch(e){fs.renameSync(target+'.old',target);throw e;}}else fs.renameSync(part,target);

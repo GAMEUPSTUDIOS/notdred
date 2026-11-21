@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# notdred.io one-line setup for a brand-new Linux or macOS machine:
+# notdred.io one-line setup for a Linux server or desktop (and macOS):
 #
-#   curl -fsSL https://gameupstudios.github.io/notdred/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh | bash
 #
-# Installs what's missing (git, a C++ compiler, Node.js 22, GitHub CLI), signs you in to GitHub once (the
-# repository is private: a browser code login), downloads or updates the code in ~/notdred, builds it, and
-# starts the server with a temporary public https link (Cloudflare quick tunnel, no account needed).
-# Run the same command again later to update and restart. Options (environment variables):
+# Installs what's missing (git, a C++ compiler, Node.js 22), downloads or updates the code in ~/notdred, builds it
+# (including the native C++ physics), and starts the server with a temporary public https link (Cloudflare quick
+# tunnel, no account needed). Run the same command again later to update and restart.
+# Options (environment variables, before "bash"):
+#   NOTDRED_SERVICE=1         Linux servers/VPS: install it as a system service instead — starts at boot, restarts if it
+#                             stops, updates itself every night at 04:30 — and print where to find the link and token
+#   NOTDRED_LOCAL=1           no Cloudflare link: serve on port 8080 only (with NOTDRED_SERVICE: on every network
+#                             interface, for a VPS you reach by its own address or put behind your own proxy)
 #   NOTDRED_DIR=~/somewhere   where the code goes (default ~/notdred)
-#   GH_TOKEN=github_pat_…     a GitHub token that can read the repository (skips the GitHub CLI sign-in)
-#   NOTDRED_LOCAL=1           no public link: serve on http://localhost:8080 only
-#   DEV_TOKEN=secret          your dev-menu token (default: a random one, printed at start)
+#   DEV_TOKEN=secret          your dev-menu token (default: a random one; the service keeps it in /etc/notdred.env)
+#   GH_TOKEN=github_pat_…     only if the repository is private: a token that can read it
 # This file holds no game code; it is safe to publish.
 set -euo pipefail
 REPO="${NOTDRED_REPO:-GAMEUPSTUDIOS/notdred}"
@@ -59,8 +62,8 @@ if ! node_ok; then
 fi
 say "Node.js $(node -v)"
 
-# ---- 3. GitHub sign-in (the repository is private) -----------------------------------------------------------------
-# Skipped when this machine can already read the repository (saved Git credentials, or an earlier run).
+# ---- 3. GitHub sign-in (only when the repository is private) ---------------------------------------------------------
+# Skipped when this machine can already read the repository (it's public, saved Git credentials, or an earlier run).
 URL="https://github.com/$REPO.git"
 can_read(){ GIT_TERMINAL_PROMPT=0 git ${AUTH[@]+"${AUTH[@]}"} ls-remote "$URL" HEAD > /dev/null 2>&1; }
 # A GitHub token in GH_TOKEN (a fine-grained one with read-only Contents access to the repository is enough) is used
@@ -112,6 +115,67 @@ npm ci --no-audit --no-fund
 npm run build:native
 
 # ---- 6. Run --------------------------------------------------------------------------------------------------------
+# As a system service (Linux with systemd): notdred.service runs the game (with the public link unless NOTDRED_LOCAL=1)
+# and restarts it if it stops; notdred-update.timer pulls, rebuilds and restarts it every night.
+if [ "${NOTDRED_SERVICE:-0}" = 1 ]; then
+  [ "$OS" = Linux ] && have systemctl || die "NOTDRED_SERVICE=1 needs Linux with systemd."
+  NODE="$(command -v node)"; NODEBIN="$(dirname "$NODE")"; ME="$(id -un)"
+  if [ ! -f /etc/notdred.env ]; then
+    T="${DEV_TOKEN:-$(node -e "console.log(require('crypto').randomBytes(12).toString('hex'))")}"
+    printf 'DEV_TOKEN=%s\nPORT=8080\nDATA_DIR=%s/data\n' "$T" "$DIR" | $SUDO tee /etc/notdred.env > /dev/null; $SUDO chmod 600 /etc/notdred.env
+  fi
+  if [ "${NOTDRED_LOCAL:-0}" = 1 ]; then RUN="$NODE server/server.cjs"; EXTRA="Environment=HOST=0.0.0.0"; else RUN="$NODE scripts/temp-host.cjs"; EXTRA=""; fi
+  $SUDO tee /etc/systemd/system/notdred.service > /dev/null <<UNIT
+[Unit]
+Description=notdred.io game server
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=$ME
+WorkingDirectory=$DIR
+EnvironmentFile=/etc/notdred.env
+Environment=PATH=$NODEBIN:/usr/local/bin:/usr/bin:/bin
+$EXTRA
+ExecStart=$RUN
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
+UNIT
+  $SUDO tee /etc/systemd/system/notdred-update.service > /dev/null <<UNIT
+[Unit]
+Description=Update notdred.io (pull, rebuild, restart)
+[Service]
+Type=oneshot
+User=$ME
+WorkingDirectory=$DIR
+Environment=PATH=$NODEBIN:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/sh -c 'git fetch origin && git reset --hard origin/main && npm ci --no-audit --no-fund && npm run build:native'
+ExecStartPost=+/bin/systemctl restart notdred
+UNIT
+  $SUDO tee /etc/systemd/system/notdred-update.timer > /dev/null <<UNIT
+[Unit]
+Description=Update notdred.io every night
+[Timer]
+OnCalendar=*-*-* 04:30
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl enable --now notdred-update.timer > /dev/null
+  $SUDO systemctl enable notdred > /dev/null; $SUDO systemctl restart notdred
+  say "notdred is running as a service (starts at boot, restarts if it stops, updates nightly at 04:30)"
+  echo "    Dev menu token:  $($SUDO sed -n 's/^DEV_TOKEN=//p' /etc/notdred.env)"
+  if [ "${NOTDRED_LOCAL:-0}" = 1 ]; then echo "    Play at:         http://<this server's address>:8080   (open port 8080 in the firewall)"
+  else
+    printf '    Public link:     waiting for Cloudflare'; L=""; for i in $(seq 1 45); do L="$($SUDO journalctl -u notdred --since '-3 min' --no-pager -o cat 2>/dev/null | grep -o 'https://[-a-z0-9]*\.trycloudflare\.com' | tail -1 || true)"; [ -n "$L" ] && break; printf '.'; sleep 2; done; echo
+    echo "    Public link:     ${L:-not yet — run: sudo journalctl -u notdred | grep trycloudflare}"
+    echo "    (The link changes when the service restarts; for a permanent address use your own domain with a named Cloudflare tunnel.)"
+  fi
+  echo "    Logs:            sudo journalctl -u notdred -f      Stop: sudo systemctl stop notdred      Update now: sudo systemctl start notdred-update"
+  exit 0
+fi
 if [ "${NOTDRED_LOCAL:-0}" = 1 ]; then
   say "Starting the server on http://localhost:8080  (Ctrl+C stops it)"
   [ -n "${DEV_TOKEN:-}" ] || export DEV_TOKEN="$(node -e "console.log(require('crypto').randomBytes(9).toString('hex'))")"
