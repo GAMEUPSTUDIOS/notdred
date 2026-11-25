@@ -130,8 +130,8 @@ const AMMO = {
   scatter: {name: 'Scatter ammo',  damage: 32,  speed: 80,  life: .75, pellets: 5, spread: .2, decay: .35, trail: '#f0d050', head: '#ffe2c4'},
   flak:    {name: 'Flak ammo',     damage: 70,  speed: 70,  life: 1.6, burst: {after: .45, count: 5, damage: 21, spread: 1.1, speed: 55, life: .5}, trail: '#c8643a', head: '#ffffff'},
   sniper:  {name: 'Sniper ammo',   damage: 150, speed: 140, life: 2.4, bounces: 2, trail: '#d83848', head: '#e8fbff'},
-  punch:   {name: 'Punch ammo',    damage: 100,  speed: 90,  life: 2,   impulse: 1, trail: '#60d070', head: '#ffd2f0'},
-  yank:    {name: 'Yank ammo',     damage: 100,  speed: 90,  life: 2,   impulse: -1, trail: '#d080e0', head: '#dcd6ff'},
+  punch:   {name: 'Punch ammo',    damage: 100,  speed: 90,  life: 2,   impulse: 2, trail: '#60d070', head: '#ffd2f0'},
+  yank:    {name: 'Yank ammo',     damage: 100,  speed: 90,  life: 2,   impulse: -2, trail: '#d080e0', head: '#dcd6ff'},
   breaker: {name: 'Breaker ammo',  damage: 200, speed: 110, life: 2,   rockBreaker: true, trail: '#b81c1c', head: '#ffd8cc'},
   slug:    {name: 'Slug ammo',     damage: 400, mine: 250, speed: 38, life: 4.5, trail: '#d0a010', head: '#f0d2a8'},
   trash:   {name: 'Trash ammo',    damage: 100, speed: 75,  life: 1.2, itemDecay: 45, trail: '#a0a0a0', head: '#d9e0bf'}
@@ -165,10 +165,18 @@ function isAmmo(type) { return Object.hasOwn(AMMO, type); }
 // Shield boosters charge after use: the booster is spent at once and heals boosterAmount when its charge completes
 // (boosterChargeSeconds, a bar under the shield bar shows it); one can charge at a time. Charge time is a PLACEHOLDER.
 const SHIELDS = {base: 1000, perExpansion: 100, regenPerSecond: 15, regenDelay: 4, safeZoneMultiplier: 12, boosterAmount: 500, boosterUseSeconds: 2, boosterChargeSeconds: 6};
-// With shields down, hits damage tiles (100 HP each) by this fraction of the projectile's damage.
+// With shields down, a hit takes this fraction of the projectile's damage off the tile, turret or thruster it strikes.
 const TILE_DAMAGE_FACTOR = .24;
+// Each placed block and machine has its own health (by item type; anything not listed has 100). A block takes ~17
+// standard rounds once the shields are down; a light ladder about half that, a fabricator over twice as many.
+const ITEM_HP = {block: 100, wedge: 100, storage: 100, glass: 40, ladder: 50, walkway: 60, walkway_wedge: 60, net: 40, sign: 30, paint: 30,
+  hatch: 80, starter_hatch: 80, loader: 80, pusher_block: 80, door: 120, spawn: 80, comms: 150, ejector: 120, shredder: 150, shredder_gold: 200,
+  recycler: 250, anchor: 300, fab_starter: 250, fab_machine: 250, fab_engineering: 250, fab_munitions: 250,
+  thruster: 80, starter: 80, turret: 120, starter_rc: 120, turret_burst: 150, turret_auto: 150, turret_controller: 80};
+function itemMaxHp(type) { return ITEM_HP[type] || 100; }
 // Critical ships (shields at 0):
-//   ℵ26 "Starter items will never be destroyed or ejected by bullet damage."
+//   (ℵ26 made starter items immune to bullets; here they take damage and break like everything else. Loose starter
+//   stacks are still never blown out of the hull.)
 //   ℵ28 "Bullets hitting critical ships now have a chance to shrink them." — hull tiles never break; a hit on
 //        the hull may instead shrink that side by one row (shrinkChance is a PLACEHOLDER).
 //   ℵ32 "Ships will no-longer shrink under 8x8 ship tiles when shot." (hull included: (r−l+1) × (b−t+1)).
@@ -193,7 +201,7 @@ const BOT_RULES = {volleyGap: .22, arrivalGrace: 4, portalKeepout: 28};         
 const BOT_TYPES = {
   // v33: red raiders are much bigger; green bots are huge and very tough.
   red:   {label: 'Red raider',  hp: 500,  radius: 4.2, ranged: true,  shots: 3, spread: .03, interval: 9, damage: 35, shotType: 'ammo',  thrust: 7, minimap: '#ff4c4c', tag: 'RED', body: '#e04e4e'},
-  green: {label: 'Green scout', hp: 5000, radius: 7.5, ranged: true,  shots: 3, spread: .03, interval: 7, damage: 20, shotType: 'punch', thrust: 7, minimap: '#63ff30', tag: 'GRN', body: '#55d54f'},
+  green: {label: 'Green scout', hp: 5000, radius: 7.5, ranged: true,  shots: 3, spread: .03, interval: 7, damage: 20, shotType: 'punch', thrust: 16, minimap: '#63ff30', tag: 'GRN', body: '#55d54f'},
   // ℵ15: Sparrow's new variants do contact damage instead of shooting.
   // saw: the radius is the saw's outer rim (bot_saw.png, 156px) and the body is drawn at 126/156 inside it,
   // so the physics circle is the teeth. ℵ15 blue bots damage ships by ramming.
@@ -324,4 +332,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {GOLDEN_SHREDDER_CHANCE, SHRED_COOLDOWN, ZONE_SCALE, SHIP_CLEARANCE, THRUSTER_FORCE, PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {ITEM_HP, itemMaxHp, GOLDEN_SHREDDER_CHANCE, SHRED_COOLDOWN, ZONE_SCALE, SHIP_CLEARANCE, THRUSTER_FORCE, PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};

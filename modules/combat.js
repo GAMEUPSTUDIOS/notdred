@@ -191,11 +191,19 @@ function breakShipTile(tile,kind){
 // A round flying through a critical ship (in the shared zone each round is moved step by step): this step's path,
 // ship-local a→b, is walked and the first tile on it is struck — the round stops there. Returns {hit:{x,y}} (where it
 // stopped), {exit:true} once it has left the hull on the far side, or null while it's still crossing open space.
+// The ship's shape in the zone is its extents (hull plus turrets and thrusters), so a round can enter up to a couple of
+// tiles outside the hull: it only counts as gone once it is outside the extents. Turrets and thrusters on its path are
+// struck like tiles (they used to be skipped, and a round entering beside one passed through the whole ship).
+// Turrets and thrusters sit outside the hull: a round strikes one only beyond the hull's outer face (their hit boxes
+// reach into the wall, and a round sliding along inside the wall near a corner thruster used to 'hit' it).
+function outsideHull(p){return p.x<bounds.l-.5||p.x>bounds.r+.5||p.y<bounds.t-.5||p.y>bounds.b+.5;}
 function pierceShip(amount,a,b){if(!Number.isFinite(amount)||amount<=0||!a||!b)return {exit:true};const onHull=c=>c.x===bounds.l||c.x===bounds.r||c.y===bounds.t||c.y===bounds.b;
- const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),n=Math.max(1,Math.ceil(len/.1));let last=null;
- for(let i=0;i<=n;i++){const p={x:a.x+dx*i/n,y:a.y+dy*i/n};if(p.x<bounds.l-.6||p.x>bounds.r+.6||p.y<bounds.t-.6||p.y>bounds.b+.6){critCargoHit(V((a.x+p.x)/2,(a.y+p.y)/2));return {exit:true};}
+ const e=shipExtents(),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),n=Math.max(1,Math.ceil(len/.1));let last=null;
+ for(let i=0;i<=n;i++){const p={x:a.x+dx*i/n,y:a.y+dy*i/n};if(p.x<e.l-.6||p.x>e.r+.6||p.y<e.t-.6||p.y>e.b+.6){critCargoHit(V((a.x+p.x)/2,(a.y+p.y)/2));return {exit:true};}
+  const m=outsideHull(p)&&mountHit(p);if(m){hitShipTile(m,'mount',amount);return {hit:p};}
+  if(p.x<bounds.l-.6||p.x>bounds.r+.6||p.y<bounds.t-.6||p.y>bounds.b+.6)continue;
   const c={x:Math.round(p.x),y:Math.round(p.y)},k=key(c.x,c.y);if(k===last||onHull(c))continue;last=k;const target=blocks.get(k)||terrainAt(c);if(!target)continue;
-  critCargoHit(V(p.x,p.y));if(!isStarterTile(target)){target.hp=Math.max(0,(target.hp??100)-amount*TILE_DAMAGE_FACTOR);target.hitAt=clock;if(target.hp===0)breakShipTile(target,'tile');}return {hit:p};}
+  critCargoHit(V(p.x,p.y));hitShipTile(target,'tile',amount);return {hit:p};}
  return null;}
 // Where a round enters a critical hull: the hull may lose that side's outer row (ℵ28), never below 8×8 (ℵ32).
 function hullEntryHit(point){lastShieldHit=clock;const entry={x:clamp(Math.round(point.x),bounds.l,bounds.r),y:clamp(Math.round(point.y),bounds.t,bounds.b)};const onHull=c=>c.x===bounds.l||c.x===bounds.r||c.y===bounds.t||c.y===bounds.b;
@@ -217,9 +225,12 @@ function damageShip(amount,point=V(0,0),dir=null){
   // An attachment sitting where the shot lands takes it first.
   const m=mountHit({x:point.x,y:point.y});if(m){target=m;kind='mount';}
   // Otherwise walk the shot through the ship until it meets a tile or leaves the hull.
-  const span=(bounds.r-bounds.l)+(bounds.b-bounds.t)+4;let last=null;
+  // The round may meet the ship at the outer edge of its turrets and thrusters, outside the hull itself.
+  const e=shipExtents(),span=(e.r-e.l)+(e.b-e.t)+4;let last=null;
   for(let s=0;!target&&s<=span;s+=.1){const p={x:point.x+d.x*s,y:point.y+d.y*s},c={x:Math.round(p.x),y:Math.round(p.y)};
-   if(p.x<bounds.l-.6||p.x>bounds.r+.6||p.y<bounds.t-.6||p.y>bounds.b+.6){if(s>1){critCargoHit(V(point.x+d.x*s/2,point.y+d.y*s/2));return {exit:V(p.x,p.y)};}continue;}
+   if(p.x<e.l-.6||p.x>e.r+.6||p.y<e.t-.6||p.y>e.b+.6){if(s>1){critCargoHit(V(point.x+d.x*s/2,point.y+d.y*s/2));return {exit:V(p.x,p.y)};}continue;}
+   const m=outsideHull(p)&&mountHit(p);if(m){target=m;kind='mount';break;}
+   if(p.x<bounds.l-.6||p.x>bounds.r+.6||p.y<bounds.t-.6||p.y>bounds.b+.6)continue;
    const k=key(c.x,c.y);if(k===last)continue;last=k;if(onHull(c))continue;
    target=blocks.get(k)||terrainAt(c)||null;}
  }else{
@@ -227,11 +238,14 @@ function damageShip(amount,point=V(0,0),dir=null){
   candidates.sort((a,b)=>P.Vec2.distance(a.p,point)-P.Vec2.distance(b.p,point));if(candidates[0]){target=candidates[0].t;kind=candidates[0].kind;}}
  critCargoHit(dir&&target?(kind==='mount'?mountPoint(target):V(target.x,target.y)):point);
  if(!target)return null;
- // Starter items are never destroyed or ejected by bullets (ℵ26); they soak the hit.
- if(isStarterTile(target))return null;
- target.hp=Math.max(0,(target.hp??100)-amount*TILE_DAMAGE_FACTOR);target.hitAt=clock;if(target.hp===0)breakShipTile(target,kind);
+ hitShipTile(target,kind,amount);
  return null;
 }
+// What a placed piece is, for its health (era.js ITEM_HP): mounts by their item, fabricators by their kind.
+function tileItemType(t,kind){return kind==='mount'?mountItem(t):t.type==='fabricator'?FABRICATORS[fabKind(t)]?.item||'fab_starter':t.type||'block';}
+// A hit on one block, machine or mount: its health (kept as a percentage of its own maximum) drops by the round's tile
+// damage over that maximum; at 0 it breaks off and drops as loot with whatever it held. Starter items too.
+function hitShipTile(target,kind,amount){if(!target||!(amount>0))return;const max=itemMaxHp(tileItemType(target,kind));target.hp=Math.max(0,(target.hp??100)-amount*TILE_DAMAGE_FACTOR/max*100);target.hitAt=clock;if(target.hp<=0)breakShipTile(target,kind);}
 // Remove one row/column from `side`. Tiles in the strip are broken off (ejected as loot), loose cargo and crew
 // are moved inward. Refused (no shrink) at the 8×8 minimum or when the strip holds the helm or a starter item.
 function shrinkFromDamage(side){const nb={...bounds},prop={left:'l',right:'r',top:'t',bottom:'b'}[side],dir=['left','top'].includes(side)?1:-1;nb[prop]+=dir;
