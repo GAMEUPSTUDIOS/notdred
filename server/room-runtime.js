@@ -107,7 +107,7 @@ function syncGhosts(list,selfId){const seen=new Set();const me=ship.getPosition(
  for(const [id,h] of ghosts)if(!seen.has(id)){world.destroyBody(h.body);ghosts.delete(id);}}
 function remoteMined(id){if(!removeRock(id))return false;zoneData[zone].mined.push(id);return true;}
 let lastHitNotice=-99;
-function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp){ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);noteKick(dir.x*5*imp,dir.y*5*imp);}damageShip(amount,V(localPoint.x,localPoint.y),dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y)?V(dir.x,dir.y):null);if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll(shooter?'Under fire from '+shooter+'!':'Hit by your own shot!');}}
+function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp){ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);noteKick(dir.x*5*imp,dir.y*5*imp);}const okDir=dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y);let out=null;if(shipHP<=0&&okDir){hullEntryHit(V(localPoint.x,localPoint.y));out={pierce:true};}else damageShip(amount,V(localPoint.x,localPoint.y),okDir?V(dir.x,dir.y):null);if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll(shooter?'Under fire from '+shooter+'!':'Hit by your own shot!');}return out;}
 function serverRegenerate(seed){zonePlaced=true;snapshotZone();const old=zoneData[zone];zoneData[zone]={seed,mined:[],loot:old.loot||[]};originalSetupZone(true);ghosts=new Map();updateShipMass();save(true);toastAll(zoneDef().name+' regenerated with a new layout. Your ship is at the entry portal.');}
 function missionNotice(text){toastAll(text);}
 function setRegenTimer(t,reset){const st=zoneData[zone];if(!st)return;st.regenIn=t??undefined;st.resetIn=reset??undefined;}
@@ -116,6 +116,7 @@ const DELTA_MIN=1;
 // the whole ship), and each member's own part (their slots, notices, mined-tile catch-up, and the tile/machine lists
 // or deltas they haven't seen yet). Own fields come after the shared ones in the message, so they win.
 const OWN_FIELDS=['stacks','slots','inventory','blocks','terrain','mounts','zoneData'];
+let botPass=0;
 function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k of OWN_FIELDS)delete data[k];data.clock=clock;data.devDraw=cleanDevShapes(devDraw);
  data.crew=[...crew.values()].map(c=>({id:c.id,name:c.name,rank:c.rank||'guest',p:c.player.getPosition(),v:c.player.getLinearVelocity(),facing:c.facing,piloting:c.piloting,tool:c.tool,climbing:c.climbing,selected:c.selected,held:c.slots[c.selected],beam:handBeam(c.pusherVisual)}));
  data.velocity=ship.getLinearVelocity();data.mission=currentMission();data.criticalFor=+criticalFor.toFixed(2);data.effects=effects;
@@ -126,6 +127,8 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
 
  // Bots go out compact — [species, index, hp, x, y, vx, vy] to 0.01 m — about 40 bytes each instead of ~95 (a combat
  // zone's bots were half of every update). The page (network.js) and snapshot() unpack them.
+ /* Bots far from this ship (beyond ~140 m, well past the screen and turret range) go out twice a second; near ones every
+  snapshot. botsAll marks a full list; the page keeps far bots from the last one meanwhile. */botPass=(botPass+1)%10;{const sp=ship.getPosition(),all=botPass===0;data.botsAll=all;if(!all)data.bots=(data.bots||[]).filter(b=>Math.abs(b.p.x-sp.x)<140&&Math.abs(b.p.y-sp.y)<140);}
  data.bots=(data.bots||[]).map(b=>[b.color,b.index,Math.round(b.hp),Math.round(b.p.x*100)/100,Math.round(b.p.y*100)/100,Math.round(b.v.x*100)/100,Math.round(b.v.y*100)/100]);
  const json=JSON.stringify(data,roundReplacer);
  // Tiles, machines and turrets: encoded once here; each member gets the whole list or only what changed for them.
@@ -144,7 +147,7 @@ function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
  return JSON.parse(JSON.stringify(own,roundReplacer));}
 // One member's whole snapshot (tests, tools). The server uses snapshotPass, which shares the common part.
 function unpackBots(list){return (list||[]).map(a=>Array.isArray(a)?{color:a[0],index:a[1],hp:a[2],p:{x:a[3],y:a[4]},v:{x:a[5],y:a[6]}}:a);}
-function snapshot(id){if(!crew.has(id))return null;const sh=snapshotShared(),own=snapshotOwn(id,sh),out=Object.assign(JSON.parse(sh.json),own);out.bots=unpackBots(out.bots);return out;}
+function snapshot(id){if(!crew.has(id))return null;/* a one-off snapshot (classic mode, tests) always has every bot */botPass=-1;const sh=snapshotShared(),own=snapshotOwn(id,sh),out=Object.assign(JSON.parse(sh.json),own);out.bots=unpackBots(out.bots);return out;}
 // Every listed member's snapshot for one pass: the shared part as encoded text, plus each member's own part.
 function snapshotPass(ids){const sh=snapshotShared();return {shared:sh.json,own:ids.map(id=>snapshotOwn(id,sh))};}
 function durableState(){storeCrew();const s=JSON.parse(JSON.stringify(state()));s.stacks=[null,null,null,null,null];s.inventory={};s.slots=[null,null,null,null,null];for(const m of crew.values())for(let i=0;i<5;i++)if(m.slots[i]&&m.slots[i]!=='wrench')s.items.push({type:m.slots[i],count:m.stackCounts[i],...m.player.getPosition()});return s;}
@@ -163,7 +166,10 @@ const shipKick={n:0,x:0,y:0};function noteKick(dx,dy){shipKick.n++;shipKick.x+=d
 // Settings windows (doors, signs, paint, spawn points) only apply within reach and not through a solid tile.
 function tileInReach(t){return P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&!buildBlocked({x:t.x,y:t.y},t.f);}
 function setPose(x,y,vx,vy,kx,ky){if(kx||ky)noteKick(kx,ky);if(docked)return;ship.setTransform(V(x,y),0);ship.setLinearVelocity(V(vx,vy));}
-function zoneDamage(amount,lp,dir,ammo){const r=damageShip(amount,V(lp.x,lp.y),dir?V(dir.x,dir.y):null);return r?.exit?{x:r.exit.x,y:r.exit.y}:null;}
+// A zone round meets this hull. Shields up: they take it. Critical: the round goes in ({pierce:true}) and the zone
+// moves it on through the ship, asking zonePierce each step what it runs into.
+function zoneDamage(amount,lp,dir,ammo){if(shipHP<=0&&dir&&amount>0){hullEntryHit(V(lp.x,lp.y));return {pierce:true};}const r=damageShip(amount,V(lp.x,lp.y),dir?V(dir.x,dir.y):null);return r?.exit?{x:r.exit.x,y:r.exit.y}:null;}
+function zonePierce(amount,a,b){return pierceShip(amount,V(a.x,a.y),V(b.x,b.y));}
 function addZoneScore(n){addScore(n);}
 if(attachedToZone){hookShipBody();
  // Shots leave for the zone the tick they are fired; bots, bot bullets and loose loot exist only in the zone.
@@ -172,3 +178,22 @@ if(attachedToZone){hookShipBody();
  addWorldLoot=function(type,p,count,velocity=V(0,0)){zoneLink.addLoot(type,p.x,p.y,count,velocity.x,velocity.y);return {type,count,grace:0,body:{setAngularVelocity(){},setAngle(){},getPosition:()=>V(p.x,p.y)}};};
  claimWorldLoot=function(hp,allow){return zoneLink.claim(hp.x,hp.y,allow);};
  worldLoot=[];}
+
+// ---- Dev live code helpers (ship) ---------------------------------------------------------------------------------
+// Short names for testing; `help()` lists them. They act as the crew member who ran the code (`me`).
+function help(){return 'tp(x, y) move yourself · here() where you and the ship are · give(type, n=16) · clearInv() · crit() shields to 0 · heal() · '+
+ 'fillArea(x0, y0, x1, y1, type="block") place tiles · clearArea(x0, y0, x1, y1) remove tiles · fly(x, y) put the ship there · zoneTo(id) · '+
+ 'spawnAt(type, x, y, n=16) loose stack · hurt(x, y, hp) set a tile\'s health · log(...) · after/every(sec, fn) · cancel(id?) · timers() · devTick=dt=>… · devDraw=[…] · '+
+ 'globals: ship, blocks, terrain, items, boxes, mounts, bounds, crew, inventory, shipHP, zone';}
+function tp(x,y){player.setTransform(V(+x,+y),0);player.setLinearVelocity(V(0,0));player.setAwake(true);return here();}
+function here(){const p=player.getPosition(),s=ship.getPosition();return {you:{x:+p.x.toFixed(2),y:+p.y.toFixed(2),cell:{x:Math.round(p.x),y:Math.round(p.y)}},ship:{x:+s.x.toFixed(1),y:+s.y.toFixed(1),zone},bounds};}
+function give(type,n=16){if(!TYPES.includes(type))throw Error('Unknown item '+type+'. Items: '+TYPES.join(', '));giveItem(type,n);return slots.map((s,i)=>s?s+'×'+stackCounts[i]:null);}
+function clearInv(){slots=[null,null,null,null,null];stackCounts=[0,0,0,0,0];return 'emptied';}
+function crit(){shipHP=0;lastShieldHit=clock;return 'critical';}
+function heal(){shipHP=shipMaxHP();for(const t of [...blocks.values(),...terrain.values(),...mounts])t.hp=100;return 'healed';}
+function fillArea(x0,y0,x1,y1,type="block"){let n=0;for(let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++)for(let y=Math.min(y0,y1);y<=Math.max(y0,y1);y++){if(x<=bounds.l||x>=bounds.r||y<=bounds.t||y>=bounds.b||blocks.get(key(x,y))||terrainAt({x,y}))continue;if(type==='block')addBlock(x,y);else addTerrain(type,x,y,buildRotation);n++;}return n+' placed';}
+function clearArea(x0,y0,x1,y1){let n=0;for(let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++)for(let y=Math.min(y0,y1);y<=Math.max(y0,y1);y++){const b=blocks.get(key(x,y));if(b){interior.destroyFixture(b.f);blocks.delete(key(x,y));n++;continue;}const t=terrainAt({x,y});if(t&&t.type!=='fabricator'){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);terrain.delete(t.key||key(t.x,t.y));n++;}}return n+' removed';}
+function fly(x,y){docked=null;ship.setType('dynamic');ship.setFixedRotation(true);ship.setTransform(V(+x,+y),0);ship.setLinearVelocity(V(0,0));zonePlaced=true;return {x,y};}
+function zoneTo(id){if(!ZONES[id])throw Error('Zones: '+Object.keys(ZONES).join(', '));snapshotZone();zone=id;setupZone(true);return 'now in '+ZONES[id].name;}
+function spawnAt(type,x,y,n=16){if(!TYPES.includes(type))throw Error('Unknown item '+type);spawnItem(type,V(+x,+y),V(0,0),n);return items.length+' loose stacks';}
+function hurt(x,y,hp){const t=blocks.get(key(x,y))||terrainAt({x,y});if(!t)throw Error('No tile at '+x+','+y);t.hp=Math.max(0,Math.min(100,+hp));t.hitAt=clock;return t.type||'block';}

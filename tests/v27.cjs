@@ -119,8 +119,8 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  // The walkways under it can't be pulled out while it stands there, and it never moves.
  run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0);giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
  run('selectSlot(slots.indexOf("wrench"));player.setTransform(V(3,1.8),0);removeAt({x:0,y:1});removeAt({x:1,y:1})');ticks(90);
- assert.ok(run('terrain.has(key(0,1))&&terrain.has(key(1,1))'),'support removal refused');assert.ok(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return Math.abs(f.body.getPosition().y+1.5-.5)<.05;})()'),'it stays put');
- console.log('PASS: fabricators placed where they fit, resting on walkways, fixed in place (supports protected); the helm stands on walkways, not floating.');}
+ assert.ok(run('!terrain.has(key(0,1))'),'the support can be removed');assert.ok(run('![...terrain.values()].some(t=>t.kind==="munitions")&&(items.some(i=>i.type==="fab_munitions")||slots.includes("fab_munitions"))'),'the fabricator on it comes down as its packaged item');
+ console.log('PASS: fabricators placed where they fit, resting on walkways, fixed in place (removing a support drops the machine as its item); the helm stands on walkways, not floating.');}
 
 // --- Loader pickup hotbox: thrown, dropped nearby, or falling through --------------------------------------------------
 {const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';

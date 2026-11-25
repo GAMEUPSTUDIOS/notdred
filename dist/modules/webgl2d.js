@@ -19,8 +19,13 @@ function createGL2D(canvas){
   vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,verts.byteLength,gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(locP);gl.vertexAttribPointer(locP,2,gl.FLOAT,false,32,0);gl.enableVertexAttribArray(locUV);gl.vertexAttribPointer(locUV,2,gl.FLOAT,false,32,8);gl.enableVertexAttribArray(locC);gl.vertexAttribPointer(locC,4,gl.FLOAT,false,32,16);
   gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.disable(gl.DEPTH_TEST);
-  white=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,white);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));texParams();
+  /* sprites share 2048² atlas pages (one draw call for most of a frame instead of one per texture switch); the plain
+   white that fills, lines and shapes use sits in page 0 too, so they batch with the sprites */atlas=[];newPage();{const p=atlas[0];gl.bindTexture(gl.TEXTURE_2D,p.tex);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,4,4,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(64).fill(255));p.x=6;p.rowH=6;white=p.tex;}
   textures=new WeakMap();textCache.clear();curTex=null;curBlend='source-over';curClip=null;vw=vh=-1;}
+ const AT=2048,WU=2/AT,WV=2/AT;let atlas=[];
+ function newPage(){const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,AT,AT,0,gl.RGBA,gl.UNSIGNED_BYTE,null);texParams();const p={tex,x:0,y:0,rowH:0};atlas.push(p);curTex=tex;return p;}
+ // Shelf packing with a 1-pixel gutter; null when nothing fits (then the image gets its own texture).
+ function atlasSpot(w,h){if(w>512||h>512||atlas.length>6&&false)return null;for(const p of atlas){if(p.x+w+1>AT){p.x=0;p.y+=p.rowH+1;p.rowH=0;}if(p.y+h+1<=AT){const spot={p,x:p.x,y:p.y};p.x+=w+1;p.rowH=Math.max(p.rowH,h);return spot;}}if(atlas.length>=8)return null;const p=newPage();p.x=w+1;p.rowH=h;return {p,x:0,y:0};}
  function texParams(){gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
  // ---- batch ------------------------------------------------------------------------------------------------------
  const MAXV=6*8192,verts=new Float32Array(MAXV*8);let nv=0,curTex=null,curBlend='source-over',curClip=null,vw=-1,vh=-1,lost=false;
@@ -35,7 +40,7 @@ function createGL2D(canvas){
  function quad(tex,x0,y0,x1,y1,u0,v0,u1,v1,c){use(tex,S.comp,S.clip);const m=S.m;
   const ax=m[0]*x0+m[2]*y0+m[4],ay=m[1]*x0+m[3]*y0+m[5],bx=m[0]*x1+m[2]*y0+m[4],by=m[1]*x1+m[3]*y0+m[5],cx=m[0]*x1+m[2]*y1+m[4],cy=m[1]*x1+m[3]*y1+m[5],dx=m[0]*x0+m[2]*y1+m[4],dy=m[1]*x0+m[3]*y1+m[5];
   vert(ax,ay,u0,v0,c);vert(bx,by,u1,v0,c);vert(cx,cy,u1,v1,c);vert(ax,ay,u0,v0,c);vert(cx,cy,u1,v1,c);vert(dx,dy,u0,v1,c);}
- function tri(ax,ay,bx,by,cx,cy,c){use(white,S.comp,S.clip);vert(ax,ay,.5,.5,c);vert(bx,by,.5,.5,c);vert(cx,cy,.5,.5,c);}
+ function tri(ax,ay,bx,by,cx,cy,c){use(white,S.comp,S.clip);vert(ax,ay,WU,WV,c);vert(bx,by,WU,WV,c);vert(cx,cy,WU,WV,c);}
  // ---- colours ----------------------------------------------------------------------------------------------------
  const colorCache=new Map();let probe=null;
  function parseColor(s){if(typeof s!=='string')return [0,0,0,1];let c=colorCache.get(s);if(c)return c;
@@ -48,9 +53,11 @@ function createGL2D(canvas){
  function paint(style,k=1){const c=parseColor(style),a=c[3]*S.alpha,br=S.bright;return [c[0]*a*br*k,c[1]*a*br*k,c[2]*a*br*k,a];}
  function tint(){const a=S.alpha,br=S.bright;return [a*br,a*br,a*br,a];}
  // ---- textures ---------------------------------------------------------------------------------------------------
- function texFor(src){let e=textures.get(src);const w=src.naturalWidth||src.videoWidth||src.width,h=src.naturalHeight||src.videoHeight||src.height;if(!w||!h)return null;
+ function texFor(src,share=true){let e=textures.get(src);const w=src.naturalWidth||src.videoWidth||src.width,h=src.naturalHeight||src.videoHeight||src.height;if(!w||!h)return null;
   if(e&&e.w===w&&e.h===h)return e;
-  flush();if(!e){e={tex:gl.createTexture(),w,h};textures.set(src,e);}else{e.w=w;e.h=h;}
+  flush();const spot=share&&!e?atlasSpot(w,h):null;
+  if(spot){e={tex:spot.p.tex,w,h,u0:spot.x/AT,v0:spot.y/AT,us:w/AT,vs:h/AT,shared:true};textures.set(src,e);gl.bindTexture(gl.TEXTURE_2D,spot.p.tex);curTex=spot.p.tex;try{gl.texSubImage2D(gl.TEXTURE_2D,0,spot.x,spot.y,gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}return e;}
+  if(!e||e.shared){e={tex:gl.createTexture(),w,h,u0:0,v0:0,us:1,vs:1};textures.set(src,e);}else{e.w=w;e.h=h;}
   gl.bindTexture(gl.TEXTURE_2D,e.tex);try{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}texParams();curTex=e.tex;return e;}
  // ---- text: one small canvas per distinct (string, font, colour, outline); least-recently-used ones are dropped ----
  const textCache=new Map(),TEXT_MAX=700;let measureCtx=null;
@@ -63,7 +70,7 @@ function createGL2D(canvas){
   e={canvas:c,w,h,width:mt.width,asc,pad};textCache.set(key,e);
   if(textCache.size>TEXT_MAX){const old=textCache.keys().next().value,o=textCache.get(old);textCache.delete(old);const t=textures.get(o.canvas);if(t){flush();if(curTex===t.tex){gl.bindTexture(gl.TEXTURE_2D,null);curTex=null;}gl.deleteTexture(t.tex);textures.delete(o.canvas);}}
   return e;}
- function drawText(str,x,y,stroke){str=String(str);if(!str)return;const e=textSprite(str,stroke),t=texFor(e.canvas);if(!t)return;
+ function drawText(str,x,y,stroke){str=String(str);if(!str)return;const e=textSprite(str,stroke),t=texFor(e.canvas,false);if(!t)return;
   let ox=0;const al=S.textAlign;if(al==='center')ox=-e.width/2;else if(al==='right'||al==='end')ox=-e.width;
   let oy=0;const bl=S.textBaseline;if(bl==='middle')oy=e.asc/2;else if(bl==='top'||bl==='hanging')oy=e.asc;else if(bl==='bottom')oy=-(e.h-e.asc-2*e.pad);
   const x0=x+ox-e.pad,y0=y+oy-e.asc-e.pad;quad(t.tex,x0,y0,x0+e.w,y0+e.h,0,0,1,1,tint());}
@@ -92,12 +99,12 @@ function createGL2D(canvas){
   get filter(){return S.filter;},set filter(v){S.filter=v;const m=/brightness\(([\d.]+)\)/.exec(v||'');S.bright=m?parseFloat(m[1]):1;},
   get imageSmoothingEnabled(){return S.smoothing;},set imageSmoothingEnabled(v){S.smoothing=!!v;},
   setLineDash(d){S.dash=Array.isArray(d)?d.filter(x=>x>0):[];},getLineDash(){return S.dash.slice();},
-  fillRect(x,y,w,h){quad(white,x,y,x+w,y+h,.5,.5,.5,.5,paint(S.fill));},
-  clearRect(x,y,w,h){const c=S.comp;S.comp='source-over';quad(white,x,y,x+w,y+h,.5,.5,.5,.5,[0,0,0,1]);S.comp=c;},
+  fillRect(x,y,w,h){quad(white,x,y,x+w,y+h,WU,WV,WU,WV,paint(S.fill));},
+  clearRect(x,y,w,h){const c=S.comp;S.comp='source-over';quad(white,x,y,x+w,y+h,WU,WV,WU,WV,[0,0,0,1]);S.comp=c;},
   strokeRect(x,y,w,h){this.beginPath();this.rect(x,y,w,h);this.stroke();},
   drawImage(img,a,b,c,d,e,f,g,h){if(!img)return;const t=texFor(img);if(!t)return;let sx=0,sy=0,sw=t.w,sh=t.h,dx,dy,dw,dh;
    if(e===undefined){dx=a;dy=b;dw=c===undefined?t.w:c;dh=d===undefined?t.h:d;}else{sx=a;sy=b;sw=c;sh=d;dx=e;dy=f;dw=g;dh=h;}
-   quad(t.tex,dx,dy,dx+dw,dy+dh,sx/t.w,sy/t.h,(sx+sw)/t.w,(sy+sh)/t.h,tint());},
+   quad(t.tex,dx,dy,dx+dw,dy+dh,t.u0+sx/t.w*t.us,t.v0+sy/t.h*t.vs,t.u0+(sx+sw)/t.w*t.us,t.v0+(sy+sh)/t.h*t.vs,tint());},
   beginPath(){path=[];cur=null;},moveTo(x,y){cur=[pt(x,y)];path.push(cur);},lineTo(x,y){if(!cur){cur=[];path.push(cur);}cur.push(pt(x,y));},
   closePath(){if(cur&&cur.length){cur.closed=true;const f=cur[0];cur=[f];path.push(cur);}},
   rect(x,y,w,h){const s=[pt(x,y),pt(x+w,y),pt(x+w,y+h),pt(x,y+h)];s.closed=true;path.push(s);cur=null;},

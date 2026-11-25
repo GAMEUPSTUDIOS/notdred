@@ -5,6 +5,15 @@ const native=require('../build/physics.node');let nextWorld=1,nextBody=1;const i
 // loose cargo, resting most of the time — isn't re-sent, and the solver only returns bodies that are awake (or just
 // fell asleep), so a ship's resting piles cost nothing per tick.
 const TYPE={static:0,kinematic:1,dynamic:2};
+// Change tracking, so a tick only walks bodies that changed: every way a body's fixtures change — added, removed, or
+// altered in place (collision filter, sensor flag, material) — bumps that body's __fixVer. Static bodies count too:
+// the collision skin switches a ship's tile boxes off (mask 0) after they're made, and that never reached the native
+// world (it kept colliding with the boxes: seams, hops) for ships built or loaded before the skin pass. Patched once on
+// the shared planck module, before any world exists, so every room and zone context sees it.
+{const planck=require('../dist/vendor/planck.min.js'),bump=b=>{if(b)b.__fixVer=(b.__fixVer|0)+1;};
+ for(const m of ['createFixture','destroyFixture']){const orig=planck.Body.prototype[m];planck.Body.prototype[m]=function(...a){bump(this);return orig.apply(this,a);};}
+ for(const m of ['setFilterData','setSensor','setFriction','setRestitution','setDensity']){const orig=planck.Fixture.prototype[m];if(typeof orig==='function')planck.Fixture.prototype[m]=function(...a){bump(this.getBody?.());return orig.apply(this,a);};}}
+function watchFixtures(){}
 // Shapes as the native side wants them (JSON; sent only for new bodies and when a body's fixtures change).
 function fixtureList(refs){return refs.map(f=>{const s=f.getShape();const entry={shape:s.getType(),density:f.getDensity(),friction:f.getFriction(),restitution:f.getRestitution(),sensor:f.isSensor(),category:f.getFilterCategoryBits(),mask:f.getFilterMaskBits(),group:f.getFilterGroupIndex()};
  if(entry.shape==='circle'){entry.radius=s.m_radius;entry.center=[s.m_p.x,s.m_p.y];}else if(entry.shape==='polygon')entry.vertices=s.m_vertices.map(v=>[v.x,v.y]);else if(entry.shape==='chain'){entry.loop=!!s.m_isLoop;entry.vertices=s.m_vertices.slice(0,s.m_isLoop?s.m_count-1:s.m_count).map(v=>[v.x,v.y]);}else throw Error('Unsupported native shape '+entry.shape);return entry;});}
@@ -14,20 +23,18 @@ function step(world,dt,opts=null){
  const wid=world.__nativeID??=nextWorld++;const map=new Map(),shapes=[],prev=world.__nativeLive||new Set(),now=new Set();let n=0;
  for(let b=world.getBodyList();b;b=b.getNext()){
   let id=ids.get(b);if(!id){id=nextBody++;ids.set(b,id);}map.set(id,b);now.add(id);
-  const type=b.getType(),old=fixtureCache.get(b),refs=[],sig=[];let sameFixtures=!!old;
-  for(let f=b.getFixtureList(),k=0;f;f=f.getNext(),k++){refs.push(f);if(sameFixtures&&old.refs[k]!==f)sameFixtures=false;
-   if(type!=='static'){const o=k*7;sig.push(f.getFilterCategoryBits(),f.getFilterMaskBits(),f.getFilterGroupIndex(),f.isSensor()?1:0,f.getDensity(),f.getFriction(),f.getRestitution());if(sameFixtures)for(let q=o;q<o+7;q++)if(old.sig[q]!==sig[q]){sameFixtures=false;break;}}}
-  if(sameFixtures&&refs.length!==old.refs.length)sameFixtures=false;
-  if(type==='static'&&sameFixtures)continue;
+  const type=b.getType(),old=fixtureCache.get(b),sameFixtures=!!old&&old.ver===(b.__fixVer|0)&&old.head===b.getFixtureList();let refs=null;
+  if(!sameFixtures){refs=[];for(let f=b.getFixtureList();f;f=f.getNext())refs.push(f);}
+  /* an unchanged static body costs nothing (a moved one — a docked hull set in place — is re-sent) */if(type==='static'&&sameFixtures){const L=sent.get(b);if(L){const q=b.getPosition();if(q.x===L.px&&q.y===L.py&&b.getAngle()===L.angle)continue;}}
   const p=b.getPosition(),v=b.getLinearVelocity(),c=b.getLocalCenter(),angle=b.getAngle(),spin=b.getAngularVelocity(),awake=b.isAwake(),fx=b.m_force.x,fy=b.m_force.y,torque=b.m_torque;
   const flags=(b.isActive()?1:0)|(b.isFixedRotation()?2:0)|(b.isBullet()?4:0)|(b.isSleepingAllowed()?8:0)|(awake?16:0),gs=b.getGravityScale(),ld=b.getLinearDamping(),ad=b.getAngularDamping(),mass=b.getMass(),inertia=b.getInertia();
   const L=sent.get(b);
   if(L&&sameFixtures&&!fx&&!fy&&!torque&&p.x===L.px&&p.y===L.py&&v.x===L.vx&&v.y===L.vy&&angle===L.angle&&spin===L.spin&&flags===L.flags&&gs===L.gs&&ld===L.ld&&ad===L.ad&&mass===L.mass&&inertia===L.inertia&&c.x===L.cx&&c.y===L.cy)continue;
-  if(!sameFixtures){shapes.push({id,type:TYPE[type],p:[p.x,p.y],fixtures:fixtureList(refs)});fixtureCache.set(b,{refs,sig});}
+  if(!sameFixtures){shapes.push({id,type:TYPE[type],p:[p.x,p.y],fixtures:fixtureList(refs)});fixtureCache.set(b,{head:b.getFixtureList(),ver:b.__fixVer|0});}
   if((n+1)*REC>recBuf.length){const g=new Float64Array(recBuf.length*2);g.set(recBuf);recBuf=g;}
   const o=n*REC;recBuf[o]=id;recBuf[o+1]=TYPE[type];recBuf[o+2]=p.x;recBuf[o+3]=p.y;recBuf[o+4]=v.x;recBuf[o+5]=v.y;recBuf[o+6]=angle;recBuf[o+7]=spin;recBuf[o+8]=fx;recBuf[o+9]=fy;recBuf[o+10]=torque;
   recBuf[o+11]=gs;recBuf[o+12]=ld;recBuf[o+13]=ad;recBuf[o+14]=mass;recBuf[o+15]=inertia;recBuf[o+16]=c.x;recBuf[o+17]=c.y;recBuf[o+18]=flags;recBuf[o+19]=0;n++;
-  if(type!=='static')sent.set(b,{px:p.x,py:p.y,vx:v.x,vy:v.y,angle,spin,flags,gs,ld,ad,mass,inertia,cx:c.x,cy:c.y});
+  sent.set(b,{px:p.x,py:p.y,vx:v.x,vy:v.y,angle,spin,flags,gs,ld,ad,mass,inertia,cx:c.x,cy:c.y});
  }
  const removed=[];for(const id of prev)if(!now.has(id))removed.push(id);world.__nativeLive=now;
  const structural=shapes.length||removed.length?JSON.stringify({shapes,removed}):'';
@@ -47,8 +54,8 @@ function stepJSON(world,dt,opts=null){
  const wid=world.__nativeID??=nextWorld++;const bodies=[],map=new Map(),live=[];
  for(let b=world.getBodyList();b;b=b.getNext()){
   let id=ids.get(b);if(!id){id=nextBody++;ids.set(b,id);}map.set(id,b);live.push(id);
-  const type=b.getType(),old=fixtureCache.get(b),refs=[],sig=[];let sameFixtures=!!old;
-  for(let f=b.getFixtureList(),k=0;f;f=f.getNext(),k++){refs.push(f);if(sameFixtures&&old.refs[k]!==f)sameFixtures=false;
+  const type=b.getType(),old=fixtureCache.get(b),refs=[],sig=[];let sameFixtures=!!old&&old.ver===(b.__fixVer|0);
+  for(let f=b.getFixtureList(),k=0;f;f=f.getNext(),k++){if(k===0)watchFixtures(f);refs.push(f);if(sameFixtures&&old.refs[k]!==f)sameFixtures=false;
    // Moving bodies: a fixture changed in place (collision filter — doors letting ranks through —, sensor, material) counts too.
    if(type!=='static'){const o=k*7;sig.push(f.getFilterCategoryBits(),f.getFilterMaskBits(),f.getFilterGroupIndex(),f.isSensor()?1:0,f.getDensity(),f.getFriction(),f.getRestitution());if(sameFixtures)for(let q=o;q<o+7;q++)if(old.sig[q]!==sig[q]){sameFixtures=false;break;}}}
   if(sameFixtures&&refs.length!==old.refs.length)sameFixtures=false;
@@ -60,7 +67,7 @@ function stepJSON(world,dt,opts=null){
   const body={id,type:props[0],p:[p.x,p.y],v:[v.x,v.y],angle,spin,force:[fx,fy],torque,gravityScale:props[1],linearDamping:props[2],angularDamping:props[3],mass:props[4],inertia:props[5],center:[c.x,c.y],active:props[8],fixed:props[9],bullet:props[10],allowSleep:props[11],awake};
   if(!sameFixtures){const fixtures=[];
    for(const f of refs){const s=f.getShape();const entry={shape:s.getType(),density:f.getDensity(),friction:f.getFriction(),restitution:f.getRestitution(),sensor:f.isSensor(),category:f.getFilterCategoryBits(),mask:f.getFilterMaskBits(),group:f.getFilterGroupIndex()};if(entry.shape==='circle'){entry.radius=s.m_radius;entry.center=[s.m_p.x,s.m_p.y];}else if(entry.shape==='polygon')entry.vertices=s.m_vertices.map(v=>[v.x,v.y]);else if(entry.shape==='chain'){entry.loop=!!s.m_isLoop;entry.vertices=s.m_vertices.slice(0,s.m_isLoop?s.m_count-1:s.m_count).map(v=>[v.x,v.y]);}else throw Error('Unsupported native shape '+entry.shape);fixtures.push(entry);}
-   body.fixtures=fixtures;fixtureCache.set(b,{refs,sig});}
+   body.fixtures=fixtures;fixtureCache.set(b,{refs,sig,ver:b.__fixVer|0});}
   bodies.push(body);if(type!=='static')sent.set(b,{p:body.p,v:body.v,angle,spin,awake,props});
  }
  const g=world.getGravity(),result=JSON.parse(native.step(JSON.stringify({id:wid,gravity:[g.x,g.y],dt,bodies,live})));

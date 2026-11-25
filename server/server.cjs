@@ -1,5 +1,5 @@
 'use strict';
-const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom,showValue}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
+const http=require('node:http'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom,showValue}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
 const root=path.resolve(__dirname,'..'),dataDir=path.resolve(process.env.DATA_DIR||path.join(root,'data'));fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
 // The dev menu token. Set DEV_TOKEN to choose one; otherwise one is made on first run and kept in data/dev-token.txt
 // so it stays the same across restarts. It is printed every time the server starts.
@@ -7,7 +7,7 @@ if(!process.env.DEV_TOKEN){const f=path.join(dataDir,'dev-token.txt');let t='';t
 if(process.env.DEV_TOKEN.length<12)console.warn('[security] DEV_TOKEN is short ('+process.env.DEV_TOKEN.length+' characters): anyone who guesses it gets the dev menu and live code. Use 12 or more random characters.');
 const cliPort=process.argv.indexOf('--port');const port=Number(process.env.PORT||(cliPort>=0?process.argv[cliPort+1]:8080));
 // Limits. Stored ships are cheap (a file); loaded ships each run two physics worlds and cost CPU.
-const MAX_LOADED=Number(process.env.MAX_LOADED_SHIPS||16),MAX_STORED=500,MAX_OWNED=4,MAX_CREW=8,IDLE_UNLOAD_MS=Number(process.env.IDLE_UNLOAD_MS||60000),SAVE_INTERVAL_MS=Number(process.env.SAVE_INTERVAL_MS||10000),RETURN_MS=Number(process.env.SHIP_RETURN_MS||era.RETURN_SECONDS*1000);
+const MAX_LOADED=Number(process.env.MAX_LOADED_SHIPS||16),MAX_STORED=500,MAX_OWNED=4,MAX_CREW=8,IDLE_UNLOAD_MS=Number(process.env.IDLE_UNLOAD_MS||era.RETURN_SECONDS*1000),SAVE_INTERVAL_MS=Number(process.env.SAVE_INTERVAL_MS||10000),RETURN_MS=Number(process.env.SHIP_RETURN_MS||era.RETURN_SECONDS*1000);
 const rooms=new Map(),sessions=new Map(),clients=new Set(),bus=new ZoneBus({dataDir});const id=()=>crypto.randomBytes(12).toString('hex');
 
 // ---- Ship records ----------------------------------------------------------------------------------------
@@ -56,15 +56,35 @@ function crewReport(r,ws){const online=new Map([...r.members].map(m=>[m.owner,m]
  rows.sort((a,b)=>(b.online-a.online)||(b.owner-a.owner)||(b.playtime-a.playtime));return {type:'crew',ship:info(r).name,captain:isCap(r,ws),rank:rankOf(r,ws),votesNeeded:votesNeeded(r),log:(r.log||[]).slice(-200),crew:rows};}
 // Chat: everyone in the same zone (all ships there) plus your own crew wherever they are. Rate-limited, plain text.
 // Chat stays aboard your own ship; a comms station (ℵ14, "communication with other ships") reaches every ship in the zone.
+// Comms transmissions (per ship): 5 at most, one more every 15 seconds — after five in a row you wait about a minute.
+const TX_MAX=5,TX_REGEN_MS=15000;
+function txNow(r,now=Date.now()){const t=r.tx||(r.tx={n:TX_MAX,t:now});if(t.n>=TX_MAX){t.n=TX_MAX;t.t=now;}else{const gain=Math.floor((now-t.t)/TX_REGEN_MS);if(gain>0){t.n=Math.min(TX_MAX,t.n+gain);t.t=t.n>=TX_MAX?now:t.t+gain*TX_REGEN_MS;}}return t;}
+function txState(r){const now=Date.now(),t=txNow(r,now);return {type:'commsState',n:t.n,max:TX_MAX,regenMs:TX_REGEN_MS,nextMs:t.n>=TX_MAX?0:Math.max(0,TX_REGEN_MS-(now-t.t))};}
+function shipTag(r){return String(r.id||'').slice(0,5).toUpperCase();}
+// Whole-server live code (host token): the rooms, the zone bus and the connections, plus helpers to reach into any
+// ship or zone. Its own context persists between runs, so variables you set stay set.
+let serverCtx=null;
+function serverEval(ws,code){if(!serverCtx){serverCtx=vm.createContext({console,setTimeout,clearTimeout,setInterval,clearInterval,Date,performance,process:{memoryUsage:()=>process.memoryUsage(),uptime:()=>process.uptime(),version:process.version,cpuUsage:()=>process.cpuUsage()},
+  era,rooms,bus,clients,
+  stats:()=>({rooms:rooms.size,loaded:[...rooms.values()].filter(r=>r.game).length,players:clients.size,tickMs:+tickMs.toFixed(2),zones:[...bus.sims.keys()],memoryMB:Math.round(process.memoryUsage().rss/1048576)}),
+  ships:()=>[...rooms.values()].map(r=>({id:r.id,name:info(r).name,zone:zoneOf(r),loaded:!!r.game,crew:[...r.members].map(m=>m.name),lagMs:r.game?.lag?+r.game.lag.ms.toFixed(2):null})),
+  findShip:q=>[...rooms.values()].find(r=>r.id===q||r.id.startsWith(String(q).toLowerCase())||info(r).name.toLowerCase()===String(q).toLowerCase()),
+  inShip:(q,c)=>{const r=serverCtx.findShip(q);if(!r?.game)throw Error('No loaded ship '+q);return r.game.evalCode([...r.members][0]?.uid||null,c);},
+  inZone:(z,c)=>{const sim=bus.sims.get(z);if(!sim)throw Error('Zone '+z+' is not running');return sim.evalCode(c);},
+  say:(text)=>{for(const c of clients)send(c,{type:'chat',from:'Server',ship:'',rank:'captain',text:String(text).slice(0,200),t:Date.now()});return 'sent';},
+  me:null});vm.runInContext('globalThis.help=()=>"stats() · ships() · findShip(nameOrId) · await inShip(nameOrId, code) · await inZone(zoneId, code) · say(text) · rooms, bus, clients, era · log(...) · after/every(sec,fn)"',serverCtx);
+ const tick=setInterval(()=>require('./live-code.cjs').tickTimers(serverCtx),1000/60);tick.unref();}
+ serverCtx.me={name:ws.name,room:ws.room?.id};return require('./live-code.cjs').run(serverCtx,code);}
 function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
  if(comms&&!r.game.run(`commsCheck(${JSON.stringify(ws.uid)})`)){ws.lastChat=0;throw Error('Stand at a comms station to talk to other ships.');}
- const z=zoneOf(r),msg={type:'chat',from:ws.name,ship:info(r).name,rank:rankOf(r,ws),zone:era.ZONES[z]?.name||z,text,t:now,...(comms?{comms:true}:{})};
+ if(comms){const t=txNow(r,now);if(t.n<=0){ws.lastChat=0;send(ws,txState(r));throw Error('No transmissions left — one recharges every 15 seconds.');}t.n--;if(t.n===TX_MAX-1)t.t=now;for(const c of r.members)send(c,txState(r));}
+ const z=zoneOf(r),msg={type:'chat',from:ws.name,ship:info(r).name,shipTag:shipTag(r),rank:rankOf(r,ws),zone:era.ZONES[z]?.name||z,text,t:now,...(comms?{comms:true}:{})};
  for(const c of clients)if(c.room&&(c.room===r||comms&&zoneOf(c.room)===z))send(c,msg);}
 // Private ships (captain's choice): hidden from other players' ship lists and joinable only with the invite link
 // (?ship=<id>&key=<invite>). The captain, and people the captain made crew, can always see and rejoin them.
 const insider=(r,ws)=>!!ws&&(r.owner===ws.owner||['captain','crew'].includes(r.ranks?.[ws.owner]));
 const mayJoin=(r,ws,key)=>!r.private||insider(r,ws)||ws.admin||(typeof key==='string'&&key===r.invite);
-function list(ws){return [...rooms.values()].filter(r=>!r.private||insider(r,ws)).map(r=>({private:!!r.private,id:r.id,name:info(r).name,players:r.members.size,maxPlayers:MAX_CREW,zone:zoneOf(r),mine:!!ws&&r.owner===ws.owner,returnIn:r.members.size||r.returned?0:Math.max(0,Math.ceil((RETURN_MS-(Date.now()-r.emptySince))/1000))}));}
+function list(ws){return [...rooms.values()].filter(r=>!r.private||insider(r,ws)).map(r=>({private:!!r.private,id:r.id,name:info(r).name,players:r.members.size,maxPlayers:MAX_CREW,zone:zoneOf(r),mine:!!ws&&r.owner===ws.owner,rank:ws?rankOf(r,ws):'guest',crew:[...r.members].map(m=>String(m.name||'').slice(0,24)).slice(0,8),tag:shipTag(r),returnIn:r.members.size||r.returned?0:Math.max(0,Math.ceil((RETURN_MS-(Date.now()-r.emptySince))/1000))}));}
 for(const file of fs.readdirSync(dataDir).filter(f=>/^[a-f0-9]+\.json$/.test(f))){try{const d=JSON.parse(fs.readFileSync(path.join(dataDir,file)));{const r=record(d.name,d.owner,codec.decode(d.ship),d.id);r.ranks=d.ranks&&typeof d.ranks==='object'?d.ranks:{};r.log=Array.isArray(d.log)?d.log.slice(-LOG_MAX):[];r.bans=d.bans&&typeof d.bans==='object'?d.bans:{};r.private=d.private===true;if(typeof d.invite==='string'&&/^[a-f0-9]{18}$/.test(d.invite))r.invite=d.invite;r.motd=typeof d.motd==='string'?cleanMotd(d.motd):'';r.people=d.people&&typeof d.people==='object'?d.people:{};r.emptySince=0;}}catch(e){console.error('Skipped invalid save',file,e.message);}}
 
 // The once-a-minute save skips a ship whose state and settings haven't changed since its last save (play time alone
@@ -137,7 +157,7 @@ function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws
  if(m.type==='delete'){const r=rooms.get(m.room);if(!r)throw Error('Ship not found');if(r.owner!==ws.owner)throw Error('Only the captain can delete this ship');if(r.members.size)throw Error('Everyone must leave the ship first');if(r.game){try{r.game.dispose();}catch{}r.game=null;}rooms.delete(r.id);fs.rmSync(path.join(dataDir,r.id+'.json'),{force:true});return send(ws,{type:'rooms',rooms:list(ws)});}
  if(!ws.room)throw Error('Join a ship first');
  if(m.type==='chat')return chat(ws,m.text);
- if(m.type==='comms')return chat(ws,m.text,true);
+ if(m.type==='commsState')return ws.room&&send(ws,txState(ws.room));if(m.type==='comms')return chat(ws,m.text,true);
  if(m.type==='crew')return send(ws,crewReport(ws.room,ws));
  // Ship settings: privacy and the invite link (the link's key only goes to the captain and crew).
  if(m.type==='shipsettings'){const r=ws.room;return send(ws,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,ws)?r.invite:null,captain:isCap(r,ws)});}
@@ -167,9 +187,10 @@ function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws
  if(m.type==='export'){return send(ws,{type:'export',data:codec.encode(ws.room.game.run('durableState()'))});}
  // Dev live code (host token only): run in this ship's simulation or in its shared zone; the answer goes back to the sender.
  if(m.type==='eval'){const r=ws.room,id=Number.isSafeInteger(m.id)?m.id:0;if(!ws.admin){send(ws,{type:'evalResult',id,ok:false,error:'Live code needs the host token.'});return;}if(!r?.game){send(ws,{type:'evalResult',id,ok:false,error:'Join a ship first.'});return;}
-  const code=String(m.code||'').slice(0,200000);let out;try{if(m.target==='zone'){const sim=bus.simOf(r);if(!sim)throw Error('This ship is not in a shared zone right now.');out=showValue(sim.evalCode(code));}else out=r.game.evalCode(ws.uid,code);send(ws,{type:'evalResult',id,ok:true,result:out});}
-  catch(e){send(ws,{type:'evalResult',id,ok:false,error:String(e?.stack||e).split('\n').slice(0,6).join('\n').slice(0,2000)});}
-  console.log('[live code] '+(ws.name||'?')+' ran '+code.length+' chars on '+(m.target==='zone'?'the zone':'ship '+r.id));return;}
+  const code=String(m.code||'').slice(0,200000),fail=e=>send(ws,{type:'evalResult',id,ok:false,error:String(e?.stack||e).split('\n').slice(0,6).join('\n').slice(0,2000)});
+  try{let p;if(m.target==='zone'){const sim=bus.simOf(r);if(!sim)throw Error('This ship is not in a shared zone right now.');p=sim.evalCode(code);}else if(m.target==='server')p=serverEval(ws,code);else p=r.game.evalCode(ws.uid,code);
+   Promise.resolve(p).then(o=>send(ws,{type:'evalResult',id,ok:true,result:o.result,logs:o.logs}),fail);}catch(e){fail(e);}
+  console.log('[live code] '+(ws.name||'?')+' ran '+code.length+' chars on '+(m.target==='zone'?'the zone':m.target==='server'?'the server':'ship '+r.id));return;}
  if(m.type==='action'){if(!Number.isSafeInteger(m.seq)||m.seq<=ws.seq)return;ws.seq=m.seq;ws.room.game.command(ws.uid,m);}
  }catch(e){send(ws,{type:'error',message:String(e.message).slice(0,180)});}});
  ws.on('close',()=>{leave(ws);clients.delete(ws);if(sessions.get(ws.token)===ws)sessions.delete(ws.token);});ws.on('error',()=>{});send(ws,{type:'hello',protocol:1});}
@@ -181,15 +202,15 @@ const classic=require('./classic.cjs').createClassic({onConnection,root});
 // ---- Simulation loop -------------------------------------------------------------------------------------
 let previous=performance.now(),acc=0,frames=0,tickMs=0;
 const timer=setInterval(()=>{const now=performance.now();acc+=Math.min((now-previous)/1000,.1);previous=now;let steps=0;const t0=performance.now();
- while(acc>=1/60&&steps++<3){const active=[];for(const r of rooms.values())if(r.game&&r.members.size){try{r.game.tick(1/60);r.tick++;active.push(r);}catch(e){recover(r,e);}}
+ while(acc>=1/60&&steps++<3){const active=[];/* empty ships stay in the world (others see them, bots can still shoot them) until they despawn */for(const r of rooms.values())if(r.game&&(r.members.size||!r.returned)){try{r.game.tick(1/60);r.tick++;active.push(r);}catch(e){recover(r,e);}}
   try{bus.step(active,1/60);}catch(e){console.error('Zone bus step failed',e.stack);}
   acc-=1/60;frames++;}
  if(steps>=3)acc=Math.min(acc,1/60);tickMs=tickMs*.9+(performance.now()-t0)*.1;
  // 20 snapshots a second (every 3rd 60 Hz tick).
- if(frames>=3){frames=0;const live=[...rooms.values()].filter(r=>r.game&&r.members.size);
+ if(frames>=3){frames=0;const loaded=[...rooms.values()].filter(r=>r.game&&(r.members.size||!r.returned)),live=loaded.filter(r=>r.members.size);
   // Pass 1: every ship's exterior (layout hash changes only when the ship is rebuilt), so pass 2 never
   // lists a ship to others before its hull is known.
-  for(const r of live){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();r.machinesCache=r.game.zone.exteriorMachines();/* other ships' live view: every snapshot; a full item list once a second */r.livePass=((r.livePass||0)+1)%20;r.liveCache=r.game.zone.exteriorLive(r.livePass===1);r.json={crew:JSON.stringify(r.crewCache),machines:JSON.stringify(r.machinesCache),live:JSON.stringify(r.liveCache)};}catch(e){recover(r,e);}}
+  for(const r of loaded){try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();r.machinesCache=r.game.zone.exteriorMachines();/* other ships' live view: every snapshot; a full item list once a second */r.livePass=((r.livePass||0)+1)%20;r.liveCache=r.game.zone.exteriorLive(r.livePass===1);r.json={crew:JSON.stringify(r.crewCache),machines:JSON.stringify(r.machinesCache),live:JSON.stringify(r.liveCache)};}catch(e){recover(r,e);}}
   for(const r of live){if(!r.game)continue;try{const members=[...r.members],pass=r.game.snapshotPass(members.map(ws=>ws.uid));members.forEach((ws,k)=>{const st=pass.own[k];
     // Log: helm use, and zone changes (credited to whoever is at the helm).
     const pil=!!st?.self?.piloting;if(pil&&!ws.wasPiloting)logEvent(r,ws,'started using helm.','helm');ws.wasPiloting=pil;
@@ -201,7 +222,7 @@ const saves=setInterval(()=>{for(const r of rooms.values())if(r.game&&r.members.
  for(const r of rooms.values())if(r.game&&!r.members.size&&Date.now()-r.emptySince>IDLE_UNLOAD_MS)unload(r);},SAVE_INTERVAL_MS);
 // Empty ships: a minute after the last crew member leaves, the ship is sent back to the Freeport tied to its zone
 // (and unloaded). Ships not in memory just get the flag and go home the next time they load.
-function returnEmptyShips(){const now=Date.now();for(const r of rooms.values()){if(r.members.size||r.returned||now-r.emptySince<RETURN_MS)continue;r.returned=true;{const z=zoneOf(r),home=era.HOME_FREEPORT[z];if(home&&home!==z&&era.ZONES[z]?.kind!=='safe')logEvent(r,null,'was returned to '+era.ZONES[home].name+' (empty for a minute).','zone');}
+function returnEmptyShips(){const now=Date.now();for(const r of rooms.values()){if(r.members.size||r.returned||now-r.emptySince<RETURN_MS)continue;r.returned=true;{const z=zoneOf(r),home=era.HOME_FREEPORT[z];if(home&&home!==z&&era.ZONES[z]?.kind!=='safe')logEvent(r,null,'despawned and was returned to '+era.ZONES[home].name+' (empty for '+Math.round(RETURN_MS/60000)+' minutes).','zone');}
  if(r.game){try{r.game.run('returnToFreeport("empty")');}catch(e){console.error('Return failed',r.id,e.message);}unload(r);}else r.returnDue=true;}}
 const returns=setInterval(returnEmptyShips,Math.min(1000,RETURN_MS/4));
 const heartbeat=setInterval(()=>{for(const ws of clients){if(!ws.alive)ws.terminate();else{ws.alive=false;ws.ping();}}},15000);

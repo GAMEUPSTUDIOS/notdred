@@ -40,8 +40,12 @@ onShotStart=function(s){scoreOwner=s.owner??null;};
 shotLeftOwner=function(s){const f=fleet.get(s.owner);if(!f)return true;const q=f.body.getLocalPoint(s.p),e=f.ext;return q.x<e.l-1||q.x>e.r+1||q.y<e.t-1||q.y>e.b+1;};
 shotPvp=function(s){const f=fleet.get(s.owner);return pvpMultiplierFor(f?.size||0,zone);};
 addScore=function(n){if(scoreOwner!=null&&Number.isFinite(n)&&n>0)zoneHost.score(scoreOwner,n);};
-zoneEvent=function(e){if(e.type==='hit'){const t=fleet.get(e.target);if(!t)return;const lp=t.body.getLocalPoint(V(e.point.x,e.point.y));zoneHost.pvpHit(e.target,e.amount,{x:lp.x,y:lp.y},e.dir,e.ammo,scoreOwner);}else if(e.type==='mined')zoneHost.mined(e.id,e.seed);};
+zoneEvent=function(e){if(e.type==='hit'){const t=fleet.get(e.target);if(!t)return null;const lp=t.body.getLocalPoint(V(e.point.x,e.point.y));return zoneHost.pvpHit(e.target,e.amount,{x:lp.x,y:lp.y},e.dir,e.ammo,scoreOwner);}else if(e.type==='mined')zoneHost.mined(e.id,e.seed);};
 
+// A round inside a critical ship: this step's path in that ship's frame. 'hit' (it struck a tile and stops there),
+// 'exit' (it left the hull and flies on), or null (still crossing open space inside).
+shotInside=function(s,next,amount){const f=fleet.get(s.inside);if(!f){s.inside=null;return 'exit';}const a=f.body.getLocalPoint(s.p),b=f.body.getLocalPoint(next),r=zoneHost.pierce(f.id,amount,{x:a.x,y:a.y},{x:b.x,y:b.y});
+ if(r?.hit){s.p=f.body.getWorldPoint(V(r.hit.x,r.hit.y));return 'hit';}if(r?.exit){s.inside=null;return 'exit';}return null;};
 function zsNearest(p,maxDist=Infinity){let best=null,bd=maxDist;for(const f of fleet.values()){const d=P.Vec2.distance(p,f.body.getPosition());if(d<bd){bd=d;best=f;}}return best;}
 
 function zsStep(dt){clock+=dt;
@@ -69,10 +73,11 @@ function zsStep(dt){clock+=dt;
 
 // Bot bullets against every hull in the zone (critical hulls let them through to the tiles behind).
 function zsEnemyShots(dt){for(const s of enemyShots){s.v.y+=10*dt;const next=V(s.p.x+s.v.x*dt,s.p.y+s.v.y*dt);let hit=null,point=null,fraction=1;
+  if(s.inside!=null){const r=shotInside(s,next,s.damage??(AMMO[s.type]||AMMO.ammo).damage);if(r==='hit'){s.life=0;continue;}if(r!=='exit'){s.p=next;s.life-=dt;continue;}}
   world.rayCast(s.p,next,(f,p,n,t)=>{const b=f.getBody();if(b===s.owner||(s.through!=null&&b.getUserData()?.shipId===s.through))return -1;if(t<fraction){hit=b;point=p.clone();fraction=t;}return t;});
   if(hit){const sid=hit.getUserData()?.shipId,f=sid!=null&&fleet.get(sid);if(f){const d=s.v.clone();d.normalize();const imp=AMMO[s.type]?.impulse||0;if(imp&&!f.docked){f.body.applyLinearImpulse(V(d.x*f.body.getMass()*5*imp,d.y*f.body.getMass()*5*imp),f.body.getWorldCenter(),true);f.kx=(f.kx||0)+d.x*5*imp;f.ky=(f.ky||0)+d.y*5*imp;}
     const lp=f.body.getLocalPoint(point),ld=f.body.getLocalVector(d),through=zoneHost.damage(f.id,s.damage??(AMMO[s.type]||AMMO.ammo).damage,{x:lp.x,y:lp.y},{x:ld.x,y:ld.y},s.type,null);
-    if(through){s.through=f.id;s.p=f.body.getWorldPoint(V(through.x,through.y));s.life-=dt;continue;}}s.life=0;}
+    if(through?.pierce){s.through=f.id;s.inside=f.id;s.p=point;s.life-=dt;continue;}if(through){s.through=f.id;s.p=f.body.getWorldPoint(V(through.x,through.y));s.life-=dt;continue;}}s.life=0;}
   s.p=next;s.life-=dt;}enemyShots=enemyShots.filter(s=>s.life>0);}
 
 // Ships hand their projectiles to the zone.
@@ -95,4 +100,15 @@ function rockHealth(){const out=[];for(const id of hurtRocks){const r=rocks.get(
 function zsSnapshot(){return {devDraw:cleanDevShapes(devDraw,'world'),rockHp:rockHealth(),bots:allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:{x:+b.body.getPosition().x.toFixed(3),y:+b.body.getPosition().y.toFixed(3)},v:{x:+b.body.getLinearVelocity().x.toFixed(3),y:+b.body.getLinearVelocity().y.toFixed(3)}})),
  projectiles:[...shots,...enemyShots].map(s=>({type:s.type,p:{x:+s.p.x.toFixed(3),y:+s.p.y.toFixed(3)},v:{x:+s.v.x.toFixed(3),y:+s.v.y.toFixed(3)},life:+(s.life||0).toFixed(3),frag:s.frag||undefined})),
  loot:worldLoot.map(i=>({type:i.type,count:i.count,x:+i.body.getPosition().x.toFixed(3),y:+i.body.getPosition().y.toFixed(3),vx:+i.body.getLinearVelocity().x.toFixed(3),vy:+i.body.getLinearVelocity().y.toFixed(3)})),
- boulders:boulderState()};}
+ boulders:boulderState((zsSnapN=(zsSnapN+1)%20)===1)};}
+let zsSnapN=0;
+
+// ---- Dev live code helpers (zone) ---------------------------------------------------------------------------------
+help=function(){return 'zbots() count by species · killAll(species?) · spawnBotAt(species, x, y) · ships() hulls here · pause() bots on/off · '+
+ 'loot(type, x, y, n=16) · log(...) · after/every(sec, fn) · cancel(id?) · devTick=dt=>… · devDraw=[…] · globals: world, rocks, boulders, worldLoot, shots, enemyShots, fleet';};
+function zbots(){const out={};for(const b of allBots())out[b.species]=(out[b.species]||0)+1;return out;}
+killAll=function(sp){let n=0;for(const b of [...allBots()])if(!sp||b.species===sp){damageBot(1e9,b.species,b.index);n++;}return n+' destroyed';};
+spawnBotAt=function(sp,x,y){const list=(zoneData[zone].bots??={})[sp]??=[];const i=list.length;list[i]={dead:false};const b=spawnBot(sp,V(+x,+y),i);return b?'spawned '+sp+' #'+i:'could not spawn';};
+ships=function(){return [...fleet.values()].map(f=>({id:f.id,name:f.name,x:+f.body.getPosition().x.toFixed(1),y:+f.body.getPosition().y.toFixed(1),size:f.size}));};
+pause=function(){botsPaused=!botsPaused;return botsPaused?'bots paused':'bots running';};
+loot=function(type,x,y,n=16){addWorldLoot(type,V(+x,+y),n,V(0,0));return worldLoot.length+' loot';};
