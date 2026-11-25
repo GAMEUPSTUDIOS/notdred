@@ -24,7 +24,7 @@ function missionSendHome(){const was=zoneDef().name;snapshotZone();zone=START_ZO
 // Sent home: an empty ship after RETURN_SECONDS (the server calls this), or a ship that stays critical that long.
 let criticalFor=0;
 function homeFreeport(id=zone){return HOME_FREEPORT[id]||START_ZONE;}
-function returnToFreeport(reason){criticalFor=0;const home=homeFreeport();if(zone===home||zoneDef().kind==='safe')return false;const was=zoneDef().name;snapshotZone();zone=home;setupZone(true,'entry');updateShipMass();save(true);
+function returnToFreeport(reason){criticalFor=0;const home=homeFreeport();if(zone===home||zoneDef().kind==='safe')return false;const was=zoneDef().name;snapshotZone();zone=home;/* a random free spot in the home Freeport, never docked */setupZone(true,'random');updateShipMass();save(true);
  toastAll(reason==='critical'?'Your ship stayed critical for '+RETURN_SECONDS+' seconds and was towed back to '+zoneDef().name+'.':'Your ship was returned from '+was+' to '+zoneDef().name+'.');return true;}
 // The clock starts the moment the ship goes critical and keeps running (shields coming back do not stop it); only
 // leaving the combat zone (a portal) clears it.
