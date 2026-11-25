@@ -82,7 +82,7 @@ fs.mkdirSync(home,{recursive:true});
 if(packed&&await update(bundleHead().head.commit))return;
 const app=packed?unpack():{dir:path.resolve(__dirname,'..','..'),label:'dev'};
 const PORT=Number(process.env.PORT||8080),DATA=process.env.DATA_DIR||path.join(home,'data');fs.mkdirSync(DATA,{recursive:true});
-if(win)process.title='notdred.io server';
+if(win)process.title='notdred.io server';if(packed){try{process.env.NOTDRED_BUILD=String(bundleHead().head.commit||'').slice(0,7)||process.env.NOTDRED_BUILD;}catch{}}
 console.log(`
   notdred.io ${app.label} — all-in-one host
   Saves: ${DATA}
