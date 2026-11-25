@@ -62,7 +62,10 @@ function holdCargoAwake(body,owner){let locks=cargoWakeLocks.get(body);if(!locks
 // within a few hundredths of a tile — otherwise two piles side by side, or one dropped on another, never merged.
 function cargoHalf(b){const v=b.getFixtureList()?.getShape()?.m_vertices;return v?Math.abs(v[0].x):.32;}
 function cargoNear(a,b){const p=a.getPosition(),q=b.getPosition();return Math.hypot(p.x-q.x,p.y-q.y)<(cargoHalf(a)+cargoHalf(b))*1.15;}
-function mergeTouchingCargo(list,physics){const byBody=new Map(list.map(i=>[i.body,i])),removed=new Set();for(const x of list){if(removed.has(x))continue;for(let e=x.body.getContactList();e;e=e.next){const y=byBody.get(e.other);if(!y||y===x||removed.has(y)||x.type!==y.type||x.count+y.count>stackLimit(x.type)||!(e.contact.isTouching()||cargoNear(x.body,y.body)))continue;
+// Resting (sleeping) stacks are checked only every MERGE_FULL ticks; awake ones every tick (an awake stack also finds
+// the sleeping ones it touches). A ship with a big resting pile spent a tenth of its tick here.
+const MERGE_FULL=30;let mergePass=0;
+function mergeTouchingCargo(list,physics){const full=(++mergePass%MERGE_FULL)===0;if(!full&&!list.some(i=>i.body.isAwake()))return;const byBody=new Map(list.map(i=>[i.body,i])),removed=new Set();for(const x of list){if(removed.has(x))continue;if(!full&&!x.body.isAwake())continue;for(let e=x.body.getContactList();e;e=e.next){const y=byBody.get(e.other);if(!y||y===x||removed.has(y)||x.type!==y.type||x.count+y.count>stackLimit(x.type)||!(e.contact.isTouching()||cargoNear(x.body,y.body)))continue;
 // An active logic owner can keep an item's identity stable while manipulating it.
 if(cargoWakeLocks.get(x.body)?.size||cargoWakeLocks.get(y.body)?.size)continue;
 const vx=x.body.getLinearVelocity(),vy=y.body.getLinearVelocity(),total=x.count+y.count;x.body.setLinearVelocity(V((vx.x*x.count+vy.x*y.count)/total,(vx.y*x.count+vy.y*y.count)/total));x.count=total;x.grace=Math.max(x.grace||0,y.grace||0);wakeCargo(x.body);removed.add(y);}}

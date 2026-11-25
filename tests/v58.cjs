@@ -35,6 +35,6 @@ for(const [type,sign] of [['ammo',0],['punch',1],['yank',-1]]){const vx=Number(s
  assert.ok(era.FABRICATORS?Object.values(era.FABRICATORS).some(f=>f.recipes?.includes('slug')):/'breaker', 'slug'/.test(fs.readFileSync('dist/modules/era.js','utf8')),'munitions fabricator makes slug');
  const g=fs.readFileSync('dist/game.js','utf8');assert.ok(/slug:\['item-ammo_slug'\]/.test(g)&&/breaker:\['item-ammo_b_slug'\]/.test(g)&&fs.existsSync('dist/sprites/item-ammo_slug.png')&&fs.existsSync('dist/sprites/item-ammo_b_slug.png'),'slug and breaker icons from the game art');
  assert.ok(/'breaker','slug','trash'/.test(g)&&/'breaker','slug','trash'/.test(fs.readFileSync('dist/modules/save-codec.js','utf8')),'slug is an item that saves');
- const bot=JSON.parse(sim.run(`(()=>{const b=allBots().find(b=>b.species==="green");const q=b.body.getPosition();const hp=b.hp;zsFire("A",[{type:"slug",p:{x:q.x-12,y:q.y},v:{x:38,y:0},life:4.5,maxLife:4.5,bounces:0}]);globalThis._s=b;return JSON.stringify({hp});})()`));
- step(40);assert.equal(bot.hp-Number(sim.run('_s.hp')),S.damage,'a slug round hits a bot for its full damage');}
+ const bot=JSON.parse(sim.run(`(()=>{/* green scouts are fast (v72): hold it still for the shot */botsPaused=true;const b=allBots().find(b=>b.species==="green");b.body.setLinearVelocity(V(0,0));const q=b.body.getPosition();const hp=b.hp;zsFire("A",[{type:"slug",p:{x:q.x-12,y:q.y},v:{x:38,y:0},life:4.5,maxLife:4.5,bounces:0}]);globalThis._s=b;return JSON.stringify({hp});})()`));
+ step(40);assert.equal(bot.hp-Number(sim.run('_s.hp')),S.damage,'a slug round hits a bot for its full damage');sim.run('botsPaused=false');}
 console.log('v58 PASS');process.exit(0);

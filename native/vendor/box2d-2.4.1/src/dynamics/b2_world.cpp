@@ -756,8 +756,10 @@ void b2World::SolveTOI(const b2TimeStep& step)
 			continue;
 		}
 
-		bA->SetAwake(true);
-		bB->SetAwake(true);
+		// notdred change: wake only sleeping bodies. SetAwake(true) also restarts the sleep timer, and a bullet body
+		// resting on a pile (a crew member) produces a TOI event every step, so its whole pile could never fall asleep.
+		if (bA->IsAwake() == false) bA->SetAwake(true);
+		if (bB->IsAwake() == false) bB->SetAwake(true);
 
 		// Build the island
 		island.Clear();
@@ -853,7 +855,7 @@ void b2World::SolveTOI(const b2TimeStep& step)
 
 					if (other->m_type != b2_staticBody)
 					{
-						other->SetAwake(true);
+						if (other->IsAwake() == false) other->SetAwake(true); // notdred change, see above
 					}
 
 					island.Add(other);

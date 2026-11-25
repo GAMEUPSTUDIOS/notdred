@@ -8,9 +8,11 @@
 #include <vector>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 using J=nlohmann::json;
 // fixtures: the last fixture list's signature; awake: awake after the last step; touched: sent this step.
-struct Body {b2Body* p;std::string fixtures;bool awake=true;bool touched=false;};
+// still: seconds this body has been below Box2D's sleep tolerances (see the end of call2).
+struct Body {b2Body* p;std::string fixtures;bool awake=true;bool touched=false;float still=0;};
 struct World {b2World physics{{0,20}};std::unordered_map<int,Body> bodies;};
 static std::unordered_map<int,std::unique_ptr<World>> worlds;
 static b2Vec2 vec(const J& a){return {a[0].get<float>(),a[1].get<float>()};}
@@ -76,11 +78,32 @@ static std::vector<double> call2(int id,double dt,double gx,double gy,const std:
   b->SetType((b2BodyType)(int)r[1]);b->SetEnabled(flags&1);b->SetFixedRotation(flags&2);b->SetBullet(flags&4);b->SetGravityScale((float)r[11]);b->SetLinearDamping((float)r[12]);b->SetAngularDamping((float)r[13]);b->SetSleepingAllowed(flags&8);
   b2Vec2 p((float)r[2],(float)r[3]),v((float)r[4],(float)r[5]);float angle=(float)r[6];
   if((p-b->GetPosition()).LengthSquared()>1e-10f||fabs(angle-b->GetAngle())>1e-6)b->SetTransform(p,angle);
-  b->SetLinearVelocity(v);b->SetAngularVelocity((float)r[7]);
+  // Box2D treats every velocity update and every SetAwake(true) as a wake-up that restarts the body's sleep timer, so a
+  // body the game re-sends each tick (the crew member, standing still) kept every pile it touched awake for good. Only
+  // real changes are applied: velocities differing by more than a hair, and the awake flag when it actually flips.
+  if((v-b->GetLinearVelocity()).LengthSquared()>4e-6f)b->SetLinearVelocity(v);
+  if(fabs((float)r[7]-b->GetAngularVelocity())>2e-3f)b->SetAngularVelocity((float)r[7]);
   if(b->GetType()==b2_dynamicBody&&r[14]>0){b2MassData md;md.mass=(float)r[14];md.center.Set((float)r[16],(float)r[17]);md.I=(float)r[15];b->SetMassData(&md);}
-  b->SetAwake(flags&16);b2Vec2 force((float)r[8],(float)r[9]);if(force.LengthSquared()>0)b->ApplyForceToCenter(force,true);if(r[10])b->ApplyTorque((float)r[10],true);}
+  if(((flags&16)!=0)!=b->IsAwake())b->SetAwake(flags&16);b2Vec2 force((float)r[8],(float)r[9]);if(force.LengthSquared()>0)b->ApplyForceToCenter(force,true);if(r[10])b->ApplyTorque((float)r[10],true);}
  if(!std::isfinite(dt)||dt<0||dt>1.0/15)throw std::runtime_error("Invalid timestep");
  w.physics.SetAutoClearForces(false);for(int i=0;i<2;i++)w.physics.Step((float)dt*.5f,8,3);w.physics.ClearForces();
+ // Box2D only lets a group of touching bodies sleep once every overlap in it is fully resolved. A big pile of cargo
+ // crammed against walls never quite gets there, so it stayed awake (and was solved every tick) forever though nothing
+ // moved. Here each body keeps its own stillness time (under Box2D's sleep tolerances); touching awake bodies are
+ // linked into groups, and a group whose members have all been still for STILL_SLEEP seconds is put to sleep together
+ // (one at a time didn't work: an awake neighbour wakes a sleeping body straight away). Anything that touches it later
+ // wakes it as usual.
+ {const float STILL_SLEEP=1.0f,lin=b2_linearSleepTolerance*b2_linearSleepTolerance,ang=b2_angularSleepTolerance*b2_angularSleepTolerance;
+  std::unordered_map<b2Body*,int> idx;std::vector<Body*> recs;
+  for(auto& [n2,r]:w.bodies){auto b=r.p;if(b->GetType()==b2_staticBody)continue;if(!b->IsAwake()||!b->IsEnabled()){r.still=0;continue;}
+   bool calm=b->IsSleepingAllowed()&&b->GetLinearVelocity().LengthSquared()<=lin&&b->GetAngularVelocity()*b->GetAngularVelocity()<=ang;r.still=calm?r.still+(float)dt:0;
+   idx[b]=(int)recs.size();recs.push_back(&r);}
+  if(!recs.empty()){std::vector<int> up(recs.size());for(size_t k=0;k<up.size();k++)up[k]=(int)k;
+   auto find=[&](int a){while(up[a]!=a){up[a]=up[up[a]];a=up[a];}return a;};
+   for(auto* r:recs)for(b2ContactEdge* e=r->p->GetContactList();e;e=e->next){b2Contact* c=e->contact;if(!c->IsTouching()||!c->IsEnabled()||c->GetFixtureA()->IsSensor()||c->GetFixtureB()->IsSensor())continue;
+    auto ia=idx.find(r->p),ib=idx.find(e->other);if(ib==idx.end())continue;int a=find(ia->second),b=find(ib->second);if(a!=b)up[a]=b;}
+   std::vector<float> minStill(recs.size(),1e9f);for(size_t k=0;k<recs.size();k++){int root=find((int)k);minStill[root]=std::min(minStill[root],recs[k]->still);}
+   for(size_t k=0;k<recs.size();k++)if(minStill[find((int)k)]>=STILL_SLEEP){recs[k]->p->SetAwake(false);recs[k]->still=0;}}}
  std::vector<double> out;for(auto& [n2,r]:w.bodies){auto b=r.p;bool awake=b->IsAwake(),report=awake||r.awake||r.touched;r.awake=awake;r.touched=false;if(b->GetType()==b2_staticBody||!report)continue;auto p=b->GetPosition(),v=b->GetLinearVelocity();double o[OUT]={(double)n2,p.x,p.y,v.x,v.y,b->GetAngle(),b->GetAngularVelocity(),awake?1.0:0.0};out.insert(out.end(),o,o+OUT);}
  return out;}
 static napi_value step2(napi_env env,napi_callback_info info){

@@ -24,7 +24,7 @@ function devToggles(m){if(!piloting&&m.noclip){if(!m.noclipMask){m.noclipMask=[]
 function fabFor(msg){if(typeof msg.fab==='string'){for(const t of terrain.values())if(t.id===msg.fab&&fabReach(t))return t;}return nearFab();}
 let crashNextTick=false; // admin-only test hook: proves the server restores a ship after a simulation error
 function serverCrewStep(dt){if(crashNextTick){crashNextTick=false;throw Error('Injected test crash');}storeCrew();for(const m of crew.values()){bindCrew(m.id);actor=m;if(Date.now()-m.inputAt>500){keys={};pusherHeld=false;}ladderCooldown=Math.max(0,ladderCooldown-dt);if(m.sandbox&&buildJob)buildJob.elapsed=buildJob.duration;tickBuild(dt);if(pusherHeld&&tool==='pusher'&&!piloting)pushAt(localMouse(),dt);stepController(dt);devToggles(m);storeCrew();}actor=null;}
-function serverCrewAfterStep(){for(const m of crew.values()){bindCrew(m.id);if(!piloting){if(!finiteVec(player.getPosition())||!finiteVec(player.getLinearVelocity()))recover();else clampSpeed(player,SAFETY.maxCrewSpeed);const p=localPlayer();/* noclip flight may leave the hull */if(!m.noclip)player.setTransform(V(clamp(p.x,bounds.l+.75,bounds.r-.75),clamp(p.y,bounds.t+1.13,bounds.b-1.13)),0);}storeCrew();}}
+function serverCrewAfterStep(){for(const m of crew.values()){bindCrew(m.id);if(!piloting){if(!finiteVec(player.getPosition())||!finiteVec(player.getLinearVelocity()))recover();else clampSpeed(player,SAFETY.maxCrewSpeed);const p=localPlayer();/* noclip flight may leave the hull; moved only when actually outside (setTransform wakes the body, and a crew member woken every tick kept every pile it touched from ever sleeping) */if(!m.noclip){const x=clamp(p.x,bounds.l+.75,bounds.r-.75),y=clamp(p.y,bounds.t+1.13,bounds.b-1.13);if(x!==p.x||y!==p.y)player.setTransform(V(x,y),0);}}storeCrew();}}
 function notify(targets,message){const text=String(message).slice(0,240);for(const t of targets){t.notices??=[];if(t.notices.at(-1)!==text)t.notices.push(text);if(t.notices.length>8)t.notices.shift();}}
 toast=function(message){notify(actor?[actor]:[...crew.values()],message);};toastAll=function(message){notify([...crew.values()],message);};
 const originalInteract=interact;interact=function(){if(!piloting&&nearHelm()&&[...crew.values()].some(m=>m.id!==currentCrew.id&&m.piloting))return toast('The helm is already occupied.');return originalInteract();};
@@ -86,7 +86,7 @@ function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},br
 // comms), loose items and expando boxes. Clock-based timers go out as time remaining (each client has its own clock).
 const LIVE_TERRAIN=['door','fabricator','loader','pusher_block','recycler','comms','spawn','ejector','shredder','hatch','starter_hatch'];
 // Physics machines (fabricators, recyclers, comms) move, so they go to other ships with every snapshot, not in the layout.
-function exteriorMachines(){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100;return [...terrain.values()].filter(t=>t.body).map(t=>{const o={};if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);return [t.type,r2(t.x),r2(t.y),o];});}
+function exteriorMachines(){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100;return [...terrain.values()].filter(t=>t.body).map(t=>{const o={};if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);if((t.hp??100)<100)o.hp=Math.round(t.hp);return [t.type,r2(t.x),r2(t.y),o];});}
 // Other ships' view of this one, every snapshot (20 a second). Loose items: a full list on `full` passes (once a second),
 // otherwise only the ones that moved, changed or appeared, plus the ids that went away — resting piles cost nothing.
 let liveSeq=0,livePrev=new Set();
@@ -95,6 +95,9 @@ function exteriorLive(full=true){const left=v=>v>clock?+(v-clock).toFixed(2):0,r
  const gone=full?[]:[...livePrev].filter(id=>!now.has(id));livePrev=now;
  return {m:mounts.map(m=>[m.aim==null?null:r2(m.aim),left(m.recoilUntil||0),m.active?1:0,m.ammo||0,m.thrustDirection?[r2(m.thrustDirection.x),r2(m.thrustDirection.y)]:0,m.ammoType&&m.ammoType!=='ammo'?m.ammoType:0]),
   t:[...terrain.values()].filter(t=>!t.body&&LIVE_TERRAIN.includes(t.type)).map(t=>{const o={};if(t.access)o.access=t.access;if(t.filterMode&&t.filterMode!=='all')o.filterMode=t.filterMode;if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='loader'){o.phase=r2(t.phase??1);if(t.cargo?.length)o.cargo=[{type:t.cargo[0].type}];}if(t.type==='pusher_block'){o.beam=r2(t.beam||0);if(t.pull)o.pull=true;o.beamMode=t.beamMode||(t.pull?'pull':'push');}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);if(t.flash)o.flash=left(t.flash);if(t.chewing)o.chewing=left(t.chewing);return [t.x,t.y,o];}),
+  // Battle damage others can see: [x, y, health %] for each hurt block or placed piece, and each turret/thruster's health.
+  d:(()=>{const d=[];for(const t of blocks.values())if((t.hp??100)<100)d.push([t.x,t.y,Math.round(t.hp)]);for(const t of terrain.values())if(!t.body&&(t.hp??100)<100)d.push([t.x,t.y,Math.round(t.hp)]);return d;})(),
+  md:mounts.some(m=>(m.hp??100)<100)?mounts.map(m=>Math.round(m.hp??100)):0,
   i:il,gone,full:full?1:0,
   b:boxes.map(b=>{const p=b.body.getPosition(),v=b.body.getLinearVelocity();return [r2(p.x),r2(p.y),r2(b.body.getAngle()),b.size,b.materials,r2(v.x),r2(v.y)];})};}
 // Move this ship to free space if another ship in the zone overlaps it (Freeports: the next free berth).
@@ -128,9 +131,12 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
  data.crew=[...crew.values()].map(c=>({id:c.id,name:c.name,rank:c.rank||'guest',p:c.player.getPosition(),v:c.player.getLinearVelocity(),facing:c.facing,piloting:c.piloting,tool:c.tool,climbing:c.climbing,selected:c.selected,held:c.slots[c.selected],beam:handBeam(c.pusherVisual)}));
  data.velocity=ship.getLinearVelocity();data.mission=currentMission();data.criticalFor=+criticalFor.toFixed(2);data.effects=effects;
  if(attachedToZone){const z=zoneLink.snapshot();data.bots=z?.bots||[];data.rockHp=z?.rockHp||[];data.projectiles=z?.projectiles||[];data.zoneLoot=z?.loot||[];data.zoneDevDraw=z?.devDraw;data.zoneBoulders=z?.boulders||[];}else{data.bots=allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:b.body.getPosition(),v:b.body.getLinearVelocity()}));data.projectiles=[...shots.map(s=>({...s,owner:undefined})),...enemyShots.map(s=>({...s,owner:undefined}))];}
- data.items=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity(),o={type:i.type,count:i.count,x:p.x,y:p.y,angle:i.body.getAngle()};if(Math.abs(v.x)>.005||Math.abs(v.y)>.005)o.v=v;return o;});
+ // Loose items and zone loot go to each member as changes (see snapshotOwn): [id, type, count, x, y, angle, vx, vy] per
+ // stack to 0.01 (velocity 0 when still), so a resting pile costs nothing after the first snapshot.
+ const r2=v=>Math.round(v*100)/100,rv=v=>Math.abs(v)<.01?0:r2(v);
+ delete data.items;const itemRecs=items.map(i=>{const p=i.body.getPosition(),v=i.body.getLinearVelocity();return [i.nid||(i.nid=++liveSeq),i.type,i.count,r2(p.x),r2(p.y),r2(i.body.getAngle()),rv(v.x),rv(v.y)];});
  // The zone record (without its mined list, which each member catches up on separately).
- const zone0=snapshotZone()[zone]||{},zd={...zone0};delete zd.mined;zd.loot=(data.zoneLoot||zd.loot||[]).map(({type,count,x,y,vx,vy})=>({type,count,x,y,vx,vy}));if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;
+ const zone0=snapshotZone()[zone]||{},zd={...zone0};delete zd.mined;const lootRecs=(data.zoneLoot||zd.loot||[]).map((l,k)=>[l.id??k+1,l.type,l.count,r2(l.x),r2(l.y),rv(l.vx||0),rv(l.vy||0)]);delete zd.loot;if(data.zoneBoulders)zd.boulders=data.zoneBoulders;delete data.zoneLoot;delete data.zoneBoulders;
 
  // Bots go out compact — [species, index, hp, x, y, vx, vy] to 0.01 m — about 40 bytes each instead of ~95 (a combat
  // zone's bots were half of every update). The page (network.js) and snapshot() unpack them.
@@ -142,7 +148,12 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
  // Tiles, machines and turrets: encoded once here; each member gets the whole list or only what changed for them.
  const round=v=>JSON.parse(JSON.stringify(v,roundReplacer)),blocks=round(st.blocks),lists={};
  for(const [field,keyOf] of [['terrain',t=>t.type+':'+t.x+','+t.y+':'+(t.rotation||0)],['mounts',t=>t.type+':'+t.side+':'+t.at]]){const list=round(field==='mounts'?mounts.map(({f,...m})=>m):st[field]);lists[field]={list,keys:list.length<DELTA_MIN?null:list.map(keyOf).join('|'),json:list.length<DELTA_MIN?null:list.map(t=>JSON.stringify(t))};}
- return {json,zone:zd,mined:zone0.mined||[],seed:zone0.seed||0,blocks,blocksJSON:JSON.stringify(blocks),lists};}
+ return {json,zone:zd,mined:zone0.mined||[],seed:zone0.seed||0,blocks,blocksJSON:JSON.stringify(blocks),lists,items:{recs:itemRecs,json:itemRecs.map(r=>JSON.stringify(r))},loot:{recs:lootRecs,json:lootRecs.map(r=>JSON.stringify(r))}};}
+// A list by id, as changes for one member: the whole list the first time (and every RESYNC passes, which also corrects
+// anything the page's own physics moved), otherwise the records that changed or appeared and the ids that went away.
+const RESYNC=40;function listDelta(m,field,L,own,scope=''){const sent=m[field+'Sent'],n=m[field+'Pass']=(m[field+'Pass']||0)+1,now=new Map();L.recs.forEach((r,k)=>now.set(r[0],L.json[k]));
+ if(!sent||sent.scope!==scope||n%RESYNC===0){own[field+'Full']=L.recs;}else{const up=[],gone=[];L.recs.forEach((r,k)=>{if(sent.map.get(r[0])!==L.json[k])up.push(r);});for(const id of sent.map.keys())if(!now.has(id))gone.push(id);if(up.length)own[field+'Up']=up;if(gone.length)own[field+'Gone']=gone;}
+ m[field+'Sent']={scope,map:now};}
 function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
  const own={zone,stacks:slots.map((type,i)=>type?{type,count:stackCounts[i]}:null),slots:[...slots],inventory:{},self:{id,selected,tool,piloting,facing,climbing,rotation:buildRotation,pusherPull,buildJob,manning,rank:m.rank||'guest',noclip:!!m.noclip,sandbox:!!m.sandbox,shipNoclip},notices:(m.notices||[]).splice(0),kick:shipKick};
  const zd={...sh.zone},sent=m.minedSent;if(sent&&sent.zone===zone&&sent.seed===sh.seed&&sent.count<=sh.mined.length)own.minedAdd=sh.mined.slice(sent.count);else{own.minedReset=true;zd.mined=sh.mined;}m.minedSent={zone,seed:sh.seed,count:sh.mined.length};own.zoneData={[zone]:zd};
@@ -151,11 +162,13 @@ function snapshotOwn(id,sh){const m=crew.get(id);if(!m)return null;bindCrew(id);
  if(m.blocksSent===sh.blocksJSON)own.blocks=null;else{m.blocksSent=sh.blocksJSON;own.blocks=sh.blocks;}
  // Big ships: machine and turret records go out only when they change ([index, record] pairs), as long as the
  // set of machines is the same as last time; otherwise the whole list is sent again.
+ listDelta(m,'items',sh.items,own);listDelta(m,'loot',sh.loot,own,zone+':'+(sh.seed||0));
  for(const field of ['terrain','mounts']){const L=sh.lists[field];own[field]=L.list;if(!L.keys){m[field+'Sent']=null;continue;}const sent=m[field+'Sent'];if(sent&&sent.keys===L.keys){const d=[];L.json.forEach((j,i)=>{if(sent.json[i]!==j)d.push([i,L.list[i]]);});own[field]=null;own[field+'Delta']=d;}m[field+'Sent']={keys:L.keys,json:L.json};}
  return JSON.parse(JSON.stringify(own,roundReplacer));}
 // One member's whole snapshot (tests, tools). The server uses snapshotPass, which shares the common part.
 function unpackBots(list){return (list||[]).map(a=>Array.isArray(a)?{color:a[0],index:a[1],hp:a[2],p:{x:a[3],y:a[4]},v:{x:a[5],y:a[6]}}:a);}
-function snapshot(id){if(!crew.has(id))return null;/* a one-off snapshot (classic mode, tests) always has every bot */botPass=-1;const sh=snapshotShared(),own=snapshotOwn(id,sh),out=Object.assign(JSON.parse(sh.json),own);out.bots=unpackBots(out.bots);return out;}
+function snapshot(id){if(!crew.has(id))return null;/* a one-off snapshot (classic mode, tests) always has every bot, and the plain item and loot lists */botPass=-1;const sh=snapshotShared(),own=snapshotOwn(id,sh),out=Object.assign(JSON.parse(sh.json),own);out.bots=unpackBots(out.bots);
+ out.items=sh.items.recs.map(([nid,type,count,x,y,angle,vx,vy])=>({nid,type,count,x,y,angle,...(vx||vy?{v:{x:vx,y:vy}}:{})}));if(out.zoneData?.[zone])out.zoneData[zone].loot=sh.loot.recs.map(([id,type,count,x,y,vx,vy])=>({id,type,count,x,y,vx,vy}));return out;}
 // Every listed member's snapshot for one pass: the shared part as encoded text, plus each member's own part.
 function snapshotPass(ids){const sh=snapshotShared();return {shared:sh.json,own:ids.map(id=>snapshotOwn(id,sh))};}
 function durableState(){storeCrew();const s=JSON.parse(JSON.stringify(state()));s.stacks=[null,null,null,null,null];s.inventory={};s.slots=[null,null,null,null,null];for(const m of crew.values())for(let i=0;i<5;i++)if(m.slots[i]&&m.slots[i]!=='wrench')s.items.push({type:m.slots[i],count:m.stackCounts[i],...m.player.getPosition()});return s;}

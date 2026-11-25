@@ -36,7 +36,7 @@ function mergeLooseStacks(){const before=items.length,byType=new Map();for(const
 function tickSafeguards(dt){
  // Every tick: corrupted physics and runaway speeds.
  const sp=ship.getPosition();if(!finiteVec(sp)||!finiteVec(ship.getLinearVelocity())){ship.setTransform(lastGoodShip||V(0,0),0);ship.setLinearVelocity(V(0,0));}else lastGoodShip=sp.clone();
- for(const i of items){if(!finiteVec(i.body.getPosition())||!finiteVec(i.body.getLinearVelocity()))rescueBody(i.body,true);else clampSpeed(i.body,SAFETY.maxCargoSpeed);}
+ /* sleeping cargo can't be moving or broken: only awake stacks are checked each tick */for(const i of items){if(!i.body.isAwake())continue;if(!finiteVec(i.body.getPosition())||!finiteVec(i.body.getLinearVelocity()))rescueBody(i.body,true);else clampSpeed(i.body,SAFETY.maxCargoSpeed);}
  for(const b of boxes){if(!finiteVec(b.body.getPosition())||!finiteVec(b.body.getLinearVelocity()))rescueBody(b.body,true);else clampSpeed(b.body,SAFETY.maxCargoSpeed);}
  for(const t of terrain.values())if(t.body){if(!finiteVec(t.body.getPosition())||!finiteVec(t.body.getLinearVelocity()))rescueBody(t.body);else clampSpeed(t.body,SAFETY.maxCargoSpeed);}
  if(player&&!piloting){if(!finiteVec(player.getPosition())||!finiteVec(player.getLinearVelocity()))recover();else clampSpeed(player,SAFETY.maxCrewSpeed);}

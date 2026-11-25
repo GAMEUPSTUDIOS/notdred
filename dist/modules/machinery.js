@@ -32,7 +32,9 @@ function ejectCarried(t){if(P.Vec2.distance(localPlayer(),mountPoint(t))>5||buil
 
 function tickEjectors(dt){for(const t of mounts)if(t.type==='ejector')t.cooldown=Math.max(0,(t.cooldown||0)-dt);}
 
-function lootReachable(i){let blocked=false;world.rayCast(i.body.getPosition(),ship.getPosition(),f=>{if(f.getBody()!==ship&&f.getBody().getType()==='static'){blocked=true;return 0;}return 1;});return !blocked;}
+// Loot can be drawn in when no rock lies between it and the nearest point of the hull (it used to look toward the ship's
+// centre, so on a big ship rock under the hull hid loot lying right beside it). The ground the loot rests on doesn't count.
+function lootReachable(i){const p=i.body.getPosition(),r=hullRect(),q=V(clamp(p.x,r.l,r.r),clamp(p.y,r.t,r.b));if(P.Vec2.distance(p,q)<.05)return true;let blocked=false;world.rayCast(p,q,(f,pt,n,t)=>{if(f.getBody()!==ship&&f.getBody().getType()==='static'&&t>.02&&P.Vec2.distance(pt,p)>.45){blocked=true;return 0;}return -1;});return !blocked;}
 
 function ejectTurretAmmo(m){if(piloting||P.Vec2.distance(localPlayer(),mountPoint(m))>8||buildBlocked(mountPoint(m)))return toast('Move closer with a clear path to the turret.');if(!m.ammo)return toast('Turret is empty.');const p=mountPoint(m),n=inward(m),t=V(-n.y,n.x);let output=null;for(const offset of [0,-.8,.8]){const q=V(p.x+n.x*1.35+t.x*offset,p.y+n.y*1.35+t.y*offset);if(q.x<bounds.l+.85||q.x>bounds.r-.85||q.y<bounds.t+.85||q.y>bounds.b-.85)continue;let blocked=false;inside.queryAABB(new P.AABB(V(q.x-.35,q.y-.35),V(q.x+.35,q.y+.35)),f=>{if(f.getBody()!==player&&(f.getFilterMaskBits()&8)&&!f.isSensor())blocked=true;return true;});if(!blocked){output=q;break;}}if(!output)return toast('Clear the turret’s interior outlet before ejecting ammo.');const count=m.ammo;spawnItem(m.ammoType||'ammo',output,V(n.x*.5,n.y*.5),count);m.ammo=0;save(true);toast('Ejected '+count+' ammo.');return true;}
 
@@ -44,7 +46,8 @@ function hatchClear(t){const q=hatchOutput(t);if(q.x<bounds.l+.85||q.x>bounds.r-
 const LOOT_REACH=7;
 // The hull's outline in the world, attachments included: straight from the ship's bounds (it never rotates). It used to be
 // gathered from every fixture of the hull for every hatch, every tick — on a big ship that was most of the server's time.
-function hullBox(){const p=ship.getPosition(),m=3.5;return {l:p.x+bounds.l-m,t:p.y+bounds.t-m,r:p.x+bounds.r+m,b:p.y+bounds.b+m};}
+function hullRect(){const p=ship.getPosition(),e=shipExtents();return {l:p.x+e.l,t:p.y+e.t,r:p.x+e.r,b:p.y+e.b};}
+function hullBox(){const r=hullRect(),m=3;return {l:r.l-m,t:r.t-m,r:r.r+m,b:r.b+m};}
 function nearHull(p,box){if(!box)return false;const dx=Math.max(box.l-p.x,0,p.x-box.r),dy=Math.max(box.t-p.y,0,p.y-box.b);return Math.hypot(dx,dy)<LOOT_REACH;}
 function claimWorldLoot(hp,allow){if(!worldLoot.length)return null;const box=hullBox();let i=null,best=Infinity;for(const c of worldLoot){if(!allow(c.type)||(c.grace||0)>0)continue;const p=c.body.getPosition();if(!nearHull(p,box)&&P.Vec2.distance(p,hp)>=9)continue;const d=P.Vec2.distance(p,hp);if(d<best&&lootReachable(c)){best=d;i=c;}}if(!i)return null;world.destroyBody(i.body);worldLoot.splice(worldLoot.indexOf(i),1);return {type:i.type,count:i.count};}
 // Where a hatch puts the next item: its outlet, or a tile or two further in when something sits on the outlet (an item
@@ -157,7 +160,7 @@ let loaderItemGrid=null;
 const gridKey=(gx,gy)=>(gx+32768)*65536+(gy+32768);
 function nearbyItems(t,cells){let out=null;const add=(x,y)=>{const x0=Math.floor((x-2.5)/2),x1=Math.floor((x+2.5)/2),y0=Math.floor((y-2.5)/2),y1=Math.floor((y+2.5)/2);for(let gx=x0;gx<=x1;gx++)for(let gy=y0;gy<=y1;gy++){const b=loaderItemGrid.get(gridKey(gx,gy));if(b)for(const i of b)(out??=new Set()).add(i);}};
  add(t.x,t.y);for(const c of cells)add(c.x,c.y);if(!out)return [];const r=[];for(const i of out)if(!i.taken)r.push(i);return r;}
-function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=gridKey(Math.floor(p.x/2),Math.floor(p.y/2));let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
+function tickLoaders(dt){if(!terrainOfType('loader').length)return;loaderItemGrid=new Map();for(const i of items){const p=i.body.getPosition(),k=gridKey(Math.floor(p.x/2),Math.floor(p.y/2));let b=loaderItemGrid.get(k);if(!b)loaderItemGrid.set(k,b=[]);b.push(i);}try{tickLoadersNow(dt);}finally{loaderItemGrid=null;}}
 // The loader's swing is its cooldown: the hand grabs a stack on the input side, carries it across (half a cycle),
 // delivers only when it arrives (waiting there if the target is full), then swings back empty (the other half) before
 // it can grab again — so what you see is exactly when it can act. phase: 0 = hand at the input, 1 = at the output.

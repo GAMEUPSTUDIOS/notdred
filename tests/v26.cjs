@@ -65,12 +65,12 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  for(let n=0;n<60;n++)run('const y=[...Array(bounds.b-bounds.t-1)].map((_,i)=>bounds.t+1+i).find(y=>!mounts.some(m=>P.Vec2.distance(mountPoint(m),V(bounds.r,y))<1.2))??0;damageShip(500,V(bounds.r,y))');
  assert.equal(run('brokenHull.size'),0,'hull tiles never break');const b1=run('({...bounds})');
  assert.ok(b1.r-b1.l+1>=8&&b1.b-b1.t+1>=8,'never below 8×8');assert.ok(b1.l>b0.l||b1.r<b0.r,'hits on the hull shrink the ship');
- // Starter items soak hits and are never destroyed.
+ // Starter items take damage and break like everything else now (v72; ℵ26 made them immune), dropping as loot.
  run('initialize();shipHP=0;CRITICAL.shrinkChance=0');const starters=run('mounts.filter(m=>isStarterTile(m)).length+[...terrain.values()].filter(isStarterTile).length');assert.ok(starters>0);
  for(const m of run('mounts.map(m=>({...mountPoint(m)}))'))for(let n=0;n<20;n++)run(`damageShip(1000,V(${m.x},${m.y}))`);
  for(const t of run('[...terrain.values()].filter(isStarterTile).map(t=>({x:t.x,y:t.y}))'))for(let n=0;n<20;n++)run(`damageShip(1000,V(${t.x},${t.y}))`);
- assert.equal(run('mounts.filter(m=>isStarterTile(m)).length+[...terrain.values()].filter(isStarterTile).length'),starters,'starter thrusters, RCs, hatch and fabricator stay');
- assert.equal(run('worldLoot.filter(i=>STARTER_ITEMS.includes(i.type)).length'),0,'no starter item ejected');
+ assert.equal(run('mounts.filter(m=>isStarterTile(m)).length+[...terrain.values()].filter(isStarterTile).length'),0,'starter thrusters, RCs, hatch and fabricator break');
+ assert.ok(run('worldLoot.filter(i=>STARTER_ITEMS.includes(i.type)).length')>0,'and drop as loot');
  // Ordinary tiles still break; loose cargo by the hit is blown out (as loot), further away it is kicked.
  run(clear+'shipHP=0;addBlock(2,1);for(let n=0;n<10;n++)damageShip(1000,V(2,1))');assert.equal(run('blocks.has(key(2,1))'),false);
  run(clear+'shipHP=0;CRITICAL.shrinkChance=0;globalThis.near=spawnItem("iron",V(0,1),V(0,0),16);globalThis.far=spawnItem("flux",V(2.2,1),V(0,0),4);damageShip(100,V(0,1))');

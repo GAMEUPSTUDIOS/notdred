@@ -85,8 +85,10 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  run('CRITICAL.shrinkChance=.08');
  console.log('PASS: critical ships — shots phase through the hull, hit the first tile on their path until it breaks, then the next; empty paths pass straight through.');}
 
-// A starter attachment where the shot lands soaks it.
-{run('initialize();shipHP=0;CRITICAL.shrinkChance=0;const rc=mounts.find(m=>m.side==="right");damageShip(1000,mountPoint(rc),V(-1,0));damageShip(1000,mountPoint(rc),V(-1,0))');assert.equal(run('mounts.filter(m=>m.side==="right").length'),1);run('CRITICAL.shrinkChance=.08');console.log('PASS: starter attachments in the line of fire soak critical shots.');}
+// An attachment where the shot lands takes the hit (the round stops there): a light round dents the starter RC, a heavy
+// one breaks it (starter items are no longer immune, v72).
+{run('initialize();shipHP=0;CRITICAL.shrinkChance=0;globalThis.rc=mounts.find(m=>m.side==="right");const before=terrainOfType("fabricator")[0]?.hp??100;damageShip(50,mountPoint(rc),V(-1,0));globalThis.fabAfter=terrainOfType("fabricator")[0]?.hp??100');
+ assert.ok(run('rc.hp')<100&&run('mounts.includes(rc)'),'the RC soaks a light round');run('damageShip(1000,mountPoint(rc),V(-1,0))');assert.equal(run('mounts.filter(m=>m.side==="right").length'),0,'a heavy one breaks it');run('CRITICAL.shrinkChance=.08');console.log('PASS: attachments in the line of fire take critical shots and break.');}
 
 // --- Loaders are solid, drop instead of throwing, and fill only what each machine uses ------------------------------
 {const clr='initialize();for(const b of blocks.values())interior.destroyFixture(b.f);blocks.clear();for(const t of terrain.values()){if(t.f)interior.destroyFixture(t.f);if(t.body)inside.destroyBody(t.body);}terrain.clear();for(const i of items)inside.destroyBody(i.body);items=[];for(const b of boxes)inside.destroyBody(b.body);boxes=[];player.setTransform(V(-4,1.8),0);';

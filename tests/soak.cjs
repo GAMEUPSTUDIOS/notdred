@@ -20,6 +20,7 @@ function check(c,s){const bad=m=>stats.invariant.length<20&&stats.invariant.push
  if(!s||!s.bounds)return bad('empty snapshot');if(!finite(s.position?.x)||!finite(s.position?.y))bad('ship position '+JSON.stringify(s.position));
  for(const m of s.crew||[]){if(!finite(m.p?.x)||!finite(m.p?.y))bad('crew position '+JSON.stringify(m.p));else if(!m.piloting&&(m.p.x<s.bounds.l-1||m.p.x>s.bounds.r+1||m.p.y<s.bounds.t-1||m.p.y>s.bounds.b+1))bad('crew outside hull '+JSON.stringify(m.p));}
  for(const i of s.items||[])if(!(i.count>=1&&i.count<=16)||!finite(i.x))bad('item '+JSON.stringify(i));
+ for(const r of [...(s.itemsFull||[]),...(s.itemsUp||[])])if(!(r[2]>=1&&r[2]<=16)||!finite(r[3])||!finite(r[4]))bad('item '+JSON.stringify(r));
  for(const st of s.stacks||[])if(st&&!(st.count>=1&&st.count<=16))bad('stack '+JSON.stringify(st));
  if(s.crew.filter(m=>m.piloting).length>1)bad('two pilots');
  if(!finite(s.shipHP))bad('shipHP '+s.shipHP);for(const o of s.others||[]){if(!finite(o.x)||!finite(o.y))bad('other ship position');stats.othersSeen=(stats.othersSeen||0)+1;}

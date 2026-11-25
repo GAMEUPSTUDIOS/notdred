@@ -19,8 +19,8 @@ A.run(`shots.push({p:V(ship.getPosition().x+9,ship.getWorldPoint(V(0,${row})).y-
 let sawInside=false;for(let i=0;i<90;i++){step(1);if(sim('sparrow').run('shots.some(s=>s.inside!=null)'))sawInside=true;}
 assert.ok(sawInside,'the round went inside the critical hull and kept flying');
 assert.ok(B.run(`(blocks.get(key(${col},${row}))?.hp??0)`)<hp0,'…and damaged the block it ran into');
-// No tile in the way: it flies out the far side.
-B.run(`(()=>{const t=blocks.get(key(${col},${row}));if(t){interior.destroyFixture(t.f);blocks.delete(key(${col},${row}));}return 1})()`);
+// No tile in the way (and no turret: the starter RCs sit on this row and now take hits too, v72): it flies out the far side.
+B.run(`(()=>{/* the round drops a little under Sparrow's shot gravity: clear the rows it crosses */for(let y=${row}-1;y<=${row}+3;y++)for(let x=bounds.l+1;x<bounds.r;x++){const t=blocks.get(key(x,y));if(t){interior.destroyFixture(t.f);blocks.delete(key(x,y));}const u=terrainAt({x,y});if(u&&!u.body){if(u.f)interior.destroyFixture(u.f);terrain.delete(u.key||key(u.x,u.y));}}for(const m of [...mounts])if(m.side==='left'||m.side==='right'){if(m.f)ship.destroyFixture(m.f);mounts.splice(mounts.indexOf(m),1);}return 1})()`);step(2);
 A.run(`shots.push({p:V(ship.getPosition().x+9,ship.getWorldPoint(V(0,${row})).y),v:V(60,0),life:3,type:'ammo',maxLife:3})`);
 let exited=false;for(let i=0;i<120;i++){step(1);if(sim('sparrow').run(`shots.some(s=>s.inside==null&&s.passed!=null&&s.p.x>${B.run('ship.getWorldPoint(V(bounds.r,0)).x')}+1)`))exited=true;}
 assert.ok(exited,'a round that meets nothing inside leaves through the far side');

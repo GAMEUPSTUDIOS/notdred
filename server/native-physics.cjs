@@ -28,6 +28,8 @@ function step(world,dt,opts=null){
   let id=b.__nid;if(!id)id=b.__nid=nextBody++;
   const type=b.m_type||b.getType(),old=b.__nfx,sameFixtures=!!old&&old.ver===(b.__fixVer|0)&&old.head===b.m_fixtureList;let refs=null;
   if(type==='static'&&sameFixtures){const L=b.__nsent,q=b.m_xf.p;if(L&&q.x===L.px&&q.y===L.py&&b.m_sweep.a===L.angle)continue;}
+  // A sleeping body nobody touched since the solver put it to sleep (most of a resting pile): a few field reads.
+  else if(sameFixtures&&!b.m_awakeFlag){const L=b.__nsent;if(L&&!(L.flags&16)&&b.m_activeFlag===!!(L.flags&1)){const q=b.m_xf.p,v=b.m_linearVelocity;if(q.x===L.px&&q.y===L.py&&v.x===L.vx&&v.y===L.vy&&b.m_sweep.a===L.angle&&b.m_angularVelocity===L.spin&&!b.m_force.x&&!b.m_force.y)continue;}}
   map.set(id,b);
   if(!sameFixtures){refs=[];for(let f=b.getFixtureList();f;f=f.getNext())refs.push(f);}
   const p=b.getPosition(),v=b.getLinearVelocity(),c=b.getLocalCenter(),angle=b.getAngle(),spin=b.getAngularVelocity(),awake=b.isAwake(),fx=b.m_force.x,fy=b.m_force.y,torque=b.m_torque;
@@ -40,6 +42,7 @@ function step(world,dt,opts=null){
   recBuf[o+11]=gs;recBuf[o+12]=ld;recBuf[o+13]=ad;recBuf[o+14]=mass;recBuf[o+15]=inertia;recBuf[o+16]=c.x;recBuf[o+17]=c.y;recBuf[o+18]=flags;recBuf[o+19]=0;n++;
   b.__nsent={px:p.x,py:p.y,vx:v.x,vy:v.y,angle,spin,flags,gs,ld,ad,mass,inertia,cx:c.x,cy:c.y};
  }
+ world.__lastRecords=n;/* bodies re-sent this tick (dev/diagnostics) */
  const removed=world.__nativeRemoved||[];world.__nativeRemoved=[];for(const id of removed)map.delete(id);
  const structural=shapes.length||removed.length?JSON.stringify({shapes,removed}):'';
  const g=world.getGravity(),out=native.step2(wid,dt,g.x,g.y,structural,recBuf.subarray(0,n*REC));

@@ -28,6 +28,9 @@ function zsPlaceShip(id,s){const f=fleet.get(id);if(!f)return;f.body.setTransfor
 function zsForces(id,forces,impulses){const f=fleet.get(id);if(!f)return;f.forces=forces||[];f.impulses=impulses||[];}
 
 // Bind the single-ship globals to fleet ship f (or to nothing).
+// The ship a zone call is about: its hull outline is its extents as its room reported them (the zone's own `bounds` are
+// a default ship's, which made a big ship's hatches pick up only loot close to its middle).
+shipExtents=function(){const e=currentTarget?.ext;return e?{l:e.l,r:e.r,t:e.t,b:e.b}:{l:bounds.l-.5,r:bounds.r+.5,t:bounds.t-.5,b:bounds.b+.5};};
 function bindTarget(f){ship=f?f.body:dummyShip;docked=f?.docked?{side:'floor'}:null;currentTarget=f||null;}
 let currentTarget=null,zsTick=0;const BOT_FAR=160;
 damageShip=function(amount,point,dir=null){const f=currentTarget;if(!f)return null;return zoneHost.damage(f.id,amount,{x:point.x,y:point.y},dir?{x:dir.x,y:dir.y}:null,null,null);};
@@ -97,9 +100,10 @@ function zsShip(id){const f=fleet.get(id);if(!f)return null;const p=f.body.getPo
 // Rocks that have taken damage, so every ship can show their health bars.
 const hurtRocks=new Set();function noteRockHurt(r){hurtRocks.add(r.id);}
 function rockHealth(){const out=[];for(const id of hurtRocks){const r=rocks.get(id);if(!r||r.hp>=r.maxhp){hurtRocks.delete(id);continue;}out.push([id,Math.max(0,Math.round(r.hp)),r.maxhp]);}return out;}
+let zsLootSeq=0;
 function zsSnapshot(){return {devDraw:cleanDevShapes(devDraw,'world'),rockHp:rockHealth(),bots:allBots().map(b=>({color:b.species,index:b.index,hp:b.hp,p:{x:+b.body.getPosition().x.toFixed(3),y:+b.body.getPosition().y.toFixed(3)},v:{x:+b.body.getLinearVelocity().x.toFixed(3),y:+b.body.getLinearVelocity().y.toFixed(3)}})),
  projectiles:[...shots,...enemyShots].map(s=>({type:s.type,p:{x:+s.p.x.toFixed(3),y:+s.p.y.toFixed(3)},v:{x:+s.v.x.toFixed(3),y:+s.v.y.toFixed(3)},life:+(s.life||0).toFixed(3),frag:s.frag||undefined})),
- loot:worldLoot.map(i=>({type:i.type,count:i.count,x:+i.body.getPosition().x.toFixed(3),y:+i.body.getPosition().y.toFixed(3),vx:+i.body.getLinearVelocity().x.toFixed(3),vy:+i.body.getLinearVelocity().y.toFixed(3)})),
+ loot:worldLoot.map(i=>({id:i.nid||(i.nid=++zsLootSeq),type:i.type,count:i.count,x:+i.body.getPosition().x.toFixed(3),y:+i.body.getPosition().y.toFixed(3),vx:+i.body.getLinearVelocity().x.toFixed(3),vy:+i.body.getLinearVelocity().y.toFixed(3)})),
  boulders:boulderState((zsSnapN=(zsSnapN+1)%20)===1)};}
 let zsSnapN=0;
 
