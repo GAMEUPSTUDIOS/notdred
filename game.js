@@ -243,7 +243,7 @@ const SPRITE_FILE={wrench:['item-wrench'],block:['item-block'],ladder:['item-lad
  ammo:['item-ammo_standard'],scatter:['item-ammo_scattershot'],flak:['item-ammo_flak'],sniper:['item-ammo_sniper'],punch:['item-ammo_punch'],yank:['item-ammo_yank'],breaker:['item-ammo_b_slug'],slug:['item-ammo_slug'],trash:['item-ammo_trash'],
  /* placeable machines show as their packaged inventory items, not the placed sprite */turret:['item-turret_rc'],starter_rc:['item-turret_rc_starter'],turret_burst:['item-turret_burst'],turret_auto:['item-turret_auto'],turret_controller:['item-turret_controller'],
  booster:['item-shield_booster','item-repairkit'],repair:['item-repair_tool'],recycler:['item-recycler'],anchor:['item-anchor'],comms:['item-comms'],spawn:['item-spawn'],sign:['item-sign'],paint:['item-color_panel']};
-function loadSprite(t){const files=[...(SPRITE_FILE[t]||[]),t];const im=new Image();let n=0;im.addEventListener('error',()=>{if(++n<files.length)im.src='sprites/'+files[n]+'.png?v=93';else im.failed=true;});im.src='sprites/'+files[0]+'.png?v=93';return im;}
+function loadSprite(t){const files=[...(SPRITE_FILE[t]||[]),t];const im=new Image();let n=0;im.addEventListener('error',()=>{if(++n<files.length)im.src='sprites/'+files[n]+'.png?v=94';else im.failed=true;});im.src='sprites/'+files[0]+'.png?v=94';return im;}
 const spriteImages={};if(typeof Image!=='undefined')for(const t of [...TYPES,'official-door','official-door_frame','official-door_full','world_portal','world_portal_x','pusher_beam','hp_bar','box0','fabricator-placed','starter-placed','thruster-placed','turret-placed','storage-placed','player','official-fabricator','official-fab_t_starter','official-player','official-player_head','official-player_face','official-player_arm','official-player_hand','official-player_leg','official-player_foot','official-helm_wheel_starter','official-thruster_starter','official-thruster_base','official-thruster','official-turret_base','official-turret_action_rc_starter','official-turret_barrel_rc_starter','official-turret_action_rc','official-turret_barrel_rc','official-exbox_base','official-exbox_mid','official-exbox_center','official-exbox_border','official-exbox_corner','official-fab_screen','official-fab_hatch','official-item_hatch','official-item_hatch_starter','official-item_hatch_patch','official-tiles_overworld','official-tiles_subworld','official-bot','official-bot_saw','bot_square','official-thruster_gradient','official-gradient_circle','official-fab_t_engineering','official-fab_t_machine','official-fab_t_munitions','official-fab_t_legacy','official-item_fabricator_legacy','official-loader','official-loader_base','official-loader_hand','official-loader_arrow','official-item_ejector','portal-composite','official-turret_barrel_burst','official-turret_action_burst','official-turret_action_auto','official-turret_barrel','official-turret_action','official-turret_controller','official-ball','official-loot_sign','official-recycler','official-recycle_saw','official-anchor','official-comms_station','official-comms_screen','official-spawn','official-sign','official-sign_hover','official-sign_near'])spriteImages[t]=loadSprite(t);
 function spriteHTML(t){if(TURRET_ICON_PARTS[t])ensureTurretIcon(t);if(spriteImages[t]?.renderURL)return `<img class="item-sprite" src="${spriteImages[t].renderURL}" alt="">`;const im=spriteImages[t];return im?.src?`<img class="item-sprite" src="${im.src}" alt="">`:''}
 // Pixel-exact rendering: zoom is held at a whole number of device pixels per tile and every ship origin is
@@ -298,16 +298,17 @@ document.querySelectorAll('[data-slot]').forEach(b=>{b.draggable=true;b.ondragst
 
 
 
-// Expando box, built from the game's own pieces like the original: the bevelled frame (exbox_base) at the box's real size
-// (it is the hitbox — the picture grows with it), the four corner pieces rotated into the corners and scaled with the box,
-// a big round dark slot in the middle with the stored item in it, and the count just inside the top edge.
+// Expando box, like the original: the dark border, the red X panel (exbox_mid) stretched over the whole box — the box's
+// hitbox — then the game's pieces at their own size, which never scale (40 px = 1 tile): a corner piece in each corner
+// (1 tile) and the round centre slot (1½ tiles) holding the stored item, the count above it. A bigger box just shows more
+// panel between them.
 function drawBox(b){const p=b.body.getPosition(),S=b.size,h=S/2,img=n=>{const im=spriteImages[n];return im?.complete&&im.naturalWidth?im:null;};ctx.save();ctx.translate(p.x,p.y);ctx.rotate(b.body.getAngle());
- const base=img('official-exbox_base'),corner=img('official-exbox_corner'),center=img('official-exbox_center');
- if(base)ctx.drawImage(base,-h,-h,S,S);else rect(-h,-h,S,S,'#a64343','#111');
- if(corner){const c=S*.4;for(let k=0;k<4;k++){ctx.save();ctx.rotate(k*Math.PI/2);ctx.drawImage(corner,-h,-h,c,c);ctx.restore();}}
- const slot=S*.62;if(center){ctx.save();ctx.globalAlpha*=.6;ctx.drawImage(center,-slot/2,-slot/2,slot,slot);ctx.restore();}ctx.beginPath();ctx.arc(0,0,slot/2,0,Math.PI*2);ctx.strokeStyle='#1c0c0c';ctx.lineWidth=Math.max(.04,S*.022);ctx.stroke();
- const t=TYPES.find(k=>b.materials[k]>0);if(t){const n=S*.4;drawSprite(t,-n/2,-n/2,n,n);}
- ctx.restore();const count=Object.values(b.materials).reduce((a,v)=>a+v,0);text(count,p.x,p.y-h+S*.2,Math.max(.3,Math.min(.75,S*.15)),'#fff');}
+ const border=img('official-exbox_border'),mid=img('official-exbox_mid'),corner=img('official-exbox_corner'),center=img('official-exbox_center');
+ /* the X panel in exbox_mid's own colours (fill #a03232, lines #6a3232, black edge), its lines a fixed width at any size */rect(-h,-h,S,S,'#000');rect(-h+.04,-h+.04,S-.08,S-.08,'#a03232');ctx.strokeStyle='#6a3232';ctx.lineWidth=.1;ctx.beginPath();ctx.moveTo(-h+.15,-h+.15);ctx.lineTo(h-.15,h-.15);ctx.moveTo(h-.15,-h+.15);ctx.lineTo(-h+.15,h-.15);ctx.stroke();ctx.lineWidth=.08;ctx.strokeRect(-h+.1,-h+.1,S-.2,S-.2);
+ if(corner){const c=Math.min(1,S*.45);for(let k=0;k<4;k++){ctx.save();ctx.rotate(k*Math.PI/2);ctx.drawImage(corner,-h,-h,c,c);ctx.restore();}}
+ const slot=Math.min(1.5,S*.72);if(center){ctx.save();ctx.globalAlpha*=.62;ctx.drawImage(center,-slot/2,-slot/2,slot,slot);ctx.restore();}ctx.beginPath();ctx.arc(0,0,slot/2,0,Math.PI*2);ctx.strokeStyle='#160909';ctx.lineWidth=.06;ctx.stroke();
+ const t=TYPES.find(k=>b.materials[k]>0);if(t){const n=slot*.62;drawSprite(t,-n/2,-n/2,n,n);}
+ ctx.restore();const count=Object.values(b.materials).reduce((a,v)=>a+v,0);text(count,p.x,p.y-Math.min(h-.28,slot/2+.3),.42,'#fff');}
 
 function updateShipMass(){if(ship.getType()!=='dynamic')return;const area=(bounds.r-bounds.l-1)*(bounds.b-bounds.t-1);const mass=35+area*.8+blocks.size*.8+terrain.size*.3+mounts.reduce((n,m)=>n+(m.type==='turret'?8:4),0);ship.setMassData({mass,center:V(0,0),I:0});ship.setLinearDamping(.55);}
 
