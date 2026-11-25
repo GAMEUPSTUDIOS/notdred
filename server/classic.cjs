@@ -33,7 +33,7 @@ function createClassic({onConnection,root}){
     if(m.type==='rooms'&&joined){joined=false;session.status=null;session.post({t:'left'});}
     if(m.type==='pong'||m.type==='export')return;q.push(m);if(q.length>80)q.splice(0,q.length-80);},
    toServer(obj){session.ws.emit('message',typeof obj==='string'?obj:JSON.stringify(obj));},
-   close(){if(!sessions.has(id))return;sessions.delete(id);try{session.ws.close();}catch{}for(const w of session.waiters.splice(0))w(null);worker.terminate().catch(()=>{});}};
+   close(){if(!sessions.has(id))return;sessions.delete(id);try{session.ws.close();}catch{}for(const w of session.waiters.splice(0))w(null);/* ask the drawing thread to stop between frames (terminating it mid-draw could kill the whole server inside node-canvas); force it only if it doesn't */session.post({t:'stop'});setTimeout(()=>worker.terminate().catch(()=>{}),3000).unref();}};
   worker.on('message',m=>{if(m.t==='out')session.ws.emit('message',m.str);
    else if(m.t==='frame'){session.latest={seq:m.seq,buf:Buffer.from(m.buf)};session.frameMs=session.frameMs*.9+m.ms*.1;/* one waiting request per new frame: the page keeps several in flight, and each gets its own frame */const w=session.waiters.shift();if(w){session.served=m.seq;w(session.latest);}}
    else if(m.t==='status')session.status=m.st;

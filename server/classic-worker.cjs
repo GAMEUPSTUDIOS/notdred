@@ -11,8 +11,9 @@ function tick(){timer=null;const start=performance.now();
  if(Date.now()<wantUntil){try{const jpg=view.render(cfg.w,cfg.h,cfg.z,cfg.q);seq++;const buf=jpg.buffer.slice(jpg.byteOffset,jpg.byteOffset+jpg.length);parentPort.postMessage({t:'frame',seq,buf,ms:performance.now()-start},[buf]);}catch(e){parentPort.postMessage({t:'error',message:String(e.message)});}}
  const spent=performance.now()-start;timer=setTimeout(tick,Math.max(1000/FPS-spent,spent*.25,2));}
 // Status for the page around the picture (shields, slots, crew, fabricator), sent when it changes.
-setInterval(()=>{let st=null;try{st=view.status();}catch{}const k=JSON.stringify(st);if(k!==lastStatus){lastStatus=k;parentPort.postMessage({t:'status',st});}},250);
+const statusTimer=setInterval(()=>{let st=null;try{st=view.status();}catch{}const k=JSON.stringify(st);if(k!==lastStatus){lastStatus=k;parentPort.postMessage({t:'status',st});}},250);
 parentPort.on('message',m=>{try{
+ if(m.t==='stop'){/* between frames: nothing is being drawn right now */clearTimeout(timer);timer=null;wantUntil=0;clearInterval(statusTimer);parentPort.close();setImmediate(()=>process.exit(0));return;}
  if(m.t==='snap')view.receive(m.str);
  else if(m.t==='welcome')view.welcome(m.m);
  else if(m.t==='joined')view.joined(m.m,m.name);

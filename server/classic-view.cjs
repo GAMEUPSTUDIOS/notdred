@@ -42,7 +42,7 @@ function viewFactory(root){const dist=path.join(root,'dist'),compiled=new Map();
    welcome(m){s.__m=m;run('netID=__m.self;netAdmin=!!__m.admin;');},
    joined(m,name){s.__m=m;s.__name=name;run('netBlocks=[];netTerrainList=[];netMountList=[];netCaptain=!!__m.captain;netCrewKey="";netOthers=new Map();netActive=true;inLobby=false;localName=__name;');},
    left(){run('netActive=false;inLobby=true;netState=null;keys={};');},
-   key(type,key,shift,repeat){s.__key=key;fire('window',type,ev({key,shiftKey:!!shift,repeat:!!repeat}));},
+   key(type,key,shift,repeat){s.__key=key;fire('window',type,ev({key,shiftKey:!!shift,repeat:!!repeat}));/* classic mode keeps E for the helm / fabricator / controllers (clicking small pictures on old browsers is awkward) */if(type==='keydown'&&!repeat&&String(key).toLowerCase()==='e')run('interact()');},
    // The client is laid out at HUD_SCALE× the picture size and scaled down, so the game's fixed-size HUD (minimap,
    // labels) fits a small classic picture; clicks are mapped back the same way.
    mouse(x,y,button,w,h){s.innerWidth=w*HUD_SCALE;s.innerHeight=h*HUD_SCALE;const e=ev({clientX:x*HUD_SCALE,clientY:y*HUD_SCALE,button});canvas.onmousemove?.(e);if(button!=null){canvas.onmousedown?.(e);fire('window','mouseup',ev());}},

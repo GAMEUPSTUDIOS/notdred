@@ -57,7 +57,7 @@ function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg
  if(['edit','remove','rotate'].includes(a)&&!piloting&&!(a==='edit'&&tool==='booster')){const c=cursorCell(),t=terrainAt(c)||blocks.get(key(c.x,c.y));if(P.Vec2.distance(localPlayer(),V(c.x,c.y))>8||buildBlocked(c,t?.f)){toast('Target is out of reach or blocked.');storeCrew();return;}}
  if(a==='input'){keys={};for(const k of ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','shift'])keys[k]=!!msg.keys?.[k];pusherHeld=!!msg.held;m.inputAt=Date.now();}
  else if(a==='select'&&Number.isInteger(msg.slot)&&msg.slot>=0&&msg.slot<5)selectSlot(msg.slot);
- else if(a==='interact')interact();else if(a==='edit')edit();else if(a==='remove')secondaryAt(cursorCell());else if(a==='rotate')rotateSelection();else if(a==='helm')setTool('helm');else if(a==='drop')dropItem(!!msg.half);else if(a==='portal')usePortal();
+ else if(a==='interact')interact();else if(a==='leave'){if(piloting)recover();else if(manning)toggleController();}else if(a==='edit')edit();else if(a==='remove')secondaryAt(cursorCell());else if(a==='rotate')rotateSelection();else if(a==='helm')setTool('helm');else if(a==='drop')dropItem(!!msg.half);else if(a==='portal')usePortal();
  else if(a==='moveStack'&&[msg.from,msg.to].every(n=>Number.isInteger(n)&&n>=0&&n<5))moveStack(msg.from,msg.to,!!msg.half);
  else if(a==='craft'&&recipeNeeds(msg.item)&&Number.isInteger(msg.count)&&msg.count>=1&&msg.count<=8){activeFab=fabFor(msg);if(activeFab)craft(msg.item,msg.count);}
  else if(a==='material'&&TYPES.includes(msg.item)){activeFab=fabFor(msg);if(activeFab)transferMaterial(msg.item,!!msg.eject);}
@@ -165,7 +165,13 @@ function takeForces(){hookShipBody();const out={forces:shipForces,impulses:shipI
 const shipKick={n:0,x:0,y:0};function noteKick(dx,dy){shipKick.n++;shipKick.x+=dx;shipKick.y+=dy;}
 // Settings windows (doors, signs, paint, spawn points) only apply within reach and not through a solid tile.
 function tileInReach(t){return P.Vec2.distance(localPlayer(),V(t.x,t.y))<8&&!buildBlocked({x:t.x,y:t.y},t.f);}
-function setPose(x,y,vx,vy,kx,ky){if(kx||ky)noteKick(kx,ky);if(docked)return;ship.setTransform(V(x,y),0);ship.setLinearVelocity(V(vx,vy));}
+// The zone hands this hull its pose every tick. Moving a planck body re-files every one of its fixtures in the broadphase
+// (a big ship has hundreds) — and this copy of the outside isn't solved in a shared zone — so off the Freeports the
+// body is moved directly and fully re-filed only every 6th tick (or after a jump); in Freeports, every tick (docking).
+let posePass=0;
+function setPose(x,y,vx,vy,kx,ky){if(kx||ky)noteKick(kx,ky);if(docked)return;const p=ship.getPosition();posePass=(posePass+1)%6;
+ if(posePass===0||zoneDef().kind==='safe'||Math.abs(p.x-x)+Math.abs(p.y-y)>4||!ship.m_xf||!ship.m_sweep)ship.setTransform(V(x,y),0);else{ship.m_xf.p.x=x;ship.m_xf.p.y=y;ship.m_sweep.setTransform(ship.m_xf);}
+ ship.setLinearVelocity(V(vx,vy));}
 // A zone round meets this hull. Shields up: they take it. Critical: the round goes in ({pierce:true}) and the zone
 // moves it on through the ship, asking zonePierce each step what it runs into.
 function zoneDamage(amount,lp,dir,ammo){if(shipHP<=0&&dir&&amount>0){hullEntryHit(V(lp.x,lp.y));return {pierce:true};}const r=damageShip(amount,V(lp.x,lp.y),dir?V(dir.x,dir.y):null);return r?.exit?{x:r.exit.x,y:r.exit.y}:null;}

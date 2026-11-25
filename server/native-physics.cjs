@@ -14,33 +14,37 @@ const TYPE={static:0,kinematic:1,dynamic:2};
  for(const m of ['createFixture','destroyFixture']){const orig=planck.Body.prototype[m];planck.Body.prototype[m]=function(...a){bump(this);return orig.apply(this,a);};}
  for(const m of ['setFilterData','setSensor','setFriction','setRestitution','setDensity']){const orig=planck.Fixture.prototype[m];if(typeof orig==='function')planck.Fixture.prototype[m]=function(...a){bump(this.getBody?.());return orig.apply(this,a);};}}
 function watchFixtures(){}
+{const planck=require('../dist/vendor/planck.min.js'),orig=planck.World.prototype.destroyBody;planck.World.prototype.destroyBody=function(b){if(b&&b.__nid&&this.__nativeID&&(b.__nsent||b.__nfx)){(this.__nativeRemoved??=[]).push(b.__nid);this.__nativeMap?.delete(b.__nid);}if(b){b.__nsent=null;b.__nfx=null;}return orig.call(this,b);};}
 // Shapes as the native side wants them (JSON; sent only for new bodies and when a body's fixtures change).
 function fixtureList(refs){return refs.map(f=>{const s=f.getShape();const entry={shape:s.getType(),density:f.getDensity(),friction:f.getFriction(),restitution:f.getRestitution(),sensor:f.isSensor(),category:f.getFilterCategoryBits(),mask:f.getFilterMaskBits(),group:f.getFilterGroupIndex()};
  if(entry.shape==='circle'){entry.radius=s.m_radius;entry.center=[s.m_p.x,s.m_p.y];}else if(entry.shape==='polygon')entry.vertices=s.m_vertices.map(v=>[v.x,v.y]);else if(entry.shape==='chain'){entry.loop=!!s.m_isLoop;entry.vertices=s.m_vertices.slice(0,s.m_isLoop?s.m_count-1:s.m_count).map(v=>[v.x,v.y]);}else throw Error('Unsupported native shape '+entry.shape);return entry;});}
 const REC=20,OUT=8;let recBuf=new Float64Array(REC*256);
 function step(world,dt,opts=null){
  if(!native.step2)return stepJSON(world,dt,opts);
- const wid=world.__nativeID??=nextWorld++;const map=new Map(),shapes=[],prev=world.__nativeLive||new Set(),now=new Set();let n=0;
+ const wid=world.__nativeID??=nextWorld++;const map=world.__nativeMap||(world.__nativeMap=new Map()),shapes=[];let n=0;
+ // Per-body state lives on the body (__nid, __nfx, __nsent): an unchanged static body — a zone's hundreds of rock pieces
+ // — is a handful of property reads per tick. Removals are recorded by World#destroyBody (patched above).
  for(let b=world.getBodyList();b;b=b.getNext()){
-  let id=ids.get(b);if(!id){id=nextBody++;ids.set(b,id);}map.set(id,b);now.add(id);
-  const type=b.getType(),old=fixtureCache.get(b),sameFixtures=!!old&&old.ver===(b.__fixVer|0)&&old.head===b.getFixtureList();let refs=null;
+  let id=b.__nid;if(!id)id=b.__nid=nextBody++;
+  const type=b.m_type||b.getType(),old=b.__nfx,sameFixtures=!!old&&old.ver===(b.__fixVer|0)&&old.head===b.m_fixtureList;let refs=null;
+  if(type==='static'&&sameFixtures){const L=b.__nsent,q=b.m_xf.p;if(L&&q.x===L.px&&q.y===L.py&&b.m_sweep.a===L.angle)continue;}
+  map.set(id,b);
   if(!sameFixtures){refs=[];for(let f=b.getFixtureList();f;f=f.getNext())refs.push(f);}
-  /* an unchanged static body costs nothing (a moved one — a docked hull set in place — is re-sent) */if(type==='static'&&sameFixtures){const L=sent.get(b);if(L){const q=b.getPosition();if(q.x===L.px&&q.y===L.py&&b.getAngle()===L.angle)continue;}}
   const p=b.getPosition(),v=b.getLinearVelocity(),c=b.getLocalCenter(),angle=b.getAngle(),spin=b.getAngularVelocity(),awake=b.isAwake(),fx=b.m_force.x,fy=b.m_force.y,torque=b.m_torque;
   const flags=(b.isActive()?1:0)|(b.isFixedRotation()?2:0)|(b.isBullet()?4:0)|(b.isSleepingAllowed()?8:0)|(awake?16:0),gs=b.getGravityScale(),ld=b.getLinearDamping(),ad=b.getAngularDamping(),mass=b.getMass(),inertia=b.getInertia();
-  const L=sent.get(b);
+  const L=b.__nsent;
   if(L&&sameFixtures&&!fx&&!fy&&!torque&&p.x===L.px&&p.y===L.py&&v.x===L.vx&&v.y===L.vy&&angle===L.angle&&spin===L.spin&&flags===L.flags&&gs===L.gs&&ld===L.ld&&ad===L.ad&&mass===L.mass&&inertia===L.inertia&&c.x===L.cx&&c.y===L.cy)continue;
-  if(!sameFixtures){shapes.push({id,type:TYPE[type],p:[p.x,p.y],fixtures:fixtureList(refs)});fixtureCache.set(b,{head:b.getFixtureList(),ver:b.__fixVer|0});}
+  if(!sameFixtures){shapes.push({id,type:TYPE[type],p:[p.x,p.y],fixtures:fixtureList(refs)});b.__nfx={head:b.getFixtureList(),ver:b.__fixVer|0};}
   if((n+1)*REC>recBuf.length){const g=new Float64Array(recBuf.length*2);g.set(recBuf);recBuf=g;}
   const o=n*REC;recBuf[o]=id;recBuf[o+1]=TYPE[type];recBuf[o+2]=p.x;recBuf[o+3]=p.y;recBuf[o+4]=v.x;recBuf[o+5]=v.y;recBuf[o+6]=angle;recBuf[o+7]=spin;recBuf[o+8]=fx;recBuf[o+9]=fy;recBuf[o+10]=torque;
   recBuf[o+11]=gs;recBuf[o+12]=ld;recBuf[o+13]=ad;recBuf[o+14]=mass;recBuf[o+15]=inertia;recBuf[o+16]=c.x;recBuf[o+17]=c.y;recBuf[o+18]=flags;recBuf[o+19]=0;n++;
-  sent.set(b,{px:p.x,py:p.y,vx:v.x,vy:v.y,angle,spin,flags,gs,ld,ad,mass,inertia,cx:c.x,cy:c.y});
+  b.__nsent={px:p.x,py:p.y,vx:v.x,vy:v.y,angle,spin,flags,gs,ld,ad,mass,inertia,cx:c.x,cy:c.y};
  }
- const removed=[];for(const id of prev)if(!now.has(id))removed.push(id);world.__nativeLive=now;
+ const removed=world.__nativeRemoved||[];world.__nativeRemoved=[];for(const id of removed)map.delete(id);
  const structural=shapes.length||removed.length?JSON.stringify({shapes,removed}):'';
  const g=world.getGravity(),out=native.step2(wid,dt,g.x,g.y,structural,recBuf.subarray(0,n*REC));
  for(let k=0;k<out.length;k+=OUT){const b=map.get(out[k]);if(!b)continue;b.setTransform({x:out[k+1],y:out[k+2]},out[k+5]);b.setLinearVelocity({x:out[k+3],y:out[k+4]});b.setAngularVelocity(out[k+6]);b.setAwake(out[k+7]===1);
-  const L=sent.get(b);if(L){const p=b.getPosition(),v=b.getLinearVelocity();L.px=p.x;L.py=p.y;L.vx=v.x;L.vy=v.y;L.angle=b.getAngle();L.spin=b.getAngularVelocity();L.flags=(L.flags&~16)|(b.isAwake()?16:0);}}
+  const L=b.__nsent;if(L){const p=b.getPosition(),v=b.getLinearVelocity();L.px=p.x;L.py=p.y;L.vx=v.x;L.vy=v.y;L.angle=b.getAngle();L.spin=b.getAngularVelocity();L.flags=(L.flags&~16)|(b.isAwake()?16:0);}}
  world.clearForces();
  // Keep the read-only Planck broadphase/contact mirror in sync for gameplay queries.
  // Bodies moved by setTransform only update the broadphase; Planck looks for new pairs during step() only when
@@ -83,5 +87,5 @@ function stepJSON(world,dt,opts=null){
  // setTransform — skips this: {contacts:false}.)
  if(opts?.contacts!==false){world.m_newFixture=true;world.step(0);}return result;
 }
-function destroy(world){if(world?.__nativeID){native.step(JSON.stringify({id:world.__nativeID,destroy:true}));delete world.__nativeID;delete world.__nativeLive;}}
+function destroy(world){if(world?.__nativeID){native.step(JSON.stringify({id:world.__nativeID,destroy:true}));delete world.__nativeID;delete world.__nativeLive;delete world.__nativeMap;world.__nativeRemoved=[];}}
 module.exports={step,destroy};

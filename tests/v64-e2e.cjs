@@ -25,7 +25,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  await p.evaluate(()=>{for(const m of mounts)if(m.type==='turret'){}});
  const ammo=await p.evaluate(()=>{netAction('dev',{op:'give',item:'ammo',count:16});return true;});await p.waitForTimeout(500);
  for(let i=0;i<40&&!(await p.evaluate(()=>nearHelm()));i++){const dx=await p.evaluate(()=>helm.x+.5-localPlayer().x);await p.keyboard.down(dx>0?'d':'a');await p.waitForTimeout(70);await p.keyboard.up(dx>0?'d':'a');await p.waitForTimeout(60);}
- await p.keyboard.press('e');await p.waitForFunction(()=>piloting,null,{timeout:5000});
+ const clickHelm=async()=>{/* the camera glides after you walk: aim until the cursor is really on the helm, then click */for(let k=0;k<20;k++){const q=await p.evaluate(()=>{const w=ship.getWorldPoint(V(helm.x+.4,helm.y-.4));return {x:(w.x-cam.x)*zoom+W/2,y:(w.y-cam.y)*zoom+H/2};});await p.mouse.move(q.x,q.y);await p.waitForTimeout(80);if(await p.evaluate(()=>onHelmCell(cursorCell()))){await p.mouse.down();await p.mouse.up();return;}}throw Error('could not aim at the helm');};/* no E key: click the helm sprite */await clickHelm();await p.waitForFunction(()=>piloting,null,{timeout:5000});
  const x0=await p.evaluate(()=>netState.position.x);await p.keyboard.down('w');await p.waitForTimeout(1500);await p.keyboard.up('w');await p.waitForTimeout(400);
  const moved=await p.evaluate(x0=>Math.hypot(netState.position.x-x0,netState.velocity.y)+Math.abs(netState.velocity.y),x0);assert.ok(moved>.5||(await p.evaluate(()=>Math.abs(netState.position.y)))>0,'the ship moves');
  // Fire: load the RCs on the server, aim outward through the turret on one side, click.
@@ -33,11 +33,11 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const fired=await p.evaluate(async()=>{const t=mounts.find(m=>m.type==='turret');const q=ship.getWorldPoint(mountPoint(t)),n=inward(t),aim={x:q.x-n.x*30,y:q.y-n.y*30};return aim;});
  await p.evaluate(()=>netAction('dev',{op:'heal'}));
  // load: hold ammo and click each turret through the normal edit path
- await p.keyboard.press('e');await p.waitForTimeout(400);
+ await clickHelm();await p.waitForFunction(()=>!piloting,null,{timeout:5000});/* clicking the helm while piloting leaves it */await p.waitForTimeout(300);
  for(const t of await p.evaluate(()=>mounts.filter(m=>m.type==='turret').map(m=>{const q=ship.getWorldPoint(mountPoint(m));return {x:(q.x-cam.x)*zoom+W/2,y:(q.y-cam.y)*zoom+H/2};}))){await p.evaluate(()=>netAction('select',{slot:slots.indexOf('ammo')}));await p.waitForTimeout(150);await p.mouse.move(t.x,t.y);await p.waitForTimeout(80);await p.evaluate(()=>netAction('edit'));await p.waitForTimeout(400);}
  const loaded=await p.evaluate(()=>mounts.filter(m=>m.type==='turret').reduce((a,m)=>a+(m.ammo||0),0));
  for(let i=0;i<40&&!(await p.evaluate(()=>nearHelm()));i++){const dx=await p.evaluate(()=>helm.x+.5-localPlayer().x);await p.keyboard.down(dx>0?'d':'a');await p.waitForTimeout(70);await p.keyboard.up(dx>0?'d':'a');await p.waitForTimeout(60);}
- await p.keyboard.press('e');await p.waitForFunction(()=>piloting,null,{timeout:5000});
+ await clickHelm();await p.waitForFunction(()=>piloting,null,{timeout:5000});
  const aimAt=await p.evaluate(()=>{const t=mounts.filter(m=>m.type==='turret').sort((a,b)=>(b.ammo||0)-(a.ammo||0))[0];const q=ship.getWorldPoint(mountPoint(t)),n=inward(t);return {x:q.x-n.x*4,y:q.y-n.y*4};});
  const s=await p.evaluate(a=>({x:(a.x-cam.x)*zoom+W/2,y:(a.y-cam.y)*zoom+H/2}),aimAt);await p.mouse.move(s.x,s.y);await p.mouse.down();await p.waitForTimeout(80);await p.mouse.up();
 

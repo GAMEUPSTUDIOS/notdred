@@ -66,7 +66,7 @@ function shipTag(r){return String(r.id||'').slice(0,5).toUpperCase();}
 let serverCtx=null;
 function serverEval(ws,code){if(!serverCtx){serverCtx=vm.createContext({console,setTimeout,clearTimeout,setInterval,clearInterval,Date,performance,process:{memoryUsage:()=>process.memoryUsage(),uptime:()=>process.uptime(),version:process.version,cpuUsage:()=>process.cpuUsage()},
   era,rooms,bus,clients,
-  stats:()=>({rooms:rooms.size,loaded:[...rooms.values()].filter(r=>r.game).length,players:clients.size,tickMs:+tickMs.toFixed(2),zones:[...bus.sims.keys()],memoryMB:Math.round(process.memoryUsage().rss/1048576)}),
+  stats:()=>({rooms:rooms.size,loaded:[...rooms.values()].filter(r=>r.game).length,players:clients.size,tickMs:+tickMs.toFixed(2),last10s:perf.last,zones:[...bus.sims.keys()],memoryMB:Math.round(process.memoryUsage().rss/1048576)}),
   ships:()=>[...rooms.values()].map(r=>({id:r.id,name:info(r).name,zone:zoneOf(r),loaded:!!r.game,crew:[...r.members].map(m=>m.name),lagMs:r.game?.lag?+r.game.lag.ms.toFixed(2):null})),
   findShip:q=>[...rooms.values()].find(r=>r.id===q||r.id.startsWith(String(q).toLowerCase())||info(r).name.toLowerCase()===String(q).toLowerCase()),
   inShip:(q,c)=>{const r=serverCtx.findShip(q);if(!r?.game)throw Error('No loaded ship '+q);return r.game.evalCode([...r.members][0]?.uid||null,c);},
@@ -102,7 +102,7 @@ function recover(r,err){console.error('Room tick failed',r.id,err.stack||err);co
 
 // ---- HTTP ------------------------------------------------------------------------------------------------
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webp':'image/webp','.svg':'image/svg+xml','.zip':'application/zip'};
-const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local');if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({ok:true,protocol:1,physics:'Box2D interiors (native C++), Planck exteriors',rooms:rooms.size,loaded:loadedCount(),players:clients.size,tickMs:+tickMs.toFixed(2)}));}if(u.pathname==='/classic'||u.pathname.startsWith('/classic/'))return classic.handle(req,res,u);if(u.pathname==='/api/rooms'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify(list()));}let file;try{file=path.resolve(root,'dist','.'+decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));}catch{res.writeHead(400);return res.end();}if(!file.startsWith(path.join(root,'dist')+path.sep)){res.writeHead(403);return res.end();}fs.stat(file,(err,st)=>{if(err||!st.isFile()){res.writeHead(404);return res.end('Not found');}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);});});
+const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local');if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({ok:true,protocol:1,physics:'Box2D interiors (native C++), Planck exteriors',rooms:rooms.size,loaded:loadedCount(),players:clients.size,tickMs:+tickMs.toFixed(2),last10s:perf.last}));}if(u.pathname==='/classic'||u.pathname.startsWith('/classic/'))return classic.handle(req,res,u);if(u.pathname==='/api/rooms'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify(list()));}let file;try{file=path.resolve(root,'dist','.'+decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));}catch{res.writeHead(400);return res.end();}if(!file.startsWith(path.join(root,'dist')+path.sep)){res.writeHead(403);return res.end();}fs.stat(file,(err,st)=>{if(err||!st.isFile()){res.writeHead(404);return res.end('Not found');}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);});});
 const wss=new WebSocketServer({noServer:true,maxPayload:2*1024*1024,
  // Updates are compressed (each looks much like the one before, so a small shared window shrinks them several-fold);
  // fast level-1 zlib, a 16 KB window per player. NOTDRED_DEFLATE=0 turns it off.
@@ -200,12 +200,13 @@ wss.on('connection',onConnection);
 const classic=require('./classic.cjs').createClassic({onConnection,root});
 
 // ---- Simulation loop -------------------------------------------------------------------------------------
-let previous=performance.now(),acc=0,frames=0,tickMs=0;
+let previous=performance.now(),acc=0,frames=0,tickMs=0,perf={worst:0,behind:0,calls:0,since:Date.now(),last:null};
 const timer=setInterval(()=>{const now=performance.now();acc+=Math.min((now-previous)/1000,.1);previous=now;let steps=0;const t0=performance.now();
- while(acc>=1/60&&steps++<3){const active=[];/* empty ships stay in the world (others see them, bots can still shoot them) until they despawn */for(const r of rooms.values())if(r.game&&(r.members.size||!r.returned)){try{r.game.tick(1/60);r.tick++;active.push(r);}catch(e){recover(r,e);}}
+ while(acc>=1/60&&steps++<3){const active=[];/* empty ships stay in the world (others see them, bots can still shoot them) until they despawn */for(const r of rooms.values())if(r.game&&(r.members.size||!r.returned)){try{/* nobody aboard: the hull stays in the zone, its inside isn't simulated (saves the server's time; it despawns after RETURN_MS) */if(r.members.size){r.game.tick(1/60);r.tick++;}active.push(r);}catch(e){recover(r,e);}}
   try{bus.step(active,1/60);}catch(e){console.error('Zone bus step failed',e.stack);}
   acc-=1/60;frames++;}
- if(steps>=3)acc=Math.min(acc,1/60);tickMs=tickMs*.9+(performance.now()-t0)*.1;
+ if(steps>=3){acc=Math.min(acc,1/60);perf.behind++;}{const ms=performance.now()-t0;tickMs=tickMs*.9+ms*.1;perf.worst=Math.max(perf.worst,ms);perf.calls++;
+  /* every 10 s: the worst tick and how often the server couldn't keep up (it then drops time — everything runs slow) */if(Date.now()-perf.since>10000){perf.last={worstMs:+perf.worst.toFixed(1),fellBehindPct:+(perf.behind/Math.max(1,perf.calls)*100).toFixed(1),avgMs:+tickMs.toFixed(2)};if(perf.last.fellBehindPct>5)console.warn('Server is falling behind: '+perf.last.fellBehindPct+'% of ticks in the last 10 s (worst '+perf.last.worstMs+' ms)');perf.worst=0;perf.behind=0;perf.calls=0;perf.since=Date.now();}}
  // 20 snapshots a second (every 3rd 60 Hz tick).
  if(frames>=3){frames=0;const loaded=[...rooms.values()].filter(r=>r.game&&(r.members.size||!r.returned)),live=loaded.filter(r=>r.members.size);
   // Pass 1: every ship's exterior (layout hash changes only when the ship is rebuilt), so pass 2 never
