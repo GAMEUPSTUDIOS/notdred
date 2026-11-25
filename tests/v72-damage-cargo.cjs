@@ -49,5 +49,13 @@ const moved=run('(()=>{const i=items[3];i.body.setTransform(V(i.body.getPosition
 pass=D.game.snapshotPass(['d']);assert.deepEqual([...pass.own[0].itemsUp.map(r=>r[0])],[moved],'only the moved stack is sent');
 const gone=run('(()=>{const i=items[5];inside.destroyBody(i.body);items.splice(5,1);return i.nid;})()');dstep(1);pass=D.game.snapshotPass(['d']);assert.deepEqual([...pass.own[0].itemsGone],[gone]);
 D.game.join('e','E',false,'crew');pass=D.game.snapshotPass(['d','e']);assert.equal(pass.own[1].itemsFull.length,run('items.length'),'a new crew member gets every stack');
+// ---- Inserting a strip (embiggener at a cut) brings every crew member into the rebuilt ship, shifted with the strip.
+{const E={id:'E'};E.game=createRoom(null,{});E.game.join('c','C',true,'captain');E.game.join('e','E',false,'crew');const run=E.game.run,st=n=>{for(let i=0;i<n;i++)E.game.tick(1/60);};st(120);
+ const pos=id=>JSON.parse(run(`(()=>{bindCrew('${id}');const p=player.getPosition(),o=JSON.stringify({x:+p.x.toFixed(2),y:+p.y.toFixed(2),here:player.m_world===inside});storeCrew();return o;})()`));const e0=pos('e'),c0=pos('c');
+ run(`bindCrew('c');giveItem('embiggener',2);selectSlot(slots.indexOf('embiggener'));buildRotation=0;storeCrew();`);const cut=Math.min(c0.x,e0.x)-2;
+ E.game.command('c',{action:'edit',aim:{x:run('ship.getPosition().x')+cut,y:run('ship.getPosition().y')+run('bounds.b-1')}});st(60);
+ assert.equal(run('bounds.r-bounds.l'),11,'the strip went in');const e1=pos('e'),c1=pos('c');
+ assert.ok(e1.here&&c1.here,'both crew bodies are in the rebuilt ship');assert.equal(e1.x,e0.x+1,'the other crew member moved with the strip');assert.equal(c1.x,c0.x+1);
+ for(let i=0;i<40;i++){E.game.command('e',{action:'input',keys:{a:true}});st(1);}assert.ok(pos('e').x<e1.x-1,'and can still walk');}
 console.log('PASS: damage on every piece (turrets, thrusters, starter items) with its own health, rounds entering beside turrets, big ships collect floor loot, piles sleep with crew in them, item changes only.');
 process.exit(0);

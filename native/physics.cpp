@@ -96,7 +96,10 @@ static std::vector<double> call2(int id,double dt,double gx,double gy,const std:
  {const float STILL_SLEEP=1.0f,lin=b2_linearSleepTolerance*b2_linearSleepTolerance,ang=b2_angularSleepTolerance*b2_angularSleepTolerance;
   std::unordered_map<b2Body*,int> idx;std::vector<Body*> recs;
   for(auto& [n2,r]:w.bodies){auto b=r.p;if(b->GetType()==b2_staticBody)continue;if(!b->IsAwake()||!b->IsEnabled()){r.still=0;continue;}
-   bool calm=b->IsSleepingAllowed()&&b->GetLinearVelocity().LengthSquared()<=lin&&b->GetAngularVelocity()*b->GetAngularVelocity()<=ang;r.still=calm?r.still+(float)dt:0;
+   // Only a body resting on something counts: one hovering still in mid-air (held in a pusher's beam) must not be
+   // frozen there, or it would keep floating after the beam lets go.
+   bool rests=false;for(b2ContactEdge* e=b->GetContactList();e&&!rests;e=e->next)rests=e->contact->IsTouching()&&e->contact->IsEnabled()&&!e->contact->GetFixtureA()->IsSensor()&&!e->contact->GetFixtureB()->IsSensor();
+   bool calm=rests&&b->IsSleepingAllowed()&&b->GetLinearVelocity().LengthSquared()<=lin&&b->GetAngularVelocity()*b->GetAngularVelocity()<=ang;r.still=calm?r.still+(float)dt:0;
    idx[b]=(int)recs.size();recs.push_back(&r);}
   if(!recs.empty()){std::vector<int> up(recs.size());for(size_t k=0;k<up.size();k++)up[k]=(int)k;
    auto find=[&](int a){while(up[a]!=a){up[a]=up[up[a]];a=up[a];}return a;};
