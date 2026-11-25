@@ -127,8 +127,9 @@ function snapshotShared(){storeCrew();const st=state(),data={...st};for(const k 
 
  // Bots go out compact — [species, index, hp, x, y, vx, vy] to 0.01 m — about 40 bytes each instead of ~95 (a combat
  // zone's bots were half of every update). The page (network.js) and snapshot() unpack them.
- /* Bots far from this ship (beyond ~140 m, well past the screen and turret range) go out twice a second; near ones every
-  snapshot. botsAll marks a full list; the page keeps far bots from the last one meanwhile. */botPass=(botPass+1)%10;{const sp=ship.getPosition(),all=botPass===0;data.botsAll=all;if(!all)data.bots=(data.bots||[]).filter(b=>Math.abs(b.p.x-sp.x)<140&&Math.abs(b.p.y-sp.y)<140);}
+ /* Bots within 250 m of this ship (a zoomed-out view while flying) go out every snapshot; farther ones 5 times a second
+  (botsAll marks a full list), and the page keeps those moving on their last velocity in between — at 2 a second, frozen
+  in between, they visibly jumped on a zoomed-out screen. */botPass=(botPass+1)%4;{const sp=ship.getPosition(),all=botPass===0||botPass<0;data.botsAll=all;if(!all)data.bots=(data.bots||[]).filter(b=>Math.abs(b.p.x-sp.x)<250&&Math.abs(b.p.y-sp.y)<250);}
  data.bots=(data.bots||[]).map(b=>[b.color,b.index,Math.round(b.hp),Math.round(b.p.x*100)/100,Math.round(b.p.y*100)/100,Math.round(b.v.x*100)/100,Math.round(b.v.y*100)/100]);
  const json=JSON.stringify(data,roundReplacer);
  // Tiles, machines and turrets: encoded once here; each member gets the whole list or only what changed for them.
