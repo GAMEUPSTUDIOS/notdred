@@ -461,6 +461,14 @@ curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/ins
 curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh | NOTDRED_SERVICE=1 bash
 ```
 
+**Your own domain or No-IP hostname on a VPS (Linode, etc.):** point the hostname at the server's IP, then
+
+```
+curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh | NOTDRED_DOMAIN=yourname.ddns.net bash
+```
+
+It installs the service (game on 127.0.0.1:8080 only), **Caddy** in front of it with automatic HTTPS from Let's Encrypt (renewed by itself; the game's WebSocket goes through it), a **firewall** that leaves only SSH, 80 and 443 open (and your current SSH port), and 1 GB of swap on small servers. Players use `https://yourname.ddns.net`; classic mode stays on plain `http://yourname.ddns.net/classic` for old browsers. It warns if the hostname doesn't point at the server yet. The server believes forwarded visitor addresses (for the host-token lockout) only from a proxy on the same machine.
+
 (`NOTDRED_SERVICE=1 NOTDRED_LOCAL=1` serves on port 8080 on every interface instead of a Cloudflare link, for your own domain or reverse proxy. `sudo journalctl -u notdred -f` shows the log; `sudo systemctl start notdred-update` updates now.)
 
 On **Windows 10/11**, in PowerShell:

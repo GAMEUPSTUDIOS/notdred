@@ -116,7 +116,11 @@ function tokenOK(given,ip){const real=process.env.DEV_TOKEN;if(!real||typeof giv
  if(ok){tokenFails.delete(ip);return true;}const g=f&&f.until<=Date.now()&&f.n>=5?{n:0,until:0}:(f||{n:0,until:0});g.n++;if(g.n>=5){g.until=Date.now()+10*60000;console.warn('[security] 5 wrong host tokens from '+ip+': locked out for 10 minutes');}tokenFails.set(ip,g);return false;}
 function underLimit(map,key,max,ms){const now=Date.now(),list=(map.get(key)||[]).filter(t=>now-t<ms);if(list.length>=max){map.set(key,list);return false;}list.push(now);map.set(key,list);return true;}
 setInterval(()=>{const now=Date.now();for(const [k,f] of tokenFails)if(f.until<now&&f.n<5)tokenFails.delete(k);for(const m of [shipMade,joinsMade])for(const [k,l] of m)if(!l.some(t=>now-t<10*60000))m.delete(k);},60000).unref();
-function onConnection(ws,req){clients.add(ws);ws.ip=String(req?.headers?.['cf-connecting-ip']||req?.socket?.remoteAddress||ws.ip||'local').slice(0,64);ws.uid=id();ws.name='Crew';ws.actions=0;ws.window=Date.now();ws.seq=-1;ws.alive=true;ws.on('pong',()=>ws.alive=true);ws.on('message',raw=>{if(ws.flooded)return;try{
+// The visitor's address: forwarded headers are believed only from a proxy on this machine (Caddy, cloudflared), never
+// from someone connecting directly (who could write anything there).
+function visitorIP(req){const peer=String(req?.socket?.remoteAddress||'');const local=/^(127\.|::1$|::ffff:127\.)/.test(peer);
+ if(local){const h=req.headers||{},f=h['cf-connecting-ip']||String(h['x-forwarded-for']||'').split(',')[0].trim()||h['x-real-ip'];if(f)return String(f);}return peer||'local';}
+function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws.ip||'local').slice(0,64);ws.uid=id();ws.name='Crew';ws.actions=0;ws.window=Date.now();ws.seq=-1;ws.alive=true;ws.on('pong',()=>ws.alive=true);ws.on('message',raw=>{if(ws.flooded)return;try{
  if(Date.now()-ws.window>1000){ws.window=Date.now();ws.actions=0;}if(++ws.actions>90){if(ws.actions===91)send(ws,{type:'error',message:'Too many messages — slow down.'});if(ws.actions>400){ws.flooded=true;console.warn('[security] closing a flooding connection from '+ws.ip);(ws.terminate||ws.close)?.call(ws);}return;}
  {const size=typeof raw==='string'?raw.length:raw?.length||0;if(size>SMALL_MESSAGE){const head=(typeof raw==='string'?raw:Buffer.from(raw).toString('utf8',0,48)).slice(0,48);if(!/^\s*\{\s*"type"\s*:\s*"(import|eval)"/.test(head))throw Error('Message too large');}}
  const m=JSON.parse(raw);if(!m||typeof m!=='object'||Array.isArray(m))throw Error('Invalid message');
