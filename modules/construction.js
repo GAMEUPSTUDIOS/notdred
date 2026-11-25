@@ -17,7 +17,9 @@ const PLACE_SIZE=t=>t==='storage'?[2,2]:MACHINE_SIZE[physicsMachineType(t)];
 let placingAim=null;
 function supportTopBelow(x0,x1,yFrom){let best=null;const k0=Math.ceil(x0-.5+1e-6),k1=Math.floor(x1+.5-1e-6);for(let x=k0;x<=k1;x++)for(let y=Math.max(Math.round(yFrom),bounds.t+1);y<=bounds.b;y++){const t=y<bounds.b&&terrainAt({x,y});if(y===bounds.b||blocks.has(key(x,y))||(t&&!t.body&&SUPPORT_TYPES.includes(t.type))){if(best==null||y-.5<best)best=y-.5;break;}}return best;}
 function placementPoint(c,type){const [w,h]=PLACE_SIZE(type)||[1,1];let aim=placingAim||buildJob?.p||null;if(!aim&&typeof localMouse==='function'&&mouse?.active){const m=localMouse();if(Math.abs(m.x-c.x)<=.5&&Math.abs(m.y-c.y)<=.5)aim=m;}aim=aim||V(c.x,c.y);
- const x=clamp(aim.x,bounds.l+.5+w/2,bounds.r-.5-w/2),top=supportTopBelow(x-w/2,x+w/2,aim.y);return top==null?null:V(x,top-h/2-.01);}
+ const x=clamp(aim.x,bounds.l+.5+w/2,bounds.r-.5-w/2);
+ /* expando boxes go exactly where you aim (anywhere they fit) — they're physics objects and behave as such from there */if(type==='storage'){const p=V(x,clamp(aim.y,bounds.t+.5+h/2,bounds.b-.5-h/2));return boxSpace(p,w)?p:null;}
+ const top=supportTopBelow(x-w/2,x+w/2,aim.y);return top==null?null:V(x,top-h/2-.01);}
 // ---- Footprints and placement (one set of rules for the preview, the client and the server) ----------------------
 // Every placeable has a footprint; the footprint is centred on where you aim (the piece sits under the middle of the
 // cursor), and a piece can go only where every tile of it is free: inside the hull, no block or tile, not the helm,
