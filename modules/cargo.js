@@ -26,7 +26,7 @@ function touching(a,b){for(let e=a.getContactList();e;e=e.next)if(e.other===b&&e
 /* growing=true (an expando box getting bigger): resting boxes sink a hair into what they sit on, so edges get a little
  slack, and players beside it are simply nudged aside by the physics — the one clicking it always stands right there */
 function boxSpace(p,size,ignore=null,growing=false){const h=size/2,e=growing?.04:0;if(p.x-h<bounds.l+.5-e||p.x+h>bounds.r-.5+e||p.y-h<bounds.t+.5-e||p.y+h>bounds.b-.5+e)return false;if(!growing&&player&&Math.abs(localPlayer().x-p.x)<h+.24&&Math.abs(localPlayer().y-p.y)<h+.63)return false;/* solid tiles (doors and machines over all their tiles), the helm, and fixed machines are in the way too */const cellHit=(x,y)=>Math.abs(x-p.x)<h+.49-e&&Math.abs(y-p.y)<h+.49-e;
- if([...terrain.values()].some(t=>t.body?(()=>{const [w2,h2]=MACHINE_SIZE[t.type],q=t.body.getPosition();return Math.abs(q.x-p.x)<w2/2+h-e&&Math.abs(q.y-p.y)<h2/2+h-e;})():['wedge','walkway_wedge','glass','net','door','hatch','starter_hatch','loader','pusher_block','paint','anchor','spawn'].includes(t.type)&&terrainCells(t).some(c=>cellHit(c.x,c.y))))return false;
+ if([...terrain.values()].some(t=>t.body?(()=>{const [w2,h2]=MACHINE_SIZE[t.type],q=t.body.getPosition();return Math.abs(q.x-p.x)<w2/2+h-e&&Math.abs(q.y-p.y)<h2/2+h-e;})():['wedge','walkway_wedge','glass','net','door','hatch','starter_hatch','pusher_block','paint','anchor','spawn'].includes(t.type)&&terrainCells(t).some(c=>cellHit(c.x,c.y))))return false;
  if(typeof helmCells==='function'&&helmCells().some(c=>cellHit(c.x,c.y)))return false;
  return ![...blocks.values()].some(t=>cellHit(t.x,t.y))&&!boxes.some(b=>b!==ignore&&Math.abs(b.body.getPosition().x-p.x)<(b.size+size)/2-e&&Math.abs(b.body.getPosition().y-p.y)<(b.size+size)/2-e)}
 
@@ -45,6 +45,9 @@ function resizeBox(box){const total=Object.values(box.materials).reduce((a,b)=>a
 // it still fills the size it already is (a box grows a quarter tile per 64 items). Returns how many went in.
 function boxInsert(box,type,n){if(n<=0||!boxAccepts(box,type))return 0;const total=Object.values(box.materials).reduce((a,v)=>a+v,0);box.materials[type]=(box.materials[type]||0)+n;if(resizeBox(box))return n;box.materials[type]-=n;
  const fits=Math.min(n,(Math.floor(total/64)+1)*64-1-total);if(fits<=0)return 0;box.materials[type]+=fits;if(resizeBox(box))return fits;box.materials[type]-=fits;return 0;}
+// A box covering p, or (pad > 0) one whose edge comes within pad of it — loaders use this so a box that has slid a little
+// off their output tile is still the one they fill.
+function boxNear(p,pad){return boxAt(p)||boxes.find(b=>{const q=b.body.getLocalPoint(p);return Math.abs(q.x)<b.size/2+pad&&Math.abs(q.y)<b.size/2+pad})}
 function boxAt(p){return boxes.find(b=>{const q=b.body.getLocalPoint(p);return Math.abs(q.x)<b.size/2&&Math.abs(q.y)<b.size/2})}
 
 function useBox(p){const b=boxAt(p);if(!b)return false;if(piloting||P.Vec2.distance(localPlayer(),p)>3.5){toast('Move closer to the expando box.');return true}if(tool==='walk'||tool==='empty'){const t=TYPES.find(t=>b.materials[t]>0);if(t){const n=Math.min(stackLimit(t),b.materials[t]);scatter(t,n,V(p.x-b.size/2-.5,p.y));b.materials[t]-=n;resizeBox(b);}else toast('Empty expando box. Right-click with wrench to package it.');}else if(TYPES.includes(tool)){const t=tool;if(!boxAccepts(b,t)){toast('This expando box holds '+NAMES[boxType(b)]+'. One item type per box — empty it first.');return true;}const n=boxInsert(b,t,inventory[t]);if(n>0)inventory[t]-=n;if(n<inventory[t]+n&&inventory[t]>0)toast(n?'The box is full until it has room to grow ('+inventory[t]+' left in hand).':'Box needs more room to expand.');}save(true);return true}

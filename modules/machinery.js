@@ -9,7 +9,7 @@ function craft(t,count=1){const f=activeFab||nearFab();if(!f||!recipeNeeds(t)||p
 
 // Machines never swallow loose items thrown or dropped onto them: a player loads one by clicking it with the item in
 // hand, or a loader feeds it.
-function tickFabricators(dt){for(const f of terrain.values()){if(f.type!=='fabricator')continue;f.queue=f.queue.filter(t=>recipeNeeds(t));if(f.job&&!recipeNeeds(f.job.type)){f.materials.iron=(f.materials.iron||0)+12;f.job=null;}if(!f.job&&f.queue.length){const t=f.queue[0];const need=Object.entries(recipeNeeds(t));if(need.every(([m,n])=>(f.materials[m]||0)>=n)){for(const [m,n] of need)f.materials[m]-=n;f.queue.shift();f.job={type:t,progress:0}}}if(f.job){f.job.progress=Math.min((DURATION[f.job.type]||2),f.job.progress+dt);if(f.job.progress>=(DURATION[f.job.type]||2)){/* The finished item is set down at the fabricator's item doors (its bottom-left hatch), at rest: it never pops
+function tickFabricators(dt){for(const f of terrainOfType('fabricator')){f.queue=f.queue.filter(t=>recipeNeeds(t));if(f.job&&!recipeNeeds(f.job.type)){f.materials.iron=(f.materials.iron||0)+12;f.job=null;}if(!f.job&&f.queue.length){const t=f.queue[0];const need=Object.entries(recipeNeeds(t));if(need.every(([m,n])=>(f.materials[m]||0)>=n)){for(const [m,n] of need)f.materials[m]-=n;f.queue.shift();f.job={type:t,progress:0}}}if(f.job){f.job.progress=Math.min((DURATION[f.job.type]||2),f.job.progress+dt);if(f.job.progress>=(DURATION[f.job.type]||2)){/* The finished item is set down at the fabricator's item doors (its bottom-left hatch), at rest: it never pops
  out with a push. A matching stack already sitting there is topped up; anything else there makes it wait. */
 const q=V(f.x+.02,f.y+2.15),n=RECIPE_YIELD[f.job.type]||1,here=items.filter(i=>P.Vec2.distance(i.body.getPosition(),q)<.8),same=here.find(i=>i.type===f.job.type&&i.count+n<=stackLimit(i.type));
 if(same||!here.length){if(same){same.count+=n;same.body.setAwake(true);}else{const it=spawnItem(f.job.type,q,V(0,0),n);it.intakeFrom=key(f.x,f.y);}effects.push({x:q.x,y:q.y,w:1,h:1,life:.3,color:'green',kind:'craft'});if(f.repeat&&f.queue.length<32)f.queue.push(f.job.type);f.job=null}}}}uiTimer+=dt;if(uiTimer>.2&&el('craft').open){uiTimer=0;renderRecipes()}}
@@ -42,16 +42,18 @@ function hatchClear(t){const q=hatchOutput(t);if(q.x<bounds.l+.85||q.x>bounds.r-
 // Loot within LOOT_REACH of the ship's hull (any part of it, not just the hatch) can be drawn in; the one nearest
 // the hatch comes first. (It used to be 9 units from the hatch itself, so most of a big ship never collected.)
 const LOOT_REACH=7;
-function hullBox(){let box=null;for(let f=ship.getFixtureList();f;f=f.getNext()){const a=f.getAABB(0);if(!a)continue;if(!box)box={l:a.lowerBound.x,t:a.lowerBound.y,r:a.upperBound.x,b:a.upperBound.y};else{box.l=Math.min(box.l,a.lowerBound.x);box.t=Math.min(box.t,a.lowerBound.y);box.r=Math.max(box.r,a.upperBound.x);box.b=Math.max(box.b,a.upperBound.y);}}return box;}
+// The hull's outline in the world, attachments included: straight from the ship's bounds (it never rotates). It used to be
+// gathered from every fixture of the hull for every hatch, every tick — on a big ship that was most of the server's time.
+function hullBox(){const p=ship.getPosition(),m=3.5;return {l:p.x+bounds.l-m,t:p.y+bounds.t-m,r:p.x+bounds.r+m,b:p.y+bounds.b+m};}
 function nearHull(p,box){if(!box)return false;const dx=Math.max(box.l-p.x,0,p.x-box.r),dy=Math.max(box.t-p.y,0,p.y-box.b);return Math.hypot(dx,dy)<LOOT_REACH;}
-function claimWorldLoot(hp,allow){const box=hullBox();let i=null,best=Infinity;for(const c of worldLoot){if(!allow(c.type)||(c.grace||0)>0)continue;const p=c.body.getPosition();if(!nearHull(p,box)&&P.Vec2.distance(p,hp)>=9)continue;const d=P.Vec2.distance(p,hp);if(d<best&&lootReachable(c)){best=d;i=c;}}if(!i)return null;world.destroyBody(i.body);worldLoot.splice(worldLoot.indexOf(i),1);return {type:i.type,count:i.count};}
+function claimWorldLoot(hp,allow){if(!worldLoot.length)return null;const box=hullBox();let i=null,best=Infinity;for(const c of worldLoot){if(!allow(c.type)||(c.grace||0)>0)continue;const p=c.body.getPosition();if(!nearHull(p,box)&&P.Vec2.distance(p,hp)>=9)continue;const d=P.Vec2.distance(p,hp);if(d<best&&lootReachable(c)){best=d;i=c;}}if(!i)return null;world.destroyBody(i.body);worldLoot.splice(worldLoot.indexOf(i),1);return {type:i.type,count:i.count};}
 // Where a hatch puts the next item: its outlet, or a tile or two further in when something sits on the outlet (an item
 // left there used to jam the hatch for good). A same-type stack on the outlet with room takes it instead.
 function hatchSpot(t,type,count){const a=(t.rotation||0)*Math.PI/2,n=V(-Math.sin(a),Math.cos(a)),q0=hatchOutput(t);
  const there=items.find(i=>i.type===type&&i.count+count<=stackLimit(type)&&P.Vec2.distance(i.body.getPosition(),q0)<.6);if(there)return {merge:there};
  for(const k of [0,1,2]){const q=V(q0.x+n.x*k,q0.y+n.y*k);if(q.x<bounds.l+.85||q.x>bounds.r-.85||q.y<bounds.t+.85||q.y>bounds.b-.85)break;let clear=true;inside.queryAABB(new P.AABB(V(q.x-.34,q.y-.34),V(q.x+.34,q.y+.34)),f=>{if(!f.isSensor()&&f.getBody()!==player){clear=false;return false;}return true;});if(clear)return {at:q};}return null;}
-function tickHatches(dt){const hatches=[...terrain.values()].filter(t=>['hatch','starter_hatch'].includes(t.type));for(const t of hatches){t.outputTimer=Math.max(0,(t.outputTimer||0)-dt);if(t.outputTimer>0||t.filterMode==='off')continue;const queued=t.cargo?.findIndex(i=>hatchAllows(t,i.type));let cargo=queued>=0?t.cargo.splice(queued,1)[0]:null;
-  if(!cargo){if(!hatchSpot(t,'',0))continue;cargo=claimWorldLoot(ship.getWorldPoint(V(t.x,t.y)),type=>hatchAllows(t,type));if(!cargo)continue;}
+function tickHatches(dt){const hatches=[...terrainOfType('hatch'),...terrainOfType('starter_hatch')];for(const t of hatches){t.outputTimer=Math.max(0,(t.outputTimer||0)-dt);if(t.outputTimer>0||t.filterMode==='off')continue;const queued=t.cargo?.findIndex(i=>hatchAllows(t,i.type));let cargo=queued>=0?t.cargo.splice(queued,1)[0]:null;
+  if(!cargo){/* nothing to claim (a shared zone's loot lives in the zone, so there we always ask) */if((typeof attachedToZone==='undefined'||!attachedToZone)&&!worldLoot.length)continue;if(!hatchSpot(t,'',0))continue;cargo=claimWorldLoot(ship.getWorldPoint(V(t.x,t.y)),type=>hatchAllows(t,type));if(!cargo)continue;}
   const spot=hatchSpot(t,cargo.type,cargo.count);if(!spot){(t.cargo??=[]).unshift(cargo);t.outputTimer=.4;continue;}
   if(spot.merge){spot.merge.count+=cargo.count;wakeCargo(spot.merge.body);}else spawnItem(cargo.type,spot.at,V(0,0),cargo.count);t.outputTimer=.4;}}
 
@@ -93,7 +95,7 @@ function pusherBeam(t){pusherSettings(t);const d=pusherDirection(t),reach=Math.m
   if(body.getType()==='dynamic'){if(frac<firstFrac){firstFrac=frac;first=body;}return frac;}return -1;});
  if(first&&firstFrac<wall)return {d,length:firstFrac*reach,bodies:[first]};
  return {d,length:wall*reach,bodies:[]};}
-function tickPushers(dt){for(const t of terrain.values()){if(t.type!=='pusher_block')continue;const {d,length,bodies}=pusherBeam(t);t.beam=length;const hit=bodies[0],mode=hit?pusherModeFor(t,hit):t.mode;t.beamMode=mode;if(!hit||mode==='off')continue;
+function tickPushers(dt){for(const t of terrainOfType('pusher_block')){const {d,length,bodies}=pusherBeam(t);t.beam=length;const hit=bodies[0],mode=hit?pusherModeFor(t,hit):t.mode;t.beamMode=mode;if(!hit||mode==='off')continue;
  const sign=mode==='pull'?-1:1,target=t.speed||PUSHER_SPEED,p=hit.getPosition();
  if(mode==='pull'&&Math.abs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){const v=hit.getLinearVelocity(),along=v.x*d.x+v.y*d.y;if(along<0)hit.setLinearVelocity(V(v.x-along*d.x,v.y-along*d.y));continue;}
  const v=hit.getLinearVelocity(),along=(v.x*d.x+v.y*d.y)*sign;if(along>=target)continue;wakeCargo(hit);const m=hit.getMass()*Math.min(target-along,PUSHER_ACCEL*dt)*sign;hit.applyLinearImpulse(V(d.x*m,d.y*m),hit.getWorldCenter(),true);}}
@@ -118,7 +120,7 @@ function loaderTake(t,c){
  const pool=loaderItemGrid?nearbyItems(t,cells):items;
  const item=pool.find(i=>{const p=i.body.getPosition();return (inLoaderHotbox(t,p)||cells.some(q=>near(p,q)))&&i.intakeFrom!==key(t.x,t.y)&&hatchAllows(t,i.type)&&!cargoWakeLocks.get(i.body)?.size;});
  if(item){item.taken=true;inside.destroyBody(item.body);items.splice(items.indexOf(item),1);return {type:item.type,count:item.count};}
- const box=cells.map(q=>boxAt(V(q.x,q.y))).find(Boolean);if(box){const type=TYPES.find(k=>(box.materials[k]||0)>0&&hatchAllows(t,k));if(type){const count=Math.min(stackLimit(type),box.materials[type]);box.materials[type]-=count;resizeBox(box);return {type,count};}}
+ const outBox=(()=>{const o=loaderEnds(t).output;return boxNear(V(o.x,o.y),.55);})(),box=cells.map(q=>boxAt(V(q.x,q.y))).find(b=>b&&b!==outBox);/* never from the box it is filling (a box grown over the loader covers both ends) */if(box){const type=TYPES.find(k=>(box.materials[k]||0)>0&&hatchAllows(t,k));if(type){const count=Math.min(stackLimit(type),box.materials[type]);box.materials[type]-=count;resizeBox(box);return {type,count};}}
  return null;}
 function loaderGive(t,c,stack,d){
  // A loader facing into a recycler feeds it one stack per cycle (while it isn't busy). Anything the object it faces
@@ -130,7 +132,7 @@ function loaderGive(t,c,stack,d){
  if(rec){if(!recycleYield(stack.type,stack.count))return refuse();return startRecycle(rec,stack.type,stack.count)?stack.count:0;}
  const fab=hit?.type==='fabricator'?hit:null;
  if(fab){if(!fabIngredients(fab).has(stack.type))return refuse();if(!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
- const box=boxAt(V(c.x,c.y));if(box){if(!boxAccepts(box,stack.type))return refuse();return boxInsert(box,stack.type,stack.count);}
+ const box=boxNear(V(c.x,c.y),.55);if(box){if(!boxAccepts(box,stack.type))return refuse();return boxInsert(box,stack.type,stack.count);}
  const m=mountHit(c);
  if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return refuse();const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
  if(m?.type==='ejector')return launchCargo(m,stack.type,stack.count)?stack.count:0;
@@ -160,7 +162,7 @@ function tickLoaders(dt){loaderItemGrid=new Map();for(const i of items){const p=
 // delivers only when it arrives (waiting there if the target is full), then swings back empty (the other half) before
 // it can grab again — so what you see is exactly when it can act. phase: 0 = hand at the input, 1 = at the output.
 // A turret delivery adds the turret's own loading wait (LOADER_TURRET_CYCLE) before the next grab.
-function tickLoadersNow(dt){const half=LOADER_CYCLE/2;for(const t of terrain.values()){if(t.type!=='loader')continue;t.cooldown=Math.max(0,(t.cooldown??0)-dt);t.cargo??=[];t.phase??=0;
+function tickLoadersNow(dt){const half=LOADER_CYCLE/2;for(const t of terrainOfType('loader')){t.cooldown=Math.max(0,(t.cooldown??0)-dt);t.cargo??=[];t.phase??=0;
  if(!t.swing)t.swing=t.cargo.length?'carry':(t.phase>0?'return':'idle');
  if(t.swing==='return'){t.phase=Math.max(0,t.phase-dt/half);if(t.phase===0&&t.cooldown===0)t.swing='idle';else continue;}
  if(t.filterMode==='off'&&t.swing==='idle')continue;
@@ -187,7 +189,7 @@ function finishRecycle(f){const {type,count}=f.job;f.job=null;const y=recycleYie
  if(unloaded){f.output=(f.output||[]).concat(stacks);while(f.output.length>8)dropRecycled(f,f.output.shift());}else for(const st of stacks)dropRecycled(f,st);
  f.lastOut=out.length?out.map(([m,k])=>k+' '+NAMES[m]).join(', '):'(nothing left)';f.busy=clock+1.5;}
 function dropRecycled(f,st){const [w,h]=MACHINE_SIZE.recycler,y=f.y+h-1,open=x=>interiorCell({x:Math.round(x),y:Math.round(y)})&&!blocks.has(key(Math.round(x),Math.round(y)))&&!(terrainAt({x:Math.round(x),y:Math.round(y)})&&solidCell(Math.round(x),Math.round(y)));const right=f.x+w-.5+.4,left=f.x-.5-.4;spawnItem(st.type,V(open(right)||!open(left)?right:left,y),V(0,0),st.count);}
-function tickRecyclers(dt){for(const f of terrain.values()){if(f.type!=='recycler'||!f.job)continue;f.job.left-=dt;f.busy=clock+Math.max(f.job.left,0)+.05;if(f.job.left<=0)finishRecycle(f);}}
+function tickRecyclers(dt){for(const f of terrainOfType('recycler')){if(!f.job)continue;f.job.left-=dt;f.busy=clock+Math.max(f.job.left,0)+.05;if(f.job.left<=0)finishRecycle(f);}}
 // Clicking a recycler with an item in hand loads the whole stack.
 function recycleCarried(f){if(P.Vec2.distance(localPlayer(),V(f.x+1,f.y+1.5))>4)return toast('Move closer to the recycler.');const t=slots[selected],n=stackCounts[selected];if(!t||!n)return toast('Click the recycler with the stack you want to recycle in your hand.');if(f.job)return toast('The recycler is still working.');if(!recycleYield(t,n))return toast(NAMES[t]+' can\'t be recycled.');startRecycle(f,t,n);stackCounts[selected]=0;slots[selected]=null;selectSlot(selected);save(true);}
 
