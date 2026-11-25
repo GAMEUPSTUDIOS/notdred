@@ -39,14 +39,15 @@ const PORTAL_RANGE = 12;
 // The Pits' hall and holes are laid out ZONE_SCALE times bigger. Bot counts doubled for the larger caves.
 const ZONE_SCALE = 3, SHIP_CLEARANCE = [10, 10];
 const ZONES = {
-  // Freeports are big enough for several 80×80 battleships to berth side by side (they were 200×112).
-  freeport: {id: 'freeport', name: 'Freeport I', kind: 'safe', pvp: null, half: {w: 240, h: 150},
+  // Freeports: a square harbour with cut corners and four I-shaped piers (see freeportLayout in zones.js), big enough
+  // for several 80×80 battleships to berth; the portal to the combat zone sits in the open water in the middle.
+  freeport: {id: 'freeport', name: 'Freeport I', kind: 'safe', pvp: null, half: {w: 220, h: 220},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'finch', x: 0, y: -28}]},
-  freeport2: {id: 'freeport2', name: 'Freeport II', kind: 'safe', pvp: null, half: {w: 240, h: 150},
+  freeport2: {id: 'freeport2', name: 'Freeport II', kind: 'safe', pvp: null, half: {w: 220, h: 220},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'finch2', x: 0, y: -28}]},
-  freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 240, h: 150},
+  freeport3: {id: 'freeport3', name: 'Freeport III', kind: 'safe', pvp: null, half: {w: 220, h: 220},
     blurb: 'Safe Zone. Weapons Disabled.', bg: '#4b4b4b', shotGravity: 0, bots: {},
     portals: [{to: 'sparrow', x: 0, y: -28}]},
   finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: null,

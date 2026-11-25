@@ -70,4 +70,7 @@ for(const i of removed)physics.destroyBody(i.body);if(removed.size){let n=0;for(
 
 function cargoSleepStats(){const cargo=[...items,...boxes,...worldLoot],awake=cargo.filter(i=>i.body.isAwake()).length;return awake+' awake / '+(cargo.length-awake)+' sleeping cargo bodies';}
 
-function tickHullLeaks(){for(const i of [...items]){const p=i.body.getPosition();if(p.x>bounds.l-.5&&p.x<bounds.r+.5&&p.y>bounds.t-.5&&p.y<bounds.b+.5)continue;const v=i.body.getLinearVelocity(),sv=ship.getLinearVelocity(),q=ship.getWorldPoint(p);addWorldLoot(i.type,q,i.count,V(v.x+sv.x,v.y+sv.y)).grace=2;inside.destroyBody(i.body);items.splice(items.indexOf(i),1);}}
+// Cargo leaves the ship only through a hole in the hull (a broken hull cell). A stack squeezed through solid hull
+// (crushed under a heavy expando box, rammed by a pusher) is put back inside instead of being lost to the zone.
+function leakedThroughHole(p){const cx=clamp(Math.round(p.x),bounds.l,bounds.r),cy=clamp(Math.round(p.y),bounds.t,bounds.b);for(let d=-1;d<=1;d++){const c=(cx===bounds.l||cx===bounds.r)&&cy!==bounds.t&&cy!==bounds.b?{x:cx,y:clamp(cy+d,bounds.t,bounds.b)}:{x:clamp(cx+d,bounds.l,bounds.r),y:cy};if(brokenHull.has(key(c.x,c.y)))return true;}return false;}
+function tickHullLeaks(){for(const i of [...items]){const p=i.body.getPosition();if(p.x>bounds.l-.5&&p.x<bounds.r+.5&&p.y>bounds.t-.5&&p.y<bounds.b+.5)continue;if(Number.isFinite(p.x)&&Number.isFinite(p.y)&&!leakedThroughHole(p)&&typeof rescueBody==='function'){rescueBody(i.body,true);continue;}const v=i.body.getLinearVelocity(),sv=ship.getLinearVelocity(),q=ship.getWorldPoint(p);addWorldLoot(i.type,q,i.count,V(v.x+sv.x,v.y+sv.y)).grace=2;inside.destroyBody(i.body);items.splice(items.indexOf(i),1);}}
