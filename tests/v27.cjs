@@ -114,7 +114,7 @@ const clear='initialize();for(const b of blocks.values())interior.destroyFixture
  assert.equal(run('validity({x:0,y:-2},"fab_munitions")'),'','a fabricator can be placed where it fits, resting on a surface');
  run('giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);
  assert.ok(Math.abs(run('(()=>{const f=[...terrain.values()].find(t=>t.kind==="munitions");return f.body.getPosition().y+1.5;})()')-.5)<.1,'it rests on the walkways');
- run(clr+'addTerrain("walkway",3,1);addTerrain("walkway",4,1);player.setTransform(V(1,1.8),0)');
+ run(clr+'for(const b of boxes)inside.destroyBody(b.body);boxes.length=0;/* the starting expando box hangs here (v66: nothing is built into a box) */addTerrain("walkway",3,1);addTerrain("walkway",4,1);player.setTransform(V(1,1.8),0)');
  assert.equal(run('validity({x:3,y:0},"helm")'),'','helm on walkways');assert.ok(run('validity({x:3,y:-1},"helm")')!=='','not floating');
  // The walkways under it can't be pulled out while it stands there, and it never moves.
  run(clr+'addTerrain("walkway",0,1);addTerrain("walkway",1,1);player.setTransform(V(-1,1.8),0);giveItem("fab_munitions",1);selectSlot(slots.indexOf("fab_munitions"));commitBuild({x:0,y:-2},"fab_munitions",0)');ticks(90);

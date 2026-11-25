@@ -67,7 +67,7 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){
  // Private notices stay private; world events reach everyone aboard.
  const p1=await client('One',true),p2=await client('Two');p1.send({type:'create',name:'Alpha'});await until(()=>p1.room);p2.send({type:'join',room:p1.room});await until(()=>p2.snaps.length>2);
  p1.notices.length=0;p2.notices.length=0;p1.act('interact');await sleep(350);assert.ok(p1.notices.length>0,'actor gets the notice');assert.equal(p2.notices.length,0,'other crew does not');
- p1.act('dev',{op:'killgreen'});p1.act('dev',{op:'sparrow'});await sleep(200);p1.notices.length=0;p2.notices.length=0;p1.act('dev',{op:'killbots',species:'red'});await sleep(350);assert.ok(p2.notices.some(n=>/destroyed/.test(n)),'world events are broadcast');
+ p1.act('dev',{op:'killgreen'});p1.act('dev',{op:'sparrow'});await sleep(200);p1.notices.length=0;p2.notices.length=0;p1.act('dev',{op:'killbots',species:'red'});for(let i=0;i<30&&!p2.notices.some(n=>/destroyed/.test(n));i++)await sleep(100);assert.ok(p2.notices.some(n=>/destroyed/.test(n)),'world events are broadcast');
  // Another ship in the same zone appears in snapshots: layout once, then just its position.
  const p3=await client('Three',true);p3.send({type:'create',name:'Bravo'});await until(()=>p3.room);p3.act('dev',{op:'sparrow'});
  await until(()=>p1.snaps.at(-1)?.others?.some(o=>o.name==='Bravo'),4000,'Bravo visible to Alpha');const withLayout=p1.snaps.filter(s=>s.others?.some(o=>o.name==='Bravo'&&o.layout)).length;await sleep(500);

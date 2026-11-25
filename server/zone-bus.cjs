@@ -14,7 +14,7 @@ const fs=require('node:fs'),path=require('node:path'),ZoneGenerator=require('../
 class ZoneBus{
  constructor({dataDir=null,random=Math.random}={}){
   this.file=dataDir?path.join(dataDir,'zones.json'):null;this.random=random;this.zones=new Map();this.sims=new Map();this.queue=[];this.lastExteriors=new Map();this.clock=0;this.tickNo=0;this.SIM_IDLE_MS=Number(process.env.ZONE_IDLE_MS||120000);this.mission={active:null,endsIn:0,nextIn:era.MISSIONS.intervalSeconds,elapsed:0,index:0};
-  if(this.file&&fs.existsSync(this.file)){try{const saved=JSON.parse(fs.readFileSync(this.file,'utf8'));if(saved._mission&&typeof saved._mission==='object'){const m=saved._mission;this.mission={...this.mission,...m,active:era.ZONES[m.active]?.mission?m.active:null};}for(const [id,z] of Object.entries(saved))if(era.ZONES[id]?.gen)this.zones.set(id,this.fresh(id,z.seed,z.mined,z.regenIn,z.resetIn));}catch(e){console.error('Ignoring unreadable zones.json:',e.message);}}
+  if(this.file&&fs.existsSync(this.file)){try{const saved=JSON.parse(fs.readFileSync(this.file,'utf8'));if(saved._mission&&typeof saved._mission==='object'){const m=saved._mission;this.mission={...this.mission,...m,active:era.ZONES[m.active]?.mission?m.active:null};}/* a zone saved from an older map generator (smaller 2019-size caves) starts over: its mined tiles were another map's */for(const [id,z] of Object.entries(saved))if(era.ZONES[id]?.gen){const v=ZoneGenerator.generate(0,{...era.ZONES[id].gen,width:15,height:15}).version;this.zones.set(id,(z.gv||1)===v?this.fresh(id,z.seed,z.mined,z.regenIn,z.resetIn):this.fresh(id,z.seed));}}catch(e){console.error('Ignoring unreadable zones.json:',e.message);}}
  }
  fresh(id,seed=0,mined=[],regenIn=null,resetIn=era.ZONE_RESET_SECONDS||null){if(era.ZONES[id].mission){regenIn=null;resetIn=null;}const g=ZoneGenerator.generate(seed,era.ZONES[id].gen);let total=0;for(const v of g.solid)total+=v;return {id,seed,grid:g,mined:new Set(mined),total,regenIn,resetIn};}
  zone(id){if(!era.ZONES[id]?.gen)return null;let z=this.zones.get(id);if(!z){z=this.fresh(id);this.zones.set(id,z);}return z;}
@@ -92,6 +92,6 @@ class ZoneBus{
   // A ship that left this player's view is forgotten, so its layout is sent again when it comes back.
   const visible=new Set(out.map(o=>o.id));for(const k of [...seen.keys()])if(!visible.has(k))seen.delete(k);
   return out;}
- save(){if(!this.file||!this.dirty)return;const out={_mission:this.mission};for(const [id,z] of this.zones)out[id]={seed:z.seed,mined:[...z.mined],regenIn:z.regenIn,resetIn:z.resetIn};const tmp=this.file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(out),{mode:0o600});fs.renameSync(tmp,this.file);this.dirty=false;}
+ save(){if(!this.file||!this.dirty)return;const out={_mission:this.mission};for(const [id,z] of this.zones)out[id]={seed:z.seed,gv:z.grid.version||1,mined:[...z.mined],regenIn:z.regenIn,resetIn:z.resetIn};const tmp=this.file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(out),{mode:0o600});fs.renameSync(tmp,this.file);this.dirty=false;}
 }
 module.exports={ZoneBus};

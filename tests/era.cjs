@@ -26,11 +26,13 @@ for(const id of ids){run(`initialize();piloting=true;player.setActive(false);${Z
 console.log('PASS: eight zones (incl. mission zones The Pits and Canary), symmetric portal graph, 2019 links (Sparrow between the Finches, Freeport III off Sparrow) and Q-travel over every edge.');
 
 // --- Generation ------------------------------------------------------------------------------------------
-for(let seed=0;seed<8;seed++)assert.deepEqual(generator.generate(seed,Z.finch.gen).solid,generator.generate(seed).solid,'Finch I parameters reproduce the original map');
+// At scale 1 (and the 2019 7×5 ship clearance) Finch I's parameters still reproduce the original map exactly; the game
+// uses the same caverns ZONE_SCALE times bigger (v66 checks those fit an 80×80 ship).
+for(let seed=0;seed<8;seed++)assert.ok(Buffer.from(generator.generate(seed,{...Z.finch.gen,scale:1,clear:[3,2]}).solid).equals(Buffer.from(generator.generate(seed).solid)),'Finch I parameters reproduce the original map');
 for(const id of ['finch2','sparrow'])for(let seed=0;seed<12;seed++){
- const g=generator.generate(seed,Z[id].gen),{width:w,height:h,solid,centers}=g;
+ const g=generator.generate(seed,{...Z[id].gen,scale:1,clear:[3,2]}),{width:w,height:h,solid,centers}=g;
  assert.equal(g.minX+((w-1)/2)*g.cell,0);assert.equal(g.minY+((h-1)/2)*g.cell,0,'entry cavern at the origin');
- assert.notDeepEqual(solid,generator.generate(seed,Z.finch.gen).solid,id+' differs from Finch I');
+ assert.ok(!Buffer.from(solid).equals(Buffer.from(generator.generate(seed,{...Z.finch.gen,scale:1,clear:[3,2]}).solid)),id+' differs from Finch I');
  const safe=new Uint8Array(w*h);for(let y=2;y<h-2;y++)for(let x=3;x<w-3;x++){let ok=true;for(let dy=-2;dy<=2&&ok;dy++)for(let dx=-3;dx<=3;dx++)if(solid[(y+dy)*w+x+dx]){ok=false;break;}safe[y*w+x]=+ok;}
  const seen=new Set([g.start]),q=[g.start];for(let n=0;n<q.length;n++){const i=q[n];for(const j of [i-1,i+1,i-w,i+w])if(safe[j]&&!seen.has(j)){seen.add(j);q.push(j);}}
  for(let i=0;i<centers.length;i++)if(centers[i])assert.ok(seen.has(i),id+' every cavern reachable at ship clearance');
@@ -53,10 +55,10 @@ run('blue.body.setTransform(V(sp.x+e.r+BOT_TYPES.blue.radius+.1,sp.y),0);tickDun
 run('blue.contactCd=0;blue.body.setTransform(V(sp.x+e.r+BOT_TYPES.blue.radius+5,sp.y),0);tickDungeon(.01)');assert.equal(run('shipHP'),run('shipMaxHP()')-era.BOT_TYPES.blue.contact,'no damage at range');
 run('damageBot(1e9,"blue",0)');assert.ok(run('worldLoot.some(i=>i.type==="iron")&&worldLoot.some(i=>i.type==="ammo")'));
 // Bot state is per zone: killing Sparrow's greens does not touch Finch, and survives a round trip.
-run('initialize();piloting=true;player.setActive(false);travelZone("sparrow","entry");damageBot(1e9,"green",0);damageBot(1e9,"green",1);travelZone("finch","entry")');assert.equal(run('botsOf("red").length'),20);assert.equal(run('botsOf("green").length'),0);
+run('initialize();piloting=true;player.setActive(false);travelZone("sparrow","entry");damageBot(1e9,"green",0);damageBot(1e9,"green",1);travelZone("finch","entry")');assert.equal(run('botsOf("red").length'),Z.finch.bots.red);assert.equal(run('botsOf("green").length'),0);
 run('travelZone("sparrow","entry")');assert.equal(run('botsOf("green").length'),0,'dead greens stay dead on return');assert.ok(run('zoneData.sparrow.bots.green.every(r=>r.dead)'));run('tickBotRespawn(BOT_RESPAWN_SECONDS)');assert.equal(run('botsOf("green").length'),2);
 // v21 saves (single Finch with redStates/bot) load cleanly.
-const v21=JSON.parse(JSON.stringify(run('initialize();zone="finch";setupZone(true);state()')));v21.zoneData.finch={seed:0,mined:[],loot:[],redStates:[{dead:true,respawn:5}],bot:{hp:3,x:0,y:0},botDead:false};run(`initialize(${JSON.stringify(v21)})`);assert.equal(run('zone'),'finch');assert.equal(run('botsOf("red").length'),20);assert.equal(run('zoneData.finch.redStates'),undefined);
+const v21=JSON.parse(JSON.stringify(run('initialize();zone="finch";setupZone(true);state()')));v21.zoneData.finch={seed:0,mined:[],loot:[],redStates:[{dead:true,respawn:5}],bot:{hp:3,x:0,y:0},botDead:false};run(`initialize(${JSON.stringify(v21)})`);assert.equal(run('zone'),'finch');assert.equal(run('botsOf("red").length'),Z.finch.bots.red);assert.equal(run('zoneData.finch.redStates'),undefined);
 console.log('PASS: per-zone species counts, blue rammer contact/cooldown/knockback/no shots, drops, per-zone bot persistence and v21 save migration.');
 
 // --- Regeneration (ℵ25 / ℵ25+) ------------------------------------------------------------------------------

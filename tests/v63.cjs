@@ -18,7 +18,7 @@ r.game.evalCode('c','devTick=dt=>{throw Error("boom")}');step(2);assert.equal(r.
 r.game.evalCode('c','devTick=dt=>{while(true){}}');step(1);assert.equal(r.game.run('typeof devTick'),'object','an endless devTick is stopped and switched off');
 // Zone code and zone shapes (world space by default).
 r.game.run('piloting=true;player.setActive(false);travelZone("finch2","entry")');step(25);const sim=bus.simOf(r);assert.ok(sim,'in the shared zone');
-assert.equal(showValue(sim.evalCode('allBots().filter(b=>b.species==="silver").length')),'6','zone code sees the zone (silver bots in Finch II)');
+assert.equal(showValue(sim.evalCode('allBots().filter(b=>b.species==="silver").length')),String(require('../dist/modules/era.js').ZONES.finch2.bots.silver),'zone code sees the zone (silver bots in Finch II)');
 sim.evalCode("devDraw=[{type:'line',x:0,y:0,x2:10,y2:10}]");step(1);sh=JSON.parse(r.game.run('JSON.stringify(JSON.parse(snapshotShared().json).zoneDevDraw)'));assert.equal(sh[0].space,'world','zone shapes are drawn in the world');
 // The server only takes live code with the host token; the page runs it, draws the shapes, and predicts noclip.
 const srv=fs.readFileSync('server/server.cjs','utf8'),net=fs.readFileSync('dist/network.js','utf8'),game=fs.readFileSync('dist/game.js','utf8');

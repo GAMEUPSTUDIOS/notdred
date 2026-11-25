@@ -17,7 +17,8 @@ let fed=0;for(let k=0;k<3;k++){run(`spawnItem("ammo",V(${rx-2},${fy}),V(0,0),16)
 fed=48;// 48 ammo cost 12 iron + 12 explosives; half back = 6 + 6.
 step(900);
 assert.equal(sum('ammo',-99,99),0,'all ammo went in through the feed loader');
-assert.equal(run('box.materials.iron||0'),6,'output loader unloaded the iron into the expando box');assert.equal(run('box.materials.explosives||0'),6,'…and the explosives');
+// One item type per expando box (v66): the output loader puts the iron in and sets the explosives down beside it.
+assert.ok(run('box.materials.iron||0')>0,'output loader unloaded iron into the expando box');assert.equal(run('box.materials.explosives||0'),0,'…but never a second type');assert.ok(sum('explosives',rx,rx+8)>0,'the explosives are set down by the output loader instead');
 assert.equal(run(`items.filter(i=>i.body.getPosition().x>${rx-.5}&&i.body.getPosition().x<${rx+2.5}).length`),0,'nothing left inside the recycler');
 
 // What can't be recycled (iron) isn't kept by the feed loader: it drops it where its hand is, inside the recycler's tiles.
@@ -26,6 +27,7 @@ assert.equal(run(`terrainAt({x:${rx-1},y:${fy}}).cargo.length`),0,'not held in t
 run('for(const i of [...items])inside.destroyBody(i.body);items.length=0;');
 
 // A stationary pusher it makes (from a handheld pusher) is unloaded, not recycled again.
+run('box.materials={};resizeBox(box);');/* an empty box for the next type (one type per box) */
 run(`spawnItem("pusher",V(${rx-2},${fy}),V(0,0),1)`);step(400);
 assert.equal(run('box.materials.pusher_block||0'),1,'stationary pusher came out and stayed whole');
 

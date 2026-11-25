@@ -130,7 +130,7 @@ function loaderGive(t,c,stack,d){
  if(rec){if(!recycleYield(stack.type,stack.count))return refuse();return startRecycle(rec,stack.type,stack.count)?stack.count:0;}
  const fab=hit?.type==='fabricator'?hit:null;
  if(fab){if(!fabIngredients(fab).has(stack.type))return refuse();if(!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
- const box=boxAt(V(c.x,c.y));if(box){const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
+ const box=boxAt(V(c.x,c.y));if(box){if(!boxAccepts(box,stack.type))return refuse();const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
  const m=mountHit(c);
  if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return refuse();const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
  if(m?.type==='ejector')return launchCargo(m,stack.type,stack.count)?stack.count:0;
@@ -141,10 +141,11 @@ function loaderGive(t,c,stack,d){
  // Dropped, not thrown: the stack is left resting on the tile the loader faces.
  spawnItem(stack.type,V(c.x,c.y),V(0,0),stack.count).intakeFrom=key(t.x,t.y);return stack.count;}
 // A refused stack is dropped where the hand is: on the tile it faces when that's open (a machine's tiles are — crew
-// and items pass through machines), otherwise back on its input side. Either way this loader won't pick it up again.
+// and items pass through machines; an expando box's aren't), otherwise on top of the loader, otherwise back on its
+// input side. Either way this loader won't pick it up again.
 // A loader set to Require output inventory never drops anything: it keeps holding the stack.
-function loaderDrop(t,stack,output,input){const open=c=>interiorCell(c)&&!blocks.has(key(c.x,c.y))&&!mountHit(c)&&!['wedge','glass','net','loader','pusher_block','walkway_wedge','hatch','starter_hatch','door'].includes(terrainAt(c)?.type);
- const c=open(output)?output:open(input)?input:null;if(!c)return false;spawnItem(stack.type,V(c.x,c.y),V(0,0),stack.count).intakeFrom=key(t.x,t.y);return true;}
+function loaderDrop(t,stack,output,input){/* never inside an expando box (it would be shoved out and push the box away) */const open=c=>interiorCell(c)&&!blocks.has(key(c.x,c.y))&&!mountHit(c)&&!boxes.some(b=>{const q=b.body.getPosition();return Math.abs(q.x-c.x)<b.size/2+.3&&Math.abs(q.y-c.y)<b.size/2+.3;})&&!['wedge','glass','net','loader','pusher_block','walkway_wedge','hatch','starter_hatch','door'].includes(terrainAt(c)?.type);
+ const up={x:t.x,y:t.y-1},c=[output,up,input].find(open)||null;if(!c)return false;spawnItem(stack.type,V(c.x,c.y),V(0,0),stack.count).intakeFrom=key(t.x,t.y);return true;}
 // What a fabricator accepts from a loader: only the ingredients of recipes its kind can make (iron, explosives,
 // flux…), never finished items.
 function fabIngredients(f){const set=new Set();for(const r of FABRICATORS[fabKind(f)].recipes)for(const m of Object.keys(recipeNeeds(r)||{}))set.add(m);return set;}
