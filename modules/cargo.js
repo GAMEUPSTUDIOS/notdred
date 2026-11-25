@@ -23,15 +23,25 @@ function dropItem(split=false){const t=slots[selected];if(piloting||!t||!stackCo
 
 function touching(a,b){for(let e=a.getContactList();e;e=e.next)if(e.other===b&&e.contact.isTouching())return true;return false}
 
-function boxSpace(p,size,ignore=null){const h=size/2;if(p.x-h<bounds.l+.5||p.x+h>bounds.r-.5||p.y-h<bounds.t+.5||p.y+h>bounds.b-.5)return false;if(player&&Math.abs(localPlayer().x-p.x)<h+.24&&Math.abs(localPlayer().y-p.y)<h+.63)return false;return ![...blocks.values(),...[...terrain.values()].filter(t=>['wedge','glass','net'].includes(t.type))].some(t=>Math.abs(t.x-p.x)<h+.49&&Math.abs(t.y-p.y)<h+.49)&&!boxes.some(b=>b!==ignore&&Math.abs(b.body.getPosition().x-p.x)<(b.size+size)/2&&Math.abs(b.body.getPosition().y-p.y)<(b.size+size)/2)}
+function boxSpace(p,size,ignore=null){const h=size/2;if(p.x-h<bounds.l+.5||p.x+h>bounds.r-.5||p.y-h<bounds.t+.5||p.y+h>bounds.b-.5)return false;if(player&&Math.abs(localPlayer().x-p.x)<h+.24&&Math.abs(localPlayer().y-p.y)<h+.63)return false;/* solid tiles (doors and machines over all their tiles), the helm, and fixed machines are in the way too */const cellHit=(x,y)=>Math.abs(x-p.x)<h+.49&&Math.abs(y-p.y)<h+.49;
+ if([...terrain.values()].some(t=>t.body?(()=>{const [w2,h2]=MACHINE_SIZE[t.type],q=t.body.getPosition();return Math.abs(q.x-p.x)<w2/2+h&&Math.abs(q.y-p.y)<h2/2+h;})():['wedge','walkway_wedge','glass','net','door','hatch','starter_hatch','loader','pusher_block','paint','anchor','spawn'].includes(t.type)&&terrainCells(t).some(c=>cellHit(c.x,c.y))))return false;
+ if(typeof helmCells==='function'&&helmCells().some(c=>cellHit(c.x,c.y)))return false;
+ return ![...blocks.values()].some(t=>cellHit(t.x,t.y))&&!boxes.some(b=>b!==ignore&&Math.abs(b.body.getPosition().x-p.x)<(b.size+size)/2&&Math.abs(b.body.getPosition().y-p.y)<(b.size+size)/2)}
 
 function spawnBox(p,materials={}){const count=Object.values(materials).reduce((a,b)=>a+b,0),size=2+Math.floor(count/64)*.25;const body=inside.createDynamicBody({position:p,angularDamping:5,linearDamping:.1,bullet:true});const box={body,size,materials:{...materials}};box.fixture=body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});boxes.push(box);return box}
 
-function resizeBox(box){const total=Object.values(box.materials).reduce((a,b)=>a+b,0),size=2+Math.floor(total/64)*.25;if(size>box.size&&!boxSpace(box.body.getPosition(),size,box))return false;box.body.destroyFixture(box.fixture);box.size=size;box.fixture=box.body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});box.body.setAwake(true);return true}
+// Expando boxes hold ONE item type, and grow (¼ tile per 64 items) evenly in every direction when there's room. A side
+// that's blocked — the floor under it, a wall, a tile, another box or machine — makes it grow the other way instead:
+// up off the floor, sideways away from a wall, or diagonally out of a corner. No room any way: it doesn't take the items.
+function boxType(box){return Object.keys(box.materials).find(k=>box.materials[k]>0)||null;}
+function boxAccepts(box,type){const t=boxType(box);return !t||t===type;}
+function resizeBox(box){const total=Object.values(box.materials).reduce((a,b)=>a+b,0),size=2+Math.floor(total/64)*.25;if(size===box.size)return true;let pos=box.body.getPosition().clone();
+ if(size>box.size){const d=(size-box.size)/2,ok=[[0,0],[0,-d],[d,0],[-d,0],[0,d],[d,-d],[-d,-d],[d,d],[-d,d]].map(([dx,dy])=>V(pos.x+dx,pos.y+dy)).find(q=>boxSpace(q,size,box));if(!ok)return false;pos=ok;}
+ box.body.destroyFixture(box.fixture);box.size=size;box.fixture=box.body.createFixture(P.Box(size/2,size/2),{density:.35,friction:.18,filterCategoryBits:8,filterMaskBits:1|2|8|16|256|512});box.body.setTransform(pos,box.body.getAngle());box.body.setAwake(true);return true}
 
 function boxAt(p){return boxes.find(b=>{const q=b.body.getLocalPoint(p);return Math.abs(q.x)<b.size/2&&Math.abs(q.y)<b.size/2})}
 
-function useBox(p){const b=boxAt(p);if(!b)return false;if(piloting||P.Vec2.distance(localPlayer(),p)>3.5){toast('Move closer to the expando box.');return true}if(tool==='walk'||tool==='empty'){const t=TYPES.find(t=>b.materials[t]>0);if(t){const n=Math.min(stackLimit(t),b.materials[t]);scatter(t,n,V(p.x-b.size/2-.5,p.y));b.materials[t]-=n;resizeBox(b);}else toast('Empty expando box. Right-click with wrench to package it.');}else if(TYPES.includes(tool)){const t=tool,n=Math.min(inventory[t],256-Object.values(b.materials).reduce((a,v)=>a+v,0));b.materials[t]=(b.materials[t]||0)+n;if(resizeBox(b))inventory[t]-=n;else {b.materials[t]-=n;toast('Box needs more room to expand.');}}save(true);return true}
+function useBox(p){const b=boxAt(p);if(!b)return false;if(piloting||P.Vec2.distance(localPlayer(),p)>3.5){toast('Move closer to the expando box.');return true}if(tool==='walk'||tool==='empty'){const t=TYPES.find(t=>b.materials[t]>0);if(t){const n=Math.min(stackLimit(t),b.materials[t]);scatter(t,n,V(p.x-b.size/2-.5,p.y));b.materials[t]-=n;resizeBox(b);}else toast('Empty expando box. Right-click with wrench to package it.');}else if(TYPES.includes(tool)){const t=tool;if(!boxAccepts(b,t)){toast('This expando box holds '+NAMES[boxType(b)]+'. One item type per box — empty it first.');return true;}const n=Math.min(inventory[t],256-Object.values(b.materials).reduce((a,v)=>a+v,0));b.materials[t]=(b.materials[t]||0)+n;if(resizeBox(b))inventory[t]-=n;else {b.materials[t]-=n;toast('Box needs more room to expand.');}}save(true);return true}
 
 function wakeCargo(body){if(body?.getType()==='dynamic')body.setAwake(true);}
 

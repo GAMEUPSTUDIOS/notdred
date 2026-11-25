@@ -33,6 +33,11 @@ const PORTAL_RANGE = 12;
 
 // Combat-zone portals are placed by the generator from the zone seed (portalsTo, in order).
 // The first one always sits on the entry cavern at (0,0). Safe zones list fixed positions.
+// Combat and mission zones fit the biggest ships (80×80, SHIP_LIMITS): caves are generated ZONE_SCALE times bigger
+// than the 2019 maps (the same caverns, sampled finer, so edges stay 4 m rock tiles), and every reachable open space
+// fits a SHIP_CLEARANCE footprint (cells either side of centre: 10 → 21 cells = 84 m). Canary's open ring is 24 cells;
+// The Pits' hall and holes are laid out ZONE_SCALE times bigger. Bot counts doubled for the larger caves.
+const ZONE_SCALE = 3, SHIP_CLEARANCE = [10, 10];
 const ZONES = {
   // Freeports are big enough for several 80×80 battleships to berth side by side (they were 200×112).
   freeport: {id: 'freeport', name: 'Freeport I', kind: 'safe', pvp: null, half: {w: 240, h: 150},
@@ -47,16 +52,16 @@ const ZONES = {
   finch: {id: 'finch', name: 'Finch I', kind: 'combat', pvp: null,
     blurb: 'Red bots · mining caves', bg: '#447477', shotGravity: 10,
     // width/height/threshold/salt 117/67/.59/0 reproduce the original single Finch map exactly.
-    gen: {width: 117, height: 67, threshold: .59, salt: 0, oreChance: .03},
-    bots: {red: 20}, portalsTo: ['freeport', 'sparrow']},
+    gen: {width: 117, height: 67, threshold: .59, salt: 0, oreChance: .03, scale: ZONE_SCALE, clear: SHIP_CLEARANCE},
+    bots: {red: 40}, portalsTo: ['freeport', 'sparrow']},
   finch2: {id: 'finch2', name: 'Finch II', kind: 'combat', pvp: {sizeFull: 110, sizeZero: 220},
     blurb: 'Red bots · wider caves', bg: '#3f6676', shotGravity: 10,
-    gen: {width: 125, height: 71, threshold: .57, salt: 7919, oreChance: .03},   // PLACEHOLDER size/ore
-    bots: {red: 24, silver: 6}, portalsTo: ['freeport2', 'sparrow']},                         // PLACEHOLDER count
+    gen: {width: 125, height: 71, threshold: .57, salt: 7919, oreChance: .03, scale: ZONE_SCALE, clear: SHIP_CLEARANCE},   // PLACEHOLDER size/ore
+    bots: {red: 48, silver: 12}, portalsTo: ['freeport2', 'sparrow']},                         // PLACEHOLDER count
   sparrow: {id: 'sparrow', name: 'Sparrow I', kind: 'combat', pvp: {},
     blurb: 'DANGER · blue rammers · green flux bots', bg: '#5b4d5f', shotGravity: 10,
-    gen: {width: 133, height: 77, threshold: .565, salt: 15485863, oreChance: .09}, // 3× Finch I ore (wiki)
-    bots: {red: 8, silver: 4, blue: 14, green: 2}, portalsTo: ['finch', 'finch2', 'freeport3']}, // green: 2 (ℵ25)
+    gen: {width: 133, height: 77, threshold: .565, salt: 15485863, oreChance: .09, scale: ZONE_SCALE, clear: SHIP_CLEARANCE}, // 3× Finch I ore (wiki)
+    bots: {red: 16, silver: 8, blue: 28, green: 2}, portalsTo: ['finch', 'finch2', 'freeport3']}, // green: 2 (ℵ25)
   // Mission zones (ℵ33, 8 Oct 2019: "a mission system which starts a new mission zone every 45 minutes",
   // "converted the pits to a mission zone", "added Canary, a mission zone dedicated to mining"). They are only
   // reachable while their mission runs: a gold portal opens in Sparrow I. The Pits keep their ℵ25
@@ -65,14 +70,14 @@ const ZONES = {
     blurb: 'MISSION · Buried treasure · dig through the boulders · full PvP', bg: '#3a2c27', shotGravity: 10, tiles: 'pits', arrival: 'entry',
     // A pit, not caves: a hazard-walled hall over three boulder-choked holes that fan out from the buried treasure.
     // Yank ammo pulls boulders out of the holes; punch shoves them away so you can shoot your way back up.
-    gen: {layout: 'pit', width: 61, height: 75, salt: 271828, oreChance: 0, treasure: 4, boulderRadius: [3.5, 9.5]},
-    bots: {red: 6, blue: 6}, portalsTo: ['freeport', 'freeport2', 'freeport3']},
+    gen: {layout: 'pit', width: 61, height: 75, salt: 271828, oreChance: 0, treasure: 4, boulderRadius: [7, 19], scale: ZONE_SCALE, clear: SHIP_CLEARANCE},
+    bots: {red: 12, blue: 12}, portalsTo: ['freeport', 'freeport2', 'freeport3']},
   // Canary: a tunneling mission. One giant square of rock (iron, turret ore, flux) with open space around it; flux
   // is rare at the edges and densest in the middle. Full of dormant seekers. Ends after 3 hours or once 90% is mined.
   canary: {id: 'canary', name: 'Canary', kind: 'combat', mission: true, pvp: {}, missionSeconds: 3 * 60 * 60, clearToEnd: .9,
     blurb: 'MISSION · tunneling · flux is richest in the middle · beware seekers', bg: '#3d5560', shotGravity: 10, tiles: 'canary',
-    gen: {layout: 'block', width: 85, height: 85, ring: 8, salt: 314159, oreChance: 0, iron: .16, turretOre: .025, fluxEdge: .015, fluxCore: .6, coreRadius: .5, seekerChance: .03},
-    bots: {red: 4}, portalsTo: ['freeport', 'freeport2', 'freeport3']}
+    gen: {layout: 'block', width: 117, height: 117, ring: 24, clear: SHIP_CLEARANCE, salt: 314159, oreChance: 0, iron: .16, turretOre: .025, fluxEdge: .015, fluxCore: .6, coreRadius: .5, seekerChance: .03},
+    bots: {red: 8}, portalsTo: ['freeport', 'freeport2', 'freeport3']}
 };
 // Where a ship goes when it is sent home: the Freeport tied to the zone it was in (Finch I → Freeport I,
 // Finch II → Freeport II, Sparrow I → Freeport III; missions → Freeport I). Freeports map to themselves.
@@ -287,7 +292,9 @@ function isCombatZone(id = zone) { return zoneDef(id).kind === 'combat'; }
 function zoneHalf(id = zone) {
   const d = zoneDef(id);
   if (d.half) return d.half;
-  return {w: (d.gen.width - 1) * 2 + 8, h: (d.gen.height - 1) * 2 + 8};
+  // The grid is ZONE_SCALE times the listed size (zone-generator.js: odd sizes, so the entry sits at the centre).
+  const k = d.gen.layout === 'block' ? 1 : (d.gen.scale || 1), odd = n => n * k - (k > 1 && (n * k) % 2 === 0 ? 1 : 0);
+  return {w: (odd(d.gen.width) - 1) * 2 + 8, h: (odd(d.gen.height || d.gen.width) - 1) * 2 + 8};
 }
 // Expansions beyond the 10×7 starter interior, each worth SHIELDS.perExpansion.
 function shipExpansions(b = (typeof bounds !== 'undefined' ? bounds : null)) { return b ? Math.max(0, (b.r - b.l - 10) + (b.b - b.t - 7)) : 0; }
@@ -314,4 +321,4 @@ function recipeNeeds(type) {
   if (typeof COST === 'undefined' || !COST[type]) return RECIPE_EXTRA[type] && typeof COST !== 'undefined' && TYPES.includes(type) ? {...RECIPE_EXTRA[type]} : null;
   return {iron: COST[type], ...(RECIPE_EXTRA[type] || {})};
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = {THRUSTER_FORCE, PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
+if (typeof module !== 'undefined' && module.exports) module.exports = {ZONE_SCALE, SHIP_CLEARANCE, THRUSTER_FORCE, PHYSICS_MACHINES, SIGN_MAX, PAINT_COLORS, PAINT_DEFAULT, SHIP_LIMITS, RECYCLE_SECONDS, THRUSTER_TANK, MACHINE_SIZE, STANDING_MACHINES, RECYCLE_RETURN, RECYCLE_SWAP, COMMS_RANGE, SPAWN_RANKS, WORLD_TILE_HP, WORLD_DAMAGE_SCALE, HOME_FREEPORT, RETURN_SECONDS, TURRET_ORE_DROPS, TURRET_CONTROLLER, TURRETS, AMMO_RELOAD, BOT_RULES, BUILD, START_ZONE, PORTAL_ARRIVAL, ZONES, MISSIONS, TREASURE_LOOT, CRITICAL, STARTER_ITEMS, AMMO_TYPES, SCORE, RENAME_COOLDOWN_SECONDS, randomShipName, cleanShipName, REGEN, ZONE_RESET_SECONDS, BOT_TYPES, BOT_DROPS, RECIPE_EXTRA, RECIPE_YIELD, FABRICATORS, FAB_ITEMS, AMMO, SHIELDS, TILE_DAMAGE_FACTOR, zoneDef: id => ZONES[id] || ZONES[START_ZONE], shipSize, shipMaxHP, pvpMultiplier: pvpMultiplierFor};
