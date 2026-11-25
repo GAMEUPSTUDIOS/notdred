@@ -54,6 +54,7 @@ function allowed(m,a){const rank=m.rank||'guest';if(rank==='captain'||a==='dev')
 function command(id,msg){if(!bindCrew(id))return;const m=currentCrew;const a=msg.action;actor=m;try{
  if(!allowed(m,a)){if(a!=='input')toast(CAPTAIN_ONLY.includes(a)?'Only the captain can do that.':'Guests cannot do that here — ask the captain to make you crew.');storeCrew();return;}
  if(msg.aim&&Number.isFinite(msg.aim.x)&&Number.isFinite(msg.aim.y)&&Math.abs(msg.aim.x)<10000&&Math.abs(msg.aim.y)<10000)mouse={x:msg.aim.x,y:msg.aim.y,active:true};
+ /* the click in ship coordinates as the player saw it wins: on a moving ship it hits the tile they clicked */if(msg.local&&Number.isFinite(msg.local.x)&&Number.isFinite(msg.local.y)&&Math.abs(msg.local.x)<10000&&Math.abs(msg.local.y)<10000){const w=ship.getWorldPoint(V(msg.local.x,msg.local.y));mouse={x:w.x,y:w.y,active:true};}
  if(['edit','remove','rotate'].includes(a)&&!piloting&&!(a==='edit'&&tool==='booster')){const c=cursorCell(),t=terrainAt(c)||blocks.get(key(c.x,c.y));if(P.Vec2.distance(localPlayer(),V(c.x,c.y))>8||buildBlocked(c,t?.f)){toast('Target is out of reach or blocked.');storeCrew();return;}}
  if(a==='input'){keys={};for(const k of ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','shift'])keys[k]=!!msg.keys?.[k];pusherHeld=!!msg.held;m.inputAt=Date.now();}
  else if(a==='select'&&Number.isInteger(msg.slot)&&msg.slot>=0&&msg.slot<5)selectSlot(msg.slot);
@@ -107,6 +108,10 @@ function syncGhosts(list,selfId){const seen=new Set();const me=ship.getPosition(
  for(const [id,h] of ghosts)if(!seen.has(id)){world.destroyBody(h.body);ghosts.delete(id);}}
 // War record: a ship towed home after staying critical in a combat zone was sunk; its zone credits whoever last hit it.
 {const towHome=returnToFreeport;returnToFreeport=function(reason){const from=zone;const moved=towHome(reason);if(moved&&reason==='critical'&&typeof zoneEvent==='function')zoneEvent({type:'sunk',zone:from});return moved;};}
+// A ship spawning from the ship list (a new ship, or one loaded from storage) appears in a Freeport at a random free
+// spot, never docked: the Freeport it was left in, or — if it was left in a combat zone — the Freeport tied to that
+// zone. Returns where it went.
+function spawnInFreeport(){criticalFor=0;if(zoneDef().kind!=='safe'){snapshotZone();zone=homeFreeport();setupZone(true,'random');}else{docked=null;ship.setType('dynamic');ship.setFixedRotation(true);ship.setTransform(randomBerth(),0);ship.setLinearVelocity(V(0,0));zonePlaced=true;}updateShipMass();save(true);return {zone,x:ship.getPosition().x,y:ship.getPosition().y};}
 function remoteMined(id){if(!removeRock(id))return false;zoneData[zone].mined.push(id);return true;}
 let lastHitNotice=-99;
 function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp){ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);noteKick(dir.x*5*imp,dir.y*5*imp);}const okDir=dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y);let out=null;const before=shipHP;if(shipHP<=0&&okDir){hullEntryHit(V(localPoint.x,localPoint.y));out={pierce:true};}else damageShip(amount,V(localPoint.x,localPoint.y),okDir?V(dir.x,dir.y):null);/* for the zone's war record: what this hit did */out={...(out||{}),dealt:before>0?Math.min(before,amount):amount,critical:before>0&&shipHP<=0};if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll(shooter?'Under fire from '+shooter+'!':'Hit by your own shot!');}return out;}

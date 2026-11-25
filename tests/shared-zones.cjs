@@ -70,6 +70,7 @@ const until=async(f,ms=4000,label='condition')=>{const t=Date.now();while(!f()){
  p1.act('dev',{op:'killgreen'});p1.act('dev',{op:'sparrow'});await sleep(200);p1.notices.length=0;p2.notices.length=0;p1.act('dev',{op:'killbots',species:'red'});for(let i=0;i<30&&!p2.notices.some(n=>/destroyed/.test(n));i++)await sleep(100);assert.ok(p2.notices.some(n=>/destroyed/.test(n)),'world events are broadcast');
  // Another ship in the same zone appears in snapshots: layout once, then just its position.
  const p3=await client('Three',true);p3.send({type:'create',name:'Bravo'});await until(()=>p3.room);p3.act('dev',{op:'sparrow'});
+ /* arrivals spread out over the zone and only ships within view range come in full (interest management): park Bravo near Alpha */await until(()=>p3.snaps.at(-1)?.zone==='sparrow',3000,'Bravo in Sparrow');{const a=p1.snaps.at(-1).position;p3.send({type:'eval',id:1,code:`shipNoclip=true;fly(${a.x+60},${a.y})`});}
  await until(()=>p1.snaps.at(-1)?.others?.some(o=>o.name==='Bravo'),4000,'Bravo visible to Alpha');const withLayout=p1.snaps.filter(s=>s.others?.some(o=>o.name==='Bravo'&&o.layout)).length;await sleep(500);
  assert.equal(p1.snaps.filter(s=>s.others?.some(o=>o.name==='Bravo'&&o.layout)).length,withLayout,'layout is not resent every snapshot');assert.ok(p1.snaps.at(-1).others.find(o=>o.name==='Bravo').layoutKey);
  p3.act('dev',{op:'finch'});await until(()=>!p1.snaps.at(-1).others?.some(o=>o.name==='Bravo'),3000,'Bravo leaves Alpha\'s zone');
