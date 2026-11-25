@@ -121,3 +121,38 @@ table.leaderboard{border-collapse:collapse;width:100%;margin:8px 0}table.leaderb
 #dev .livebar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
 #dev .liveout{max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.35 ui-monospace,Consolas,monospace;background:#0c0f12;color:#cfd8df;border-radius:4px;padding:6px;margin:6px 0 0;min-height:1.4em}
 #dev .liveout.ok{border-left:3px solid #4fd16a}#dev .liveout.bad{border-left:3px solid #e0524a;color:#ffb3ad}
+
+/* Communications window (comms station): like the original's — dark panel, red Close, transmissions bar, log, input */
+#commsdlg{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);margin:0;width:min(560px,92vw);padding:18px 22px 20px;background:rgba(30,36,42,.95);color:#fff;border:1px solid #56606a;border-radius:2px;font-family:Arial,sans-serif;z-index:30;box-shadow:0 6px 30px #000a}
+#commsdlg .commshead{display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:14px}
+#commsdlg h2{margin:0;font-size:34px;font-weight:bold;letter-spacing:.5px;text-shadow:0 2px 0 #000}
+#commsclose{position:absolute;right:0;top:-2px;background:#9e3434;color:#fff;border:2px solid #d27b7b;border-radius:3px;font:20px Arial,sans-serif;padding:3px 9px;cursor:pointer}
+#commsclose:hover{background:#b84040}
+#commsdlg .txbar{position:relative;height:44px;border:2px solid #d8d8d8;background:#20262c;margin-bottom:14px}
+#commsdlg .txbar i{position:absolute;left:0;top:0;bottom:0;background:#b2ac46;transition:width .25s linear}
+#commsdlg .txbar span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000;color:#fff;font:bold 19px Arial,sans-serif;padding:1px 6px;border-radius:3px;white-space:nowrap}
+#commslog{height:300px;overflow-y:auto;border:2px solid #d8d8d8;padding:8px;background:rgba(20,24,28,.55);font-size:19px;line-height:1.35}
+.commsline{margin-bottom:4px;word-wrap:break-word}
+.commsship{background:#a8661b;padding:0 3px;border-radius:2px}.commsship small{font-size:13px;margin-left:2px}
+#commsinput{display:block;width:100%;box-sizing:border-box;margin:16px 0 10px;height:48px;padding:6px 10px;background:#1c2228;color:#fff;border:3px solid #3f6fd6;border-radius:2px;font:20px Arial,sans-serif;outline:none}
+#commssend{background:#3c444c;color:#fff;border:2px solid #8a939b;border-radius:3px;font:20px Arial,sans-serif;padding:5px 9px;cursor:pointer}#commssend:hover{background:#4c555e}
+
+/* Ship list, like the original's lobby: a blue page, one scrolling column of coloured bars */
+#lobby{background:linear-gradient(#1d5fc4,#123f94 60%,#0f347c) fixed}#lobby main{background:none;min-height:100vh;box-sizing:border-box;padding:14px 16px 40px}
+#lobby main h2{display:none}
+#lobby main .realm{background:rgba(10,22,50,.55);border:none;max-width:680px;margin:0 auto 10px;padding:8px 12px}
+#lobby .shipcards#shipcards{display:block;max-width:680px;margin:0 auto;max-height:68vh;overflow-y:auto;background:#0d2350;border:3px solid #0a1a3c;padding:0}
+#lobby .shiprow{position:relative;padding:8px 12px 10px;border-bottom:2px solid rgba(0,0,0,.35);color:#fff;cursor:pointer;text-align:left;text-shadow:0 1px 1px rgba(0,0,0,.45)}
+#lobby .shiprow:hover{filter:brightness(1.08)}#lobby .shiprow.full{opacity:.7}
+#lobby .shiprow.lightbg{color:#122;text-shadow:none}
+#lobby .shiprow .shiptitle{font:bold 21px Arial,sans-serif;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+#lobby .shiprow .saveicon{width:20px;height:20px;image-rendering:pixelated}
+#lobby .shiprow .shipline{font-size:15px;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+#lobby .shiprow .joinbtn{background:#3f9c3a;color:#fff;border:1px solid #2a6b26;border-radius:3px;font:bold 14px Arial,sans-serif;padding:2px 7px;width:auto;height:auto;cursor:pointer}
+#lobby .shiprow .joinbtn:disabled{background:#6b6b6b;border-color:#444}
+#lobby .shiprow .rankbadge{background:#0c1a20;color:#fff;border-radius:3px;padding:1px 6px;font-size:13px;font-weight:bold;text-shadow:none}
+#lobby .shiprow .crewnames{opacity:.95}
+#lobby .shiprow .shiptag{position:absolute;right:8px;bottom:3px;font-size:11px;opacity:.75}
+#lobby .shiprow.newship{background:#2b2f3a;border-bottom:3px solid #0a1a3c}
+#lobby .shiprow .deleteship{background:#5a2724;border:1px solid #c5605a;color:#ffd6d3;border-radius:2px;font-size:12px;padding:1px 8px;width:auto;height:auto}
+#lobby .shipempty{color:#dfe8ff;padding:14px}

@@ -130,7 +130,7 @@ function loaderGive(t,c,stack,d){
  if(rec){if(!recycleYield(stack.type,stack.count))return refuse();return startRecycle(rec,stack.type,stack.count)?stack.count:0;}
  const fab=hit?.type==='fabricator'?hit:null;
  if(fab){if(!fabIngredients(fab).has(stack.type))return refuse();if(!canStore(fab,stack.type))return 0;const n=Math.min(stack.count,64-(fab.materials[stack.type]||0));fab.materials[stack.type]=(fab.materials[stack.type]||0)+n;return n;}
- const box=boxAt(V(c.x,c.y));if(box){if(!boxAccepts(box,stack.type))return refuse();const room=256-Object.values(box.materials).reduce((a,b)=>a+b,0),n=Math.min(stack.count,room);if(n<=0)return 0;box.materials[stack.type]=(box.materials[stack.type]||0)+n;if(!resizeBox(box)){box.materials[stack.type]-=n;return 0;}return n;}
+ const box=boxAt(V(c.x,c.y));if(box){if(!boxAccepts(box,stack.type))return refuse();return boxInsert(box,stack.type,stack.count);}
  const m=mountHit(c);
  if(m?.type==='turret'){if(!isAmmo(stack.type)||(m.ammo&&(m.ammoType||'ammo')!==stack.type))return refuse();const n=Math.min(stack.count,turretCapacity(m)-(m.ammo||0));if(n>0){m.ammoType=stack.type;m.ammo=(m.ammo||0)+n;t.cooldown=LOADER_TURRET_CYCLE;}return n;}
  if(m?.type==='ejector')return launchCargo(m,stack.type,stack.count)?stack.count:0;

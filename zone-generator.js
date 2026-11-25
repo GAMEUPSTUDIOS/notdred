@@ -10,7 +10,7 @@ function generatePit(seed=0,opts={}){
  const hash=(x,y)=>{let h=Math.imul(x,374761393)^Math.imul(y,668265263)^Math.imul((seed+(opts.salt|0))|0,1442695041);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;};
  const index=(x,y)=>y*width+x,solid=new Uint8Array(N).fill(1),centers=new Uint8Array(N),kinds=new Uint8Array(N).fill(1);
  const open=(x,y)=>{if(x<2||y<2||x>=width-2||y>=height-2)return;solid[index(x,y)]=0;kinds[index(x,y)]=0;};
- const hall={y0:cy-10*K,y1:cy+4*K,x0:3,x1:width-4},band={y0:height-5*K,y1:height-3};
+ const hall={y0:cy-10*K,y1:cy+4*K,x0:3,x1:width-4},band={y0:height-6*K+1,y1:height-3};/* the loot band starts right under the rooms (at 3× scale it used to leave two rows of hazard wall between them, sealing the treasure off) */
  for(let y=hall.y0;y<=hall.y1;y++)for(let x=hall.x0;x<=hall.x1;x++)open(x,y);
  // Hole centres: `low` cells apart at the loot rooms, `spread` cells apart where they open into the hall.
  const low=11*K,spread=(18+Math.floor(hash(3,4)*3))*K,top=hall.y1+1,bottom=height-9*K,roomHalf=3*K;
@@ -22,7 +22,7 @@ function generatePit(seed=0,opts={}){
  for(let y=0;y<height;y++)for(let x=0;x<width;x++){let fits=true;for(let dy=-CL[1];dy<=CL[1]&&fits;dy++)for(let dx=-CL[0];dx<=CL[0];dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=width||yy>=height||solid[index(xx,yy)]){fits=false;break;}}if(fits)centers[index(x,y)]=1;}
  const start=index(cx,cy),signs=holes.map(h=>({x:minX+h.topX*cell,y:minY+(hall.y1-2)*cell}));
  const room={x0:rooms[0].x0,x1:rooms[2].x1,y0:rooms[0].y0,y1:rooms[0].y1};
- return {seed,width,height,cell,minX,minY,solid,centers,kinds,start,connectors:0,version:K>1?2:1,pit:{hall,room,rooms,band,signs,holes:{top,bottom,spread,low,list:holes}}};}
+ return {seed,width,height,cell,minX,minY,solid,centers,kinds,start,connectors:0,version:K>1?3:1,pit:{hall,room,rooms,band,signs,holes:{top,bottom,spread,low,list:holes}}};}
 // Canary ("tunneling mission"): one giant solid square of rock with open space around it. Iron and diamond turret
 // ore are scattered through it; flux is rare near the edges and gets much denser toward the middle, so crews tunnel
 // in for it. kinds: 0 open, 1 hazard wall, 2 rock, 3 turret ore, 4 flux, 5 iron.
