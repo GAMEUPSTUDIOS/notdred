@@ -9,6 +9,8 @@
 # Options (environment variables, before "bash"):
 #   NOTDRED_SERVICE=1         Linux servers/VPS: install it as a system service instead — starts at boot, restarts if it
 #                             stops, updates itself every night at 04:30 — and print where to find the link and token
+#   NOTDRED_DOMAIN=auto       no domain needed: a free name from this server's public IP (96-126-108-134.sslip.io),
+#                             HTTPS, firewall, and port forwarding on a home router (UPnP) — all automatic
 #   NOTDRED_DOMAIN=name.ddns.net  your own domain or No-IP hostname (pointed at this server): installs the service,
 #                             Caddy with automatic HTTPS (Let's Encrypt) in front of it, and a firewall (SSH, 80,
 #                             443 only; the game itself listens only inside the server). Debian/Ubuntu.
@@ -122,7 +124,7 @@ npm run build:native
 # and restarts it if it stops; notdred-update.timer pulls, rebuilds and restarts it every night.
 DOMAIN="${NOTDRED_DOMAIN:-}"
 if [ -n "$DOMAIN" ]; then
-  printf '%s' "$DOMAIN" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$' || die "NOTDRED_DOMAIN should be a hostname like yourname.ddns.net"
+  [ "$DOMAIN" = auto ] || printf '%s' "$DOMAIN" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$' || die "NOTDRED_DOMAIN should be a hostname like yourname.ddns.net, or auto"
   NOTDRED_SERVICE=1; NOTDRED_LOCAL=1; HOST_ONLY=1
 fi
 if [ "${NOTDRED_SERVICE:-0}" = 1 ]; then
@@ -190,40 +192,58 @@ UNIT
       curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
       $SUDO apt-get update -y < "$TTY" > /dev/null && $SUDO apt-get install -y caddy < "$TTY" > /dev/null
     fi
-    # https://DOMAIN → the game. Plain http only for classic mode (Internet Explorer 5/6 can't do modern HTTPS);
-    # everything else on http is sent to https.
-    $SUDO tee /etc/caddy/Caddyfile > /dev/null <<CADDY
-$DOMAIN {
-	reverse_proxy 127.0.0.1:8080
-}
-http://$DOMAIN {
-	@classic path /classic /classic/*
-	handle @classic {
-		reverse_proxy 127.0.0.1:8080
-	}
-	handle {
-		redir https://{host}{uri} permanent
-	}
-}
-CADDY
-    $SUDO systemctl enable caddy > /dev/null 2>&1; $SUDO systemctl restart caddy
+    $SUDO systemctl enable caddy > /dev/null 2>&1
     # Firewall: SSH, http, https — nothing else (the game's port 8080 isn't reachable from outside).
     if have ufw || $SUDO apt-get install -y ufw < "$TTY" > /dev/null; then
       $SUDO ufw allow OpenSSH > /dev/null 2>&1 || $SUDO ufw allow 22/tcp > /dev/null; SSHP="$(printf '%s' "${SSH_CONNECTION:-}" | awk '{print $4}')"; [ -n "$SSHP" ] && $SUDO ufw allow "$SSHP/tcp" > /dev/null; $SUDO ufw allow 80/tcp > /dev/null; $SUDO ufw allow 443/tcp > /dev/null; $SUDO ufw --force enable > /dev/null
     fi
-    # Does the name point here?
-    ME_IP="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"; DNS_IP="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')"
+    # The network helper (scripts/net-setup.sh): the name (auto → <your-ip>.sslip.io), Caddy's site, and port forwarding
+    # on a home router (UPnP) — now and every 15 minutes. If the router can't forward, a Cloudflare quick tunnel
+    # (notdred-tunnel.service) carries players in meanwhile.
+    printf 'DOMAIN=%s\n' "$DOMAIN" | $SUDO tee /etc/notdred-net.env > /dev/null
+    $SUDO grep -q '^ALLOWED_ORIGINS=' /etc/notdred.env || echo 'ALLOWED_ORIGINS=https://*.trycloudflare.com' | $SUDO tee -a /etc/notdred.env > /dev/null
+    $SUDO tee /etc/systemd/system/notdred-tunnel.service > /dev/null <<UNIT
+[Unit]
+Description=notdred.io fallback public link (Cloudflare quick tunnel) while ports can't be forwarded
+After=network-online.target notdred.service
+[Service]
+User=$ME
+Environment=PATH=$NODEBIN:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/sh -c 'exec "\$\$(bash $DIR/scripts/cloudflared.sh)" tunnel --no-autoupdate --url http://127.0.0.1:8080'
+Restart=always
+RestartSec=5
+UNIT
+    $SUDO tee /etc/systemd/system/notdred-net.service > /dev/null <<UNIT
+[Unit]
+Description=notdred.io network: public name, Caddy site, router port forwarding
+After=network-online.target caddy.service
+[Service]
+Type=oneshot
+ExecStart=/bin/bash $DIR/scripts/net-setup.sh
+UNIT
+    $SUDO tee /etc/systemd/system/notdred-net.timer > /dev/null <<UNIT
+[Unit]
+Description=Keep notdred.io's name, HTTPS site and port forwarding current
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15min
+[Install]
+WantedBy=timers.target
+UNIT
+    $SUDO systemctl daemon-reload; $SUDO systemctl restart notdred
+    say "Setting up the name, HTTPS and port forwarding"
+    $SUDO bash "$DIR/scripts/net-setup.sh"
+    $SUDO systemctl enable --now notdred-net.timer > /dev/null
+    NAME="$($SUDO sed -n 's/^NAME=//p' /run/notdred-net.status 2>/dev/null)"; LINK="$($SUDO sed -n 's/^LINK=//p' /run/notdred-net.status 2>/dev/null)"
   fi
   say "notdred is running as a service (starts at boot, restarts if it stops, updates nightly at 04:30)"
   echo "    Dev menu token:  $($SUDO sed -n 's/^DEV_TOKEN=//p' /etc/notdred.env)"
   if [ -n "$DOMAIN" ]; then
-    echo "    Play at:         https://$DOMAIN        (old computers, classic mode: http://$DOMAIN/classic)"
+    echo "    Play at:         https://${NAME:-$DOMAIN}        (old computers, classic mode: http://${NAME:-$DOMAIN}/classic)"
+    [ -n "${LINK:-}" ] && echo "    Until ports are forwarded, also: $LINK"
     echo "    Firewall:        open ports are 22 (SSH), 80 and 443; the game listens only on 127.0.0.1:8080"
-    if [ -n "$ME_IP" ] && [ "$DNS_IP" != "$ME_IP" ]; then
-      echo; echo "    !! $DOMAIN points to ${DNS_IP:-nothing}, but this server is $ME_IP."
-      echo "       In No-IP (Dynamic DNS → Hostnames → Modify), set the IPv4 address to $ME_IP and save. HTTPS starts working"
-      echo "       a minute or two after the name points here (Caddy keeps retrying; check: sudo journalctl -u caddy -f)."
-    fi
+    echo "    HTTPS starts a minute or two after the name points here (check: sudo journalctl -u caddy -f)."
+    echo "    Network status:  cat /run/notdred-net.status      (name, IP, port forwarding; refreshed every 15 minutes)"
   elif [ "${NOTDRED_LOCAL:-0}" = 1 ]; then echo "    Play at:         http://<this server's address>:8080   (open port 8080 in the firewall)"
   else
     printf '    Public link:     waiting for Cloudflare'; L=""; for i in $(seq 1 45); do L="$($SUDO journalctl -u notdred --since '-3 min' --no-pager -o cat 2>/dev/null | grep -o 'https://[-a-z0-9]*\.trycloudflare\.com' | tail -1 || true)"; [ -n "$L" ] && break; printf '.'; sleep 2; done; echo
