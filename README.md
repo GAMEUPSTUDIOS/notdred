@@ -461,6 +461,12 @@ curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/ins
 curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh | NOTDRED_SERVICE=1 bash
 ```
 
+**No domain at all, fully automatic:** `NOTDRED_DOMAIN=auto` names the server after its public IP (`96-126-108-134.sslip.io` — sslip.io answers any such name with that IP; no account) and sets up everything below for it. At home it also asks your router to forward ports 80 and 443 to the machine (UPnP), renews that every 15 minutes, and follows a changed home IP (new name, new certificate). If the router can't forward (UPnP off, or a provider that shares one public IP among many homes), it says why and a Cloudflare quick tunnel carries players in meanwhile. `cat /run/notdred-net.status` shows the current name, IPs, forwarding and any fallback link.
+
+```
+curl -fsSL https://raw.githubusercontent.com/GAMEUPSTUDIOS/notdred/main/dist/install.sh | NOTDRED_DOMAIN=auto bash
+```
+
 **Your own domain or No-IP hostname on a VPS (Linode, etc.):** point the hostname at the server's IP, then
 
 ```
