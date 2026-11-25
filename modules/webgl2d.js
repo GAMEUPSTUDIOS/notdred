@@ -53,11 +53,13 @@ function createGL2D(canvas){
  function paint(style,k=1){const c=parseColor(style),a=c[3]*S.alpha,br=S.bright;return [c[0]*a*br*k,c[1]*a*br*k,c[2]*a*br*k,a];}
  function tint(){const a=S.alpha,br=S.bright;return [a*br,a*br,a*br,a];}
  // ---- textures ---------------------------------------------------------------------------------------------------
- function texFor(src,share=true){let e=textures.get(src);const w=src.naturalWidth||src.videoWidth||src.width,h=src.naturalHeight||src.videoHeight||src.height;if(!w||!h)return null;
-  if(e&&e.w===w&&e.h===h)return e;
+ // A canvas the game draws on again (the minimap's rock layer) bumps its __glVersion, and is uploaded again here: a
+ // texture is otherwise made once per image or canvas, and kept showing what it first held.
+ function texFor(src,share=true){let e=textures.get(src);const w=src.naturalWidth||src.videoWidth||src.width,h=src.naturalHeight||src.videoHeight||src.height;if(!w||!h)return null;const ver=src.__glVersion||0;
+  if(e&&e.w===w&&e.h===h){if(e.ver===ver)return e;if(e.shared){flush();e.ver=ver;gl.bindTexture(gl.TEXTURE_2D,e.tex);curTex=e.tex;try{gl.texSubImage2D(gl.TEXTURE_2D,0,Math.round(e.u0*AT),Math.round(e.v0*AT),gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}return e;}}
   flush();const spot=share&&!e?atlasSpot(w,h):null;
-  if(spot){e={tex:spot.p.tex,w,h,u0:spot.x/AT,v0:spot.y/AT,us:w/AT,vs:h/AT,shared:true};textures.set(src,e);gl.bindTexture(gl.TEXTURE_2D,spot.p.tex);curTex=spot.p.tex;try{gl.texSubImage2D(gl.TEXTURE_2D,0,spot.x,spot.y,gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}return e;}
-  if(!e||e.shared){e={tex:gl.createTexture(),w,h,u0:0,v0:0,us:1,vs:1};textures.set(src,e);}else{e.w=w;e.h=h;}
+  if(spot){e={tex:spot.p.tex,w,h,u0:spot.x/AT,v0:spot.y/AT,us:w/AT,vs:h/AT,shared:true,ver};textures.set(src,e);gl.bindTexture(gl.TEXTURE_2D,spot.p.tex);curTex=spot.p.tex;try{gl.texSubImage2D(gl.TEXTURE_2D,0,spot.x,spot.y,gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}return e;}
+  if(!e||e.shared){e={tex:gl.createTexture(),w,h,u0:0,v0:0,us:1,vs:1,ver};textures.set(src,e);}else{e.w=w;e.h=h;e.ver=ver;}
   gl.bindTexture(gl.TEXTURE_2D,e.tex);try{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);}catch{return null;}texParams();curTex=e.tex;return e;}
  // ---- text: one small canvas per distinct (string, font, colour, outline); least-recently-used ones are dropped ----
  const textCache=new Map(),TEXT_MAX=700;let measureCtx=null;
