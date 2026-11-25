@@ -46,6 +46,7 @@ assert.ok(B.run('shipHP')<sh&&!sim('sparrow').run('shots.some(s=>s.inside!=null)
  assert.ok(R(`![...terrain.values()].some(t=>t.type==='comms')&&items.some(i=>i.type==='comms')`),'unsupported comms station drops as its item');
  // Expando boxes: no fixed cap — they take items while they can grow.
  const box=R(`(()=>{for(const b of boxes)inside.destroyBody(b.body);boxes.length=0;bounds={l:-14,r:14,t:-10,b:6};rebuildShell();rebuildMounts();const b=spawnBox(V(9,-6));b.materials={iron:400};return resizeBox(b)?b.size:0})()`);assert.ok(box>3,'a box holds more than 256 when it has room ('+box+')');
+ assert.equal(R('state().boxes.find(x=>x.size>3)?.size>3'),true,'snapshots carry each box\'s size');assert.ok(/if\(b\.size&&Math\.abs\(b\.size-o\.size\)>\.001\)\{o\.body\.destroyFixture/.test(require('fs').readFileSync('dist/network.js','utf8')),'the page resizes its copy of a box that grew');
  // Golden shredder: no cooldown; the ordinary one waits.
  const sh=R(`(()=>{const out=[];for(const tl of ['shredder_gold','shredder']){giveItem(tl,1);tool=tl;const p=player.getPosition();const a=spawnItem('iron',V(p.x+1,p.y),V(0,0),4),b=spawnItem('flux',V(p.x-1,p.y),V(0,0),4);out.push([shredAt(a.body.getPosition()),shredAt(b.body.getPosition())]);}return out})()`);
  assert.deepEqual(sh,[[true,true],[true,false]],'golden shredder has no cooldown');assert.ok(era.GOLDEN_SHREDDER_CHANCE===.02,'2% of green bots');}
