@@ -14,7 +14,9 @@ using J=nlohmann::json;
 // still: seconds this body has been below Box2D's sleep tolerances (see the end of call2).
 struct Body {b2Body* p;std::string fixtures;bool awake=true;bool touched=false;float still=0;};
 struct World {b2World physics{{0,20}};std::unordered_map<int,Body> bodies;};
-static std::unordered_map<int,std::unique_ptr<World>> worlds;
+// One table per thread: the server runs zones on worker threads, each loading this module and stepping its own worlds
+// at the same time (world ids are only unique within a thread).
+static thread_local std::unordered_map<int,std::unique_ptr<World>> worlds;
 static b2Vec2 vec(const J& a){return {a[0].get<float>(),a[1].get<float>()};}
 static void buildFixtures(b2Body* b,const J& list){while(b->GetFixtureList())b->DestroyFixture(b->GetFixtureList());for(auto& f:list){
    b2FixtureDef fd;fd.density=f.value("density",0.f);fd.friction=f.value("friction",.2f);fd.restitution=f.value("restitution",0.f);fd.isSensor=f.value("sensor",false);fd.filter.categoryBits=f.value("category",1);fd.filter.maskBits=f.value("mask",65535);fd.filter.groupIndex=f.value("group",0);

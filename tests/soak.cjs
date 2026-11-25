@@ -44,9 +44,9 @@ async function crew(c,until,admin){let held={},heldUntil=0;
   else if(r<.84&&!admin){c.closing=true;c.send({type:'leave'});await sleep(rnd(100,600));c.closing=false;c.send({type:'join',room:c.roomId});stats.reconnects++;}
   await sleep(rnd(40,140));}}
 (async()=>{let ok=false;try{await sleep(900);
- const crews=[];const captain=await client('Captain',true);captain.send({type:'create',name:'Soak ship'});await sleep(400);assert.ok(captain.room,'captain created ship');captain.roomId=captain.room;
+ const crews=[];const captain=await client('Captain',true);captain.send({type:'create',name:'Soak ship'});for(let k=0;k<100&&!captain.room;k++)await sleep(50);assert.ok(captain.room,'captain created ship');captain.roomId=captain.room;
  for(let i=1;i<CREW;i++){const c=await client('Crew'+i);c.send({type:'join',room:captain.room});c.roomId=captain.room;crews.push(c);}
- const loner=await client('Rival',true);loner.send({type:'create',name:'Rival ship'});await sleep(300);loner.roomId=loner.room;
+ const loner=await client('Rival',true);loner.send({type:'create',name:'Rival ship'});for(let k=0;k<100&&!loner.room;k++)await sleep(50);loner.roomId=loner.room;
  // Both ships start in Sparrow so the soak covers shared mining, ghost hulls and PvP hits.
  captain.act('dev',{op:'sparrow'});loner.act('dev',{op:'sparrow'});await sleep(300);
  await sleep(500);const until=Date.now()+SECONDS*1000;

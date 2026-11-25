@@ -1,5 +1,5 @@
 'use strict';
-const LIVE_RANGE=Number(process.env.LIVE_RANGE||240);
+const LIVE_RANGE=Number(process.env.LIVE_RANGE||240),LIVE_RESYNC=20;
 // Interest management: a client gets other ships in full (hull layout, crew, machines) only within VIEW_RANGE of its
 // own ship (a little further once it already has them, so ships on the edge don't flicker); the rest of the zone comes
 // as a compact list for the minimap, five times a second.
@@ -18,9 +18,14 @@ const WAR_CREDIT_SECONDS=Number(require('../dist/modules/era.js').RETURN_SECONDS
 const fs=require('node:fs'),path=require('node:path'),ZoneGenerator=require('../dist/zone-generator.js'),era=require('../dist/modules/era.js'),{createZoneSim}=require('./zone-sim.cjs');
 
 class ZoneBus{
- constructor({dataDir=null,random=Math.random}={}){
+ // Multithreaded servers (server/shard.cjs) run one bus per shard: `saved` is the zones.json content handed over by the
+ // main thread (no file of its own), `owns(zoneId)` limits it to that shard's zones, and only the `authority` shard runs
+ // the server-wide mission schedule — the others get it through setMission() and forward mission events
+ // (onMissionEvent); mission announcements go to every shard (onBroadcast).
+ constructor({dataDir=null,random=Math.random,saved=null,owns=null,authority=true,onBroadcast=null,onMissionEvent=null}={}){
+  this.authority=authority;this.owns=owns;this.onBroadcast=onBroadcast;this.onMissionEvent=onMissionEvent;
   this.file=dataDir?path.join(dataDir,'zones.json'):null;this.random=random;this.zones=new Map();this.sims=new Map();this.queue=[];this.lastExteriors=new Map();this.wars=new Map();this.roomZones=new Map();this.clock=0;this.tickNo=0;this.SIM_IDLE_MS=Number(process.env.ZONE_IDLE_MS||120000);this.mission={active:null,endsIn:0,nextIn:era.MISSIONS.intervalSeconds,elapsed:0,index:0};
-  if(this.file&&fs.existsSync(this.file)){try{const saved=JSON.parse(fs.readFileSync(this.file,'utf8'));if(saved._mission&&typeof saved._mission==='object'){const m=saved._mission;this.mission={...this.mission,...m,active:era.ZONES[m.active]?.mission?m.active:null};}/* a zone saved from an older map generator (smaller 2019-size caves) starts over: its mined tiles were another map's */for(const [id,z] of Object.entries(saved))if(era.ZONES[id]?.gen){const v=ZoneGenerator.generate(0,{...era.ZONES[id].gen,width:15,height:15}).version;this.zones.set(id,(z.gv||1)===v?this.fresh(id,z.seed,z.mined,z.regenIn,z.resetIn):this.fresh(id,z.seed));}}catch(e){console.error('Ignoring unreadable zones.json:',e.message);}}
+  if(saved||this.file&&fs.existsSync(this.file)){try{saved??=JSON.parse(fs.readFileSync(this.file,'utf8'));if(saved._mission&&typeof saved._mission==='object'){const m=saved._mission;this.mission={...this.mission,...m,active:era.ZONES[m.active]?.mission?m.active:null};}/* a zone saved from an older map generator (smaller 2019-size caves) starts over: its mined tiles were another map's */for(const [id,z] of Object.entries(saved))if(era.ZONES[id]?.gen&&(!owns||owns(id))){const v=ZoneGenerator.generate(0,{...era.ZONES[id].gen,width:15,height:15}).version;this.zones.set(id,(z.gv||1)===v?this.fresh(id,z.seed,z.mined,z.regenIn,z.resetIn):this.fresh(id,z.seed));}}catch(e){console.error('Ignoring unreadable zones.json:',e.message);}}
  }
  fresh(id,seed=0,mined=[],regenIn=null,resetIn=era.ZONE_RESET_SECONDS||null){if(era.ZONES[id].mission){regenIn=null;resetIn=null;}const g=ZoneGenerator.generate(seed,era.ZONES[id].gen);let total=0;for(const v of g.solid)total+=v;return {id,seed,grid:g,mined:new Set(mined),total,regenIn,resetIn};}
  zone(id){if(!era.ZONES[id]?.gen)return null;let z=this.zones.get(id);if(!z){z=this.fresh(id);this.zones.set(id,z);}return z;}
@@ -60,6 +65,7 @@ class ZoneBus{
   const events=this.queue.splice(0);
   for(const {room,e} of events){
    if(e.type==='regenRequest')this.regenerate(e.zone,ext);
+   else if(!this.authority&&['missionStart','endmission','treasure'].includes(e.type))this.onMissionEvent?.(e);
    else if(e.type==='missionStart')this.startMission(e.zone,ext);
    else if(e.type==='endmission'){if(this.mission.active)this.mission.endsIn=0;}
    else if(e.type==='sunk')this.warSunk(room,e.zone);
@@ -75,11 +81,11 @@ class ZoneBus{
   for(const [id,sim] of this.sims)if(!sim.api.fleet.size&&Date.now()-sim.emptySince>this.SIM_IDLE_MS){try{sim.run('nativeStepDestroy(world)');}catch{}this.sims.delete(id);}
   // Mission schedule (ℵ33): one for the whole server. Ships left in a closed mission zone send themselves home.
   // Canary-style missions also end once enough of the zone is mined (clearToEnd), and report progress.
-  const m=this.mission;m.nextIn-=dt;if(m.active){m.elapsed+=dt;m.endsIn-=dt;const def=era.ZONES[m.active],z=this.zones.get(m.active);
+  const m=this.mission;if(this.authority){m.nextIn-=dt;if(m.active){m.elapsed+=dt;m.endsIn-=dt;const def=era.ZONES[m.active],z=this.zones.get(m.active);
    if(def.clearToEnd&&z){m.cleared=+(z.mined.size/(z.grid.mineable||z.total)).toFixed(4);if(m.cleared>=def.clearToEnd&&m.endsIn>0){m.endsIn=0;m.clearedOut=true;}}
    if(m.endsIn<=0){const id=m.active;m.active=null;m.endsIn=0;m.nextIn=Math.max(m.nextIn,era.MISSIONS.intervalSeconds-era.MISSIONS.durationSeconds);this.dirty=true;this.broadcast(ext,m.clearedOut?era.ZONES[id].name+' is '+Math.round(era.ZONES[id].clearToEnd*100)+'% mined — mission complete.':era.ZONES[id].name+' mission closed.');m.clearedOut=false;}}
   // One mission at a time: a long one (Canary, 3 hours) holds the next back until it closes.
-  if(m.nextIn<=0&&!m.active)this.startMission(era.MISSIONS.rotation[m.index%era.MISSIONS.rotation.length],ext);
+  if(m.nextIn<=0&&!m.active)this.startMission(era.MISSIONS.rotation[m.index%era.MISSIONS.rotation.length],ext);}
   // 5. Regeneration countdowns (ℵ25 rules), shown on every ship's minimap.
   const second=Math.floor(this.clock)!==Math.floor(this.clock-dt);
   for(const z of this.zones.values()){
@@ -92,7 +98,10 @@ class ZoneBus{
  }
  regenerate(id,ext=this.lastExteriors){const old=this.zone(id);if(!old)return;this.warReset(id);let seed;do seed=Math.floor(this.random()*999983);while(seed===old.seed);this.zones.set(id,this.fresh(id,seed));this.dirty=true;this.sims.get(id)?.api.zsRegenerate(seed);for(const [r,x] of ext)if(x.zone===id)r.game.zone.serverRegenerate(seed);}
  startMission(id,ext=this.lastExteriors){if(!era.ZONES[id]?.mission)id=era.MISSIONS.rotation[this.mission.index%era.MISSIONS.rotation.length];const m=this.mission;m.index=(era.MISSIONS.rotation.indexOf(id)+1)%era.MISSIONS.rotation.length;m.active=id;m.endsIn=era.ZONES[id].missionSeconds||era.MISSIONS.durationSeconds;m.cleared=0;m.elapsed=0;m.nextIn=era.MISSIONS.intervalSeconds;this.regenerate(id,ext);this.dirty=true;this.broadcast(ext,'Mission started: '+era.ZONES[id].name+' is open for '+Math.round(era.MISSIONS.durationSeconds/60)+' minutes. Take the gold portal in Sparrow I.');}
- broadcast(ext,text){for(const r of ext.keys()){try{r.game.zone.missionNotice(text);}catch{}}}
+ broadcast(ext,text){if(this.onBroadcast)return this.onBroadcast(text);for(const r of ext.keys()){try{r.game.zone.missionNotice(text);}catch{}}}
+ setMission(m){if(m&&typeof m==='object')this.mission=m;}
+ // This bus's zones (and, on the authority, the mission schedule) as zones.json records.
+ zoneRecords(){const out={};if(this.authority)out._mission=this.mission;for(const [id,z] of this.zones)out[id]={seed:z.seed,gv:z.grid.version||1,mined:[...z.mined],regenIn:z.regenIn,resetIn:z.resetIn};return out;}
  // Other ships in the same zone, for a client's snapshot. Layouts are sent only when they change.
  // Within DETAIL_RANGE a ship comes with its crew and physics machines (ten times a second, alternating with plain
  // position updates) and, within LIVE_RANGE, what's happening aboard; further out (to VIEW_RANGE) just the hull.
@@ -103,12 +112,22 @@ class ZoneBus{
    const detail=d<=(det.has(r.id)?DETAIL_KEEP:DETAIL_RANGE);
    if(detail){if(fresh||odd||!det.has(r.id)){o.crew=r.crewCache||[];o.machines=r.machinesCache||[];det.add(r.id);
      // Everything happening aboard, for ships close enough to see it.
-     if(r.liveCache&&d<LIVE_RANGE)o.live=r.liveCache;}}
-   else if(fresh||det.has(r.id)){o.crew=[];o.machines=[];det.delete(r.id);}
+     /* out of live range the page drops its copy of the ship's items, so it gets the whole list again on return */
+     if(r.liveCache&&d<LIVE_RANGE)o.live=this.liveFor(seen,r);else seen.live?.delete(r.id);}}
+   else{seen.live?.delete(r.id);if(fresh||det.has(r.id)){o.crew=[];o.machines=[];det.delete(r.id);}}
    out.push(o);}
   // A ship that left this player's view is forgotten, so its layout is sent again when it comes back.
   const visible=new Set(out.map(o=>o.id));for(const k of [...seen.keys()])if(!visible.has(k))seen.delete(k);for(const k of [...det])if(!visible.has(k))det.delete(k);
+  if(seen.live)for(const k of [...seen.live.keys()])if(!visible.has(k))seen.live.delete(k);
   return out;}
+ // A ship's live view for one viewer: everything but the loose items as the ship made it this pass, and the items as
+ // changes since this viewer's last one — the whole list the first time and every LIVE_RESYNC updates, otherwise the
+ // records that changed or appeared (i) and the ids that went away (gone). The base part is the same object for every
+ // viewer (o.live.__base), so the shard encodes it once.
+ liveFor(seen,r){const L=r.liveCache;if(r.liveItemsOf!==L){const recs=L.i||[],json=new Map();for(const rec of recs)json.set(rec[0],rec);const {i,...base}=L;r.liveItems={recs,byId:json};r.liveBase=base;r.liveItemsOf=L;}
+  const lives=seen.live??=new Map(),prev=lives.get(r.id),items=r.liveItems,n=(prev?.n||0)+1;let i,gone=[],full=0;
+  if(!prev||n%LIVE_RESYNC===0){i=items.recs;full=1;}else{i=[];for(const rec of items.recs)if(prev.byId.get(rec[0])!==rec)i.push(rec);for(const id of prev.byId.keys())if(!items.byId.has(id))gone.push(id);}
+  lives.set(r.id,{n,byId:items.byId});const o={...r.liveBase,i,gone,full};Object.defineProperty(o,'__base',{value:r.liveBase});return o;}
  // Which loaded ships someone else can see in full (only those need their crew, machines and live view built).
  watched(liveRooms){const out=new Set(),me=[];for(const r of liveRooms){const x=this.lastExteriors.get(r);if(x)me.push([r,x]);}
   for(const [r,x] of this.lastExteriors)for(const [v,y] of me)if(v!==r&&y.zone===x.zone&&Math.hypot(x.x-y.x,x.y-y.y)<=VIEW_KEEP){out.add(r);break;}return out;}

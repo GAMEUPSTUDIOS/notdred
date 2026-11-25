@@ -25,6 +25,7 @@ for(const [type,knocked] of [['ammo',false],['punch',true]]){sim.api.zsPlaceShip
  sim.run(`enemyShots.push({type:"${type}",p:V(${a.x-15},${a.y}),v:V(80,0),life:2,damage:20})`);step(10);const vx=Number(A.game.run('ship.getLinearVelocity().x'));
  assert.equal(vx>3,knocked,type+' from a bot '+(knocked?'knocks':'does not knock')+' the ship ('+vx.toFixed(2)+')');assert.equal(kick().n>n,knocked,type+': knock sent to the crew');}
 const own=JSON.parse(JSON.stringify(A.game.run('snapshotOwn("Ac",snapshotShared())')));assert.ok(own.kick&&own.kick.n>=1,'crew snapshot carries the knock');
+/* bots held still (no AI) so a fast green scout can't dodge the round */sim.run('botsPaused=true');
 for(const [type,sign] of [['ammo',0],['punch',1],['yank',-1]]){const vx=Number(sim.run(`(()=>{const b=allBots().find(b=>b.species==="green");globalThis._b=b;b.body.setLinearVelocity(V(0,0));const q=b.body.getPosition();zsFire("A",[{type:"${type}",p:{x:q.x-12,y:q.y},v:{x:90,y:0},life:2,maxLife:2,bounces:0}]);return 0;})()`));
  step(10);const v=Number(sim.run('_b.body.getLinearVelocity().x'));if(sign>0)assert.ok(v>15,'punch shoves a bot ('+v.toFixed(1)+')');else if(sign<0)assert.ok(v<-10,'yank pulls a bot ('+v.toFixed(1)+')');else assert.ok(Math.abs(v)<5,'standard ammo barely moves a bot');}
 // Slug ammo: heavy, very slow, mines rock in two; breaker still breaks a tile in one and has its own icon.

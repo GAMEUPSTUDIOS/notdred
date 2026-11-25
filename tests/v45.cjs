@@ -84,11 +84,17 @@ for(const [a,b] of [[A,E],[A,F],[E,F],[D,E],[D,F],[Z,E],[Z,F]])assert.ok(!ov(a,b
 // ---- Other ships' live state.
 E.run('spawnItem("ammo",V(0,1),V(0,0),4);mounts[0].aim=1.2;mounts[0].recoilUntil=clock+.2;');const live=E.game.zone.exteriorLive();
 assert.ok(live.i.some(i=>i[1]==='ammo'&&i[2]===4&&i.length===8)&&live.m[0][0]===1.2&&live.m[0][1]>0,'items, turret aim and recoil');
-// Between full lists only moving/changed/new items are sent, with the ids that went away; resting items cost nothing.
-for(let k=0;k<240;k++)E.game.tick(1/60);E.run('for(const i of items)i.body.setAwake(false);');const quiet=E.game.zone.exteriorLive(false);assert.equal(quiet.i.length,0,'resting items not resent');assert.equal(quiet.full,0);
-E.run('items[0].body.setAwake(true);items[0].body.setLinearVelocity(V(3,0));');assert.equal(E.game.zone.exteriorLive(false).i.length,1,'a moving item is sent (with its velocity)');
-const goneId=E.run('(()=>{const i=items[items.length-1],id=i.nid;inside.destroyBody(i.body);items.pop();return id;})()');{const g=E.game.zone.exteriorLive(false).gone;assert.ok(g.length===1&&g[0]==goneId,'removed items are listed '+JSON.stringify([g,goneId]));}
-assert.equal(E.game.zone.exteriorLive(true).i.length,E.run('items.length'),'full list once a second');
+// Each viewer gets the items as changes since *its own* last update (zone-bus liveFor): the whole list first, then
+// nothing for a resting pile, a moved item alone, the ids that went away — and a viewer that skipped updates still gets
+// everything it missed (a delta shared by all viewers left ghost copies and missing items for anyone who skipped one).
+{const pass=()=>{E.liveCache=E.game.zone.exteriorLive();},A=new Map(),C=new Map(),count=()=>E.run('items.length');
+ E.run('spawnItem("iron",V(1,1),V(0,0),3);spawnItem("flux",V(-1,1),V(0,0),2)');pass();let a=bus.liveFor(A,E);bus.liveFor(C,E);assert.equal(a.full,1);assert.equal(a.i.length,count(),'whole list first');
+ for(let k=0;k<240;k++)E.game.tick(1/60);E.run('for(const i of items)i.body.setAwake(false);');pass();bus.liveFor(A,E);pass();a=bus.liveFor(A,E);
+ assert.equal(a.i.length,0,'resting items not resent');assert.equal(a.gone.length,0);assert.equal(a.full,0);
+ const movedId=E.run('(()=>{items[0].body.setAwake(true);items[0].body.setLinearVelocity(V(3,0));return items[0].nid;})()');pass();a=bus.liveFor(A,E);assert.deepEqual(a.i.map(r=>r[0]),[movedId],'a moving item is sent (with its velocity)');
+ const goneId=E.run('(()=>{const i=items[items.length-1],id=i.nid;inside.destroyBody(i.body);items.pop();return id;})()');pass();a=bus.liveFor(A,E);assert.deepEqual(a.gone,[goneId],'removed items are listed');
+ const c=bus.liveFor(C,E);assert.ok(c.i.some(r=>r[0]===movedId)&&c.gone.includes(goneId),'a viewer that skipped updates gets what it missed');
+ assert.equal(bus.liveFor(new Map(),E).i.length,count(),'a new viewer gets every item');}
 E.game.zone.exterior();for(const r of rooms){r.layoutCache={key:'k',layout:r.game.zone.exteriorLayout()};r.liveCache=r.game.zone.exteriorLive();}
 assert.ok(bus.others(F,new Map()).find(o=>o.id==='E')?.live,'nearby ship gets the live state');
 

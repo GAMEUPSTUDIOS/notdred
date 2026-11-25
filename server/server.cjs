@@ -1,5 +1,8 @@
 'use strict';
-const http=require('node:http'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{createRoom,showValue}=require('./room.cjs'),{ZoneBus}=require('./zone-bus.cjs'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
+// The physics module is loaded here first, before the canvas library (classic mode) brings in its own older C++
+// runtime: the shard threads load the physics module into this same process, and it needs the system's newer one.
+try{require('../build/physics.node');}catch{}
+const http=require('node:http'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{WebSocketServer,WebSocket}=require('ws'),{Worker}=require('node:worker_threads'),os=require('node:os'),codec=require('../dist/modules/save-codec.js'),era=require('../dist/modules/era.js');
 // The running build (git commit), shown in the game header and /health, so a stale server is obvious.
 const BUILD_ID=(()=>{try{return require('node:child_process').execSync('git rev-parse --short HEAD',{cwd:path.resolve(__dirname,'..'),stdio:['ignore','pipe','ignore'],timeout:3000}).toString().trim();}catch{return process.env.NOTDRED_BUILD||'unknown';}})();
 const root=path.resolve(__dirname,'..'),dataDir=path.resolve(process.env.DATA_DIR||path.join(root,'data'));fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
@@ -10,18 +13,25 @@ if(process.env.DEV_TOKEN.length<12)console.warn('[security] DEV_TOKEN is short (
 const cliPort=process.argv.indexOf('--port');const port=Number(process.env.PORT||(cliPort>=0?process.argv[cliPort+1]:8080));
 // Limits. Stored ships are cheap (a file); loaded ships each run two physics worlds and cost CPU.
 const MAX_LOADED=Number(process.env.MAX_LOADED_SHIPS||16),MAX_STORED=500,MAX_OWNED=4,MAX_CREW=8,IDLE_UNLOAD_MS=Number(process.env.IDLE_UNLOAD_MS||era.RETURN_SECONDS*1000),SAVE_INTERVAL_MS=Number(process.env.SAVE_INTERVAL_MS||10000),RETURN_MS=Number(process.env.SHIP_RETURN_MS||era.RETURN_SECONDS*1000);
-const rooms=new Map(),sessions=new Map(),clients=new Set(),bus=new ZoneBus({dataDir});const id=()=>crypto.randomBytes(12).toString('hex');
+const rooms=new Map(),sessions=new Map(),clients=new Set(),uidSockets=new Map();const id=()=>crypto.randomBytes(12).toString('hex');
 
 // ---- Ship records ----------------------------------------------------------------------------------------
 // A record exists for every saved ship; its simulation (`game`) is only created while someone is aboard
 // (and for a minute afterwards), so the room limit counts active ships, not stored ones.
-function record(name,owner,saved,rid=id()){if(rooms.size>=MAX_STORED)throw Error('Server ship storage is full');const r={id:rid,name:era.cleanShipName(name)||era.randomShipName(),owner,ranks:{},log:[],people:{},bans:{},votes:{},tempBans:{},motd:'',private:false,invite:crypto.randomBytes(9).toString('hex'),saved:saved||null,game:null,members:new Set(),tick:0,emptySince:Date.now(),failures:[],lastGood:saved||null};rooms.set(r.id,r);return r;}
-function loadedCount(){let n=0;for(const r of rooms.values())if(r.game)n++;return n;}
-function load(r){if(r.game)return r.game;if(loadedCount()>=MAX_LOADED){const idle=[...rooms.values()].filter(x=>x.game&&!x.members.size).sort((a,b)=>a.emptySince-b.emptySince)[0];if(idle)unload(idle);else throw Error('Server is busy: every ship slot is crewed. Try again soon.');}
- r.game=createRoom(r.saved,bus.hooksFor(r));r.game.setName(r.name);r.saved=null;r.layoutCache=null;r.lastZone=null;logEvent(r,r.loader||null,'loaded the ship.','load');r.loader=null;/* every spawn from the ship list: a random free spot in a Freeport, never docked (the one it was left in, or the one tied to the combat zone it was left in) */r.returnDue=false;try{r.game.run('spawnInFreeport()');}catch(e){console.error('Spawn failed',r.id,e.message);}return r.game;}
-function unload(r){if(!r.game)return;persist(r);r.saved=r.lastGood;try{r.game.dispose();}catch{}r.game=null;r.layoutCache=null;}
-/* direct call into the ship's context: vm.runInContext with a timeout starts a watchdog each time (it cost ~10% of a busy server) */function zoneOf(r){try{return r.game?r.game.zoneId():r.saved?.zone||'freeport';}catch{return 'freeport';}}
-function info(r){try{if(r.game){const i=r.game.info();r.name=i.name||r.name;r.score=i.score;return i;}}catch{}return {name:r.name,score:r.score??r.lastGood?.score??0,zone:r.lastGood?.zone||'freeport'};}
+// A record exists for every saved ship; its simulation runs on a shard (see "Shards" below) only while it is loaded:
+// `loaded` and `shard` say where; `info` is what that shard last reported (name, score, zone).
+function record(name,owner,saved,rid=id()){if(rooms.size>=MAX_STORED)throw Error('Server ship storage is full');const r={id:rid,name:era.cleanShipName(name)||era.randomShipName(),owner,ranks:{},log:[],people:{},bans:{},votes:{},tempBans:{},motd:'',private:false,invite:crypto.randomBytes(9).toString('hex'),saved:saved||null,loaded:false,loading:null,unloading:null,shard:null,info:null,members:new Set(),emptySince:Date.now(),lastGood:saved||null};rooms.set(r.id,r);return r;}
+function loadedCount(){let n=0;for(const r of rooms.values())if(r.loaded||r.loading)n++;return n;}
+// Where a ship spawns (spawnInFreeport, room-runtime.js): the Freeport it was left in, or the one tied to its combat zone.
+function spawnZone(saved){const z=saved?.zone||era.START_ZONE;return era.ZONES[z]?.kind==='safe'?z:(era.HOME_FREEPORT[z]||era.START_ZONE);}
+// Loading a ship: the shard that owns the Freeport it spawns in creates its simulation (a Promise; one load at a time).
+function load(r){if(r.loaded)return Promise.resolve();if(r.loading)return r.loading;if(r.unloading)return r.unloading.then(()=>load(r));
+ if(loadedCount()>=MAX_LOADED){const idle=[...rooms.values()].filter(x=>x.loaded&&!x.members.size).sort((a,b)=>a.emptySince-b.emptySince)[0];if(idle)unload(idle);else return Promise.reject(Error('Server is busy: every ship slot is crewed. Try again soon.'));}
+ const shard=zoneOwner[spawnZone(r.saved)]??0,saved=r.saved??r.lastGood;
+ r.loading=request(shard,{t:'load',id:r.id,name:r.name,saved,spawn:true}).then(res=>{if(res.ok===false)throw Error(res.error||'Could not load the ship.');r.loaded=true;r.shard=shard;r.info={name:r.name,score:r.score??r.lastGood?.score??0,zone:res.zone||spawnZone(saved)};r.saved=null;logEvent(r,r.loader||null,'loaded the ship.','load');r.loader=null;}).finally(()=>{r.loading=null;});return r.loading;}
+function unload(r){if(!r.loaded)return r.unloading||Promise.resolve();r.loaded=false;r.unloading=shipRequest(r,{t:'unload'}).then(res=>{if(res.state)writeShip(r,res.state);r.saved=r.lastGood;}).catch(e=>console.error('Unload failed',r.id,e.message)).finally(()=>{r.unloading=null;});return r.unloading;}
+function zoneOf(r){return (r.loaded?r.info?.zone:null)||r.saved?.zone||r.lastGood?.zone||'freeport';}
+function info(r){if(r.loaded&&r.info){r.name=r.info.name||r.name;r.score=r.info.score;return r.info;}return {name:r.name,score:r.score??r.lastGood?.score??0,zone:r.lastGood?.zone||'freeport'};}
 // Leaderboard (press "/"): every stored ship by score.
 function leaderboard(){return [...rooms.values()].map(r=>{const i=info(r);return {id:r.private?'p'+crypto.createHash('sha1').update(r.id).digest('hex').slice(0,8):r.id,name:r.private?'(private ship)':i.name,score:i.score||0,zone:era.ZONES[zoneOf(r)]?.name||'',crew:r.members.size};}).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name)).slice(0,25);}
 // Ranks: the owner is captain; everyone else is whatever the captain set for them (stored by account), guest by default.
@@ -50,9 +60,10 @@ const VOTE_MS=90000,VOTEKICK_BAN_MS=5*60000;
 const voters=r=>[...r.members].filter(m=>rankOf(r,m)!=='guest');
 const votesNeeded=r=>Math.floor(voters(r).length/2)+1;
 function removeFromShip(r,target,message){leave(target);send(target,{type:'error',message});send(target,{type:'rooms',rooms:list(target)});}
-function notice(r,text){try{r.game?.zone.missionNotice(text);}catch{}}
-function crewReport(r,ws){const online=new Map([...r.members].map(m=>[m.owner,m]));const rows=[];
- for(const [owner,p] of Object.entries(r.people||{})){const m=online.get(owner);let inventory=[];if(m&&r.game){try{inventory=(r.game.snapshot(m.uid)?.stacks||[]).filter(Boolean).map(x=>({type:x.type,count:x.count}));}catch{}}
+function notice(r,text){if(r.loaded)post(r,{t:'call',fn:'notice',args:[String(text)]});}
+async function crewReport(r,ws){const online=new Map([...r.members].map(m=>[m.owner,m]));const rows=[],inv=new Map();
+ if(r.loaded)await Promise.all([...r.members].map(m=>shipRequest(r,{t:'call',fn:'stacks',args:[m.uid]}).then(x=>{if(x.ok)inv.set(m.uid,x.value);}).catch(()=>{})));
+ for(const [owner,p] of Object.entries(r.people||{})){const m=online.get(owner),inventory=m?inv.get(m.uid)||[]:[];
   rows.push({short:p.short,name:m?.name||p.name,online:!!m,uid:m?.uid||null,owner:owner===r.owner,rank:rankFor(r,owner),playtime:Math.round((p.playtime||0)+(m?.joinedAt?(Date.now()-m.joinedAt)/1000:0)),last:p.last||0,inventory,you:owner===ws.owner});}
  for(const row of rows){const o=Object.keys(r.people).find(k=>r.people[k].short===row.short);row.banned=!!r.bans?.[o];const v=row.uid&&r.votes?.[o];row.votes=v?[...v.voters].length:0;row.voted=!!(v&&v.voters.has(ws.owner));}
  rows.sort((a,b)=>(b.online-a.online)||(b.owner-a.owner)||(b.playtime-a.playtime));return {type:'crew',ship:info(r).name,captain:isCap(r,ws),rank:rankOf(r,ws),votesNeeded:votesNeeded(r),log:(r.log||[]).slice(-200),crew:rows};}
@@ -67,18 +78,18 @@ function shipTag(r){return String(r.id||'').slice(0,5).toUpperCase();}
 // ship or zone. Its own context persists between runs, so variables you set stay set.
 let serverCtx=null;
 function serverEval(ws,code){if(!serverCtx){serverCtx=vm.createContext({console,setTimeout,clearTimeout,setInterval,clearInterval,Date,performance,process:{memoryUsage:()=>process.memoryUsage(),uptime:()=>process.uptime(),version:process.version,cpuUsage:()=>process.cpuUsage()},
-  era,rooms,bus,clients,
-  stats:()=>({rooms:rooms.size,loaded:[...rooms.values()].filter(r=>r.game).length,players:clients.size,tickMs:+tickMs.toFixed(2),last10s:perf.last,zones:[...bus.sims.keys()],memoryMB:Math.round(process.memoryUsage().rss/1048576)}),
-  ships:()=>[...rooms.values()].map(r=>({id:r.id,name:info(r).name,zone:zoneOf(r),loaded:!!r.game,crew:[...r.members].map(m=>m.name),lagMs:r.game?.lag?+r.game.lag.ms.toFixed(2):null})),
+  era,rooms,clients,shards:()=>shards.map(x=>({index:x.index,thread:!!x.worker,zones:x.zones,ships:x.ships,perf:x.perf})),
+  stats:()=>({rooms:rooms.size,loaded:loadedCount(),players:clients.size,tickMs:shardTickMs(),last10s:last10s(),workers:WORKERS,shards:shards.length,zones:zoneCounts(),memoryMB:Math.round(process.memoryUsage().rss/1048576)}),
+  ships:()=>[...rooms.values()].map(r=>({id:r.id,name:info(r).name,zone:zoneOf(r),loaded:!!r.loaded,shard:r.loaded?r.shard:null,crew:[...r.members].map(m=>m.name),lagMs:r.loaded?r.lagMs??null:null})),
   findShip:q=>[...rooms.values()].find(r=>r.id===q||r.id.startsWith(String(q).toLowerCase())||info(r).name.toLowerCase()===String(q).toLowerCase()),
-  inShip:(q,c)=>{const r=serverCtx.findShip(q);if(!r?.game)throw Error('No loaded ship '+q);return r.game.evalCode([...r.members][0]?.uid||null,c);},
-  inZone:(z,c)=>{const sim=bus.sims.get(z);if(!sim)throw Error('Zone '+z+' is not running');return sim.evalCode(c);},
+  inShip:(q,c)=>{const r=serverCtx.findShip(q);if(!r?.loaded)throw Error('No loaded ship '+q);return shipRequest(r,{t:'shipEval',code:String(c)}).then(o=>{if(o.ok===false)throw Error(o.error);return o;});},
+  inZone:(z,c)=>{if(zoneOwner[z]==null)throw Error('Unknown zone '+z);return request(zoneOwner[z],{t:'zoneEval',zone:z,code:String(c)}).then(o=>{if(o.ok===false)throw Error(o.error);return o;});},
   say:(text)=>{for(const c of clients)send(c,{type:'chat',from:'Server',ship:'',rank:'captain',text:String(text).slice(0,200),t:Date.now()});return 'sent';},
-  me:null});vm.runInContext('globalThis.help=()=>"stats() · ships() · findShip(nameOrId) · await inShip(nameOrId, code) · await inZone(zoneId, code) · say(text) · rooms, bus, clients, era · log(...) · after/every(sec,fn)"',serverCtx);
+  me:null});vm.runInContext('globalThis.help=()=>"stats() · ships() · shards() · findShip(nameOrId) · await inShip(nameOrId, code) · await inZone(zoneId, code) · say(text) · rooms, clients, era · log(...) · after/every(sec,fn)"',serverCtx);
  const tick=setInterval(()=>require('./live-code.cjs').tickTimers(serverCtx),1000/60);tick.unref();}
  serverCtx.me={name:ws.name,room:ws.room?.id};return require('./live-code.cjs').run(serverCtx,code);}
-function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
- if(comms&&!r.game.run(`commsCheck(${JSON.stringify(ws.uid)})`)){ws.lastChat=0;throw Error('Stand at a comms station to talk to other ships.');}
+async function chat(ws,text,comms=false){const r=ws.room;if(!r)throw Error('Join a ship to chat');const now=Date.now();if(now-(ws.lastChat||0)<600)throw Error('You are sending messages too fast');text=String(text||'').replace(/[\x00-\x1f<>]/g,' ').replace(/\s+/g,' ').trim().slice(0,200);if(!text)return;ws.lastChat=now;
+ if(comms&&!(await shipRequest(r,{t:'call',fn:'commsCheck',args:[ws.uid]}).then(x=>x.ok&&x.value).catch(()=>false))){ws.lastChat=0;throw Error('Stand at a comms station to talk to other ships.');}
  if(comms){const t=txNow(r,now);if(t.n<=0){ws.lastChat=0;send(ws,txState(r));throw Error('No transmissions left — one recharges every 15 seconds.');}t.n--;if(t.n===TX_MAX-1)t.t=now;for(const c of r.members)send(c,txState(r));}
  const z=zoneOf(r),msg={type:'chat',from:ws.name,ship:info(r).name,shipTag:shipTag(r),rank:rankOf(r,ws),zone:era.ZONES[z]?.name||z,text,t:now,...(comms?{comms:true}:{})};
  for(const c of clients)if(c.room&&(c.room===r||comms&&zoneOf(c.room)===z))send(c,msg);}
@@ -91,20 +102,17 @@ for(const file of fs.readdirSync(dataDir).filter(f=>/^[a-f0-9]+\.json$/.test(f))
 
 // The once-a-minute save skips a ship whose state and settings haven't changed since its last save (play time alone
 // doesn't count, but every ship is still written at least every 10 minutes). Every other save always writes.
-function persist(r,periodic=false){if(!r.game)return;try{info(r);const state=r.game.run('durableState()'),meta={id:r.id,name:r.name,owner:r.owner,ranks:r.ranks||{},log:r.log||[],people:r.people||{},bans:r.bans||{},motd:r.motd||'',private:!!r.private,invite:r.invite};
+function writeShip(r,state,periodic=false){try{info(r);const meta={id:r.id,name:r.name,owner:r.owner,ranks:r.ranks||{},log:r.log||[],people:r.people||{},bans:r.bans||{},motd:r.motd||'',private:!!r.private,invite:r.invite};
  const key=crypto.createHash('sha1').update(JSON.stringify(state)).update(JSON.stringify({...meta,people:Object.keys(meta.people)})).digest('hex');if(periodic&&key===r.savedKey&&Date.now()-(r.savedAt||0)<10*60000)return;
  const file=path.join(dataDir,r.id+'.json'),tmp=file+'.tmp',ship=codec.encode(state);fs.writeFileSync(tmp,JSON.stringify({...meta,ship}),{mode:0o600});fs.renameSync(tmp,file);r.lastGood=codec.decode(ship);r.savedKey=key;r.savedAt=Date.now();}catch(e){console.error('Save failed:',r.id,e.message);}}
-// A simulation error no longer ends the session: the ship is rebuilt from its last good save and the crew
-// rejoin it. Three failures inside a minute means the save itself is bad; then the crew is sent to the lobby.
-function recover(r,err){console.error('Room tick failed',r.id,err.stack||err);const now=Date.now();r.failures=r.failures.filter(t=>now-t<60000);r.failures.push(now);
- try{r.game.dispose();}catch{}r.game=null;
- if(r.failures.length>=3){for(const ws of [...r.members]){send(ws,{type:'error',message:'This ship keeps failing to simulate and was closed. Your last save is kept.'});leave(ws,false);send(ws,{type:'rooms',rooms:list(ws)});}r.saved=r.lastGood;return;}
- try{r.saved=r.lastGood;load(r);for(const ws of r.members){r.game.join(ws.uid,ws.name,ws.admin,rankOf(r,ws));ws.layoutSeen=new Map();send(ws,{type:'error',message:'The ship hit a simulation error and was restored from its last save.'});}}
- catch(e){console.error('Recovery failed',r.id,e.message);for(const ws of [...r.members])leave(ws,false);}}
+// Saving a loaded ship: its shard hands over the state, then it is written (crewed ships are also saved every
+// SAVE_INTERVAL_MS by their shard). A Promise.
+function persist(r){if(!r.loaded)return Promise.resolve();return shipRequest(r,{t:'state'}).then(res=>{if(res.state)writeShip(r,res.state);}).catch(e=>console.error('Save failed:',r.id,e.message));}
+// A ship that keeps failing to simulate is restored or closed by its shard (shard.cjs recover; 'closed' below).
 
 // ---- HTTP ------------------------------------------------------------------------------------------------
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webp':'image/webp','.svg':'image/svg+xml','.zip':'application/zip'};
-const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local');if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({ok:true,build:BUILD_ID,protocol:1,physics:'Box2D interiors (native C++), Planck exteriors',rooms:rooms.size,loaded:loadedCount(),players:clients.size,tickMs:+tickMs.toFixed(2),last10s:perf.last,zones:(()=>{const z={};for(const x of bus.lastExteriors.values())z[x.zone]=(z[x.zone]||0)+1;return z;})()}));}if(u.pathname==='/classic'||u.pathname.startsWith('/classic/'))return classic.handle(req,res,u);if(u.pathname==='/api/rooms'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify(list()));}let file;try{file=path.resolve(root,'dist','.'+decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));}catch{res.writeHead(400);return res.end();}if(!file.startsWith(path.join(root,'dist')+path.sep)){res.writeHead(403);return res.end();}fs.stat(file,(err,st)=>{if(err||!st.isFile()){res.writeHead(404);return res.end('Not found');}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);});});
+const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://local');if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({ok:true,build:BUILD_ID,protocol:1,physics:'Box2D interiors (native C++), Planck exteriors',rooms:rooms.size,loaded:loadedCount(),players:clients.size,tickMs:shardTickMs(),last10s:last10s(),lastBackup,workers:WORKERS,cores:CORES,shards:shards.map(x=>({zones:x.zones,ships:x.ships,thread:!!x.worker,tickMs:x.perf?.tickMs??null})),zones:zoneCounts()}));}if(u.pathname==='/classic'||u.pathname.startsWith('/classic/'))return classic.handle(req,res,u);if(u.pathname==='/api/rooms'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify(list()));}let file;try{file=path.resolve(root,'dist','.'+decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));}catch{res.writeHead(400);return res.end();}if(!file.startsWith(path.join(root,'dist')+path.sep)){res.writeHead(403);return res.end();}fs.stat(file,(err,st)=>{if(err||!st.isFile()){res.writeHead(404);return res.end('Not found');}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);});});
 const wss=new WebSocketServer({noServer:true,maxPayload:2*1024*1024,
  // Updates are compressed (each looks much like the one before, so a small shared window shrinks them several-fold);
  // fast level-1 zlib, a 16 KB window per player. NOTDRED_DEFLATE=0 turns it off.
@@ -115,22 +123,21 @@ server.on('upgrade',(req,socket,head)=>{const origin=req.headers.origin,allowed=
 // ALLOWED_ORIGINS entries are exact origins, or https://*.domain for any subdomain (npm run host uses
 // https://*.trycloudflare.com, since each Cloudflare quick tunnel — including a reconnect — gets a new random address).
 function originAllowed(list,origin){return list.some(a=>a===origin||(a.startsWith('https://*.')&&origin.startsWith('https://')&&origin.endsWith(a.slice(9))&&!origin.slice(8,-(a.length-9)).includes('/')));}
-// Other ships in a snapshot: each ship's crew, machines and live view are encoded once per pass (r.json) and spliced
-// into every viewer's message as text, so a busy ship seen by many players is serialised once, not once per viewer.
-// Crew, machines and live view are encoded once per pass per ship (r.json) and spliced into every viewer's list.
-function othersJSON(list){return '['+list.map(o=>{const r=rooms.get(o.id),j=r?.json,{crew,machines,live,...rest}=o;let t=JSON.stringify(rest).slice(0,-1);
- if(crew!==undefined)t+=',"crew":'+(j&&crew===r.crewCache?j.crew:JSON.stringify(crew));if(machines!==undefined)t+=',"machines":'+(j&&machines===r.machinesCache?j.machines:JSON.stringify(machines));if(live!==undefined)t+=',"live":'+(j&&live===r.liveCache?j.live:JSON.stringify(live));return t+'}';}).join(',')+']';}
-// The ship's shared snapshot text (the same for everyone aboard) comes first; the member's own fields follow and win.
-// Snapshots are only built for players whose connection has taken the last ones (less than SNAPSHOT_BACKLOG waiting to go
-// out, compression queue included): a slow link gets fewer, fresh snapshots instead of an ever-longer delay.
+// Snapshots are built by the shards (shard.cjs). A player whose connection hasn't taken the last ones (more than
+// SNAPSHOT_BACKLOG waiting to go out, compression queue included) is skipped until it has: fewer, fresh snapshots on a
+// slow link instead of an ever-longer delay.
 const SNAPSHOT_BACKLOG=Number(process.env.SNAPSHOT_BACKLOG||96*1024);
-function sendSnapshot(ws,tick,st,others,shared,tail=''){if(ws.readyState!==WebSocket.OPEN)return;const own=st==null?'{}':JSON.stringify(st),head=st!=null&&shared&&shared!=='{}'?shared.slice(0,-1)+',':'{',body=own==='{}'?head:head+own.slice(1,-1)+',';const text='{"type":"snapshot","tick":'+JSON.stringify(tick)+',"state":'+body+'"others":'+othersJSON(others)+tail+'}}';sentBytes+=text.length;ws.send(text);}
 // Bytes sent to players (for /health: egress per second over the last 10 s).
 let sentBytes=0;
 function send(ws,o){if(ws.readyState===WebSocket.OPEN&&ws.bufferedAmount<2*1024*1024){const t=JSON.stringify(o);sentBytes+=t.length;ws.send(t);}}
-function leave(ws,save=true){const r=ws.room;if(!r)return;ws.room=null;r.members.delete(ws);{const p=person(r,ws);if(ws.joinedAt)p.playtime=(p.playtime||0)+(Date.now()-ws.joinedAt)/1000;ws.joinedAt=0;ws.wasPiloting=false;}logEvent(r,ws,'left the ship.','leave');if(!r.members.size)logEvent(r,null,'saved the ship.','save');try{r.game?.leave(ws.uid);}catch(e){console.error('Leave failed',r.id,e.message);}if(save)persist(r);if(!r.members.size)r.emptySince=Date.now();}
-function join(ws,r,key){if(!mayJoin(r,ws,key))throw Error('This ship is private. Ask its captain for the invite link.');if(r.owner!==ws.owner&&r.bans?.[ws.owner])throw Error('You are banned from this ship.');{const until=r.tempBans?.[ws.owner];if(until&&until>Date.now())throw Error('You were vote-kicked from this ship. Try again in '+Math.ceil((until-Date.now())/60000)+' min.');}/* the same player coming back to this ship (a reconnect, or a second tab on it) replaces their old connection there; their other ships stay open */for(const other of [...r.members])if(other!==ws&&other.token===ws.token){leave(other);send(other,{type:'error',message:'This ship was opened in another window.'});other.close?.(1000,'Reconnected elsewhere');}
- if(r.members.size>=MAX_CREW)throw Error('Ship full');leave(ws);if(!r.game)r.loader=ws;load(r);r.game.join(ws.uid,ws.name,ws.admin,rankOf(r,ws));r.members.add(ws);ws.room=r;r.returned=false;ws.joinedAt=Date.now();person(r,ws);logEvent(r,null,'','time');logEvent(r,ws,'joined the ship.','join');ws.layoutSeen=new Map();send(ws,{type:'joined',room:r.id,name:r.name,self:ws.uid,admin:ws.admin,captain:isCap(r,ws)});send(ws,{type:'snapshot',tick:r.tick,state:{...r.game.snapshot(ws.uid),others:bus.others(r,ws.layoutSeen)}});send(ws,{type:'motd',text:r.motd||''});}
+function leave(ws,save=true){const r=ws.room;if(!r)return;ws.room=null;ws.ready=false;r.members.delete(ws);{const p=person(r,ws);if(ws.joinedAt)p.playtime=(p.playtime||0)+(Date.now()-ws.joinedAt)/1000;ws.joinedAt=0;ws.wasPiloting=false;}logEvent(r,ws,'left the ship.','leave');if(!r.members.size)logEvent(r,null,'saved the ship.','save');if(r.loaded)post(r,{t:'leave',uid:ws.uid});if(save)persist(r);if(!r.members.size)r.emptySince=Date.now();}
+// Joining: checks here, then the ship is loaded on its shard if it isn't yet, and the crew member added there. The
+// player gets 'joined' and the first snapshot once the shard has them aboard; input sent before that is ignored.
+async function join(ws,r,key){if(!mayJoin(r,ws,key))throw Error('This ship is private. Ask its captain for the invite link.');if(r.owner!==ws.owner&&r.bans?.[ws.owner])throw Error('You are banned from this ship.');{const until=r.tempBans?.[ws.owner];if(until&&until>Date.now())throw Error('You were vote-kicked from this ship. Try again in '+Math.ceil((until-Date.now())/60000)+' min.');}/* the same player coming back to this ship (a reconnect, or a second tab on it) replaces their old connection there; their other ships stay open */for(const other of [...r.members])if(other!==ws&&other.token===ws.token){leave(other);send(other,{type:'error',message:'This ship was opened in another window.'});other.close?.(1000,'Reconnected elsewhere');}
+ if(r.members.size>=MAX_CREW)throw Error('Ship full');leave(ws);r.members.add(ws);ws.room=r;ws.ready=false;r.returned=false;ws.joinedAt=Date.now();person(r,ws);logEvent(r,null,'','time');logEvent(r,ws,'joined the ship.','join');
+ try{if(!r.loaded){r.loader=ws;await load(r);}if(ws.room!==r)return;const res=await shipRequest(r,{t:'join',uid:ws.uid,name:ws.name,admin:ws.admin,rank:rankOf(r,ws)});if(res.ok===false||res.missing)throw Error(res.error||'Could not join the ship.');
+  if(ws.room!==r){post(r,{t:'leave',uid:ws.uid});return;}ws.ready=true;send(ws,{type:'joined',room:r.id,name:r.name,self:ws.uid,admin:ws.admin,captain:isCap(r,ws)});if(ws.readyState===WebSocket.OPEN&&res.snapshot){sentBytes+=res.snapshot.length;ws.send(res.snapshot);}send(ws,{type:'motd',text:r.motd||''});}
+ catch(e){if(ws.room===r){ws.room=null;ws.joinedAt=0;r.members.delete(ws);if(!r.members.size)r.emptySince=Date.now();}throw e;}}
 const owned=ws=>[...rooms.values()].filter(r=>r.owner===ws.owner).length;
 // One handler for every client: real WebSockets, and classic-mode sessions (server/classic.cjs) that use a stand-in socket.
 // ---- Abuse limits (simple and quiet) -------------------------------------------------------------------------------
@@ -149,7 +156,7 @@ setInterval(()=>{const now=Date.now();for(const [k,f] of tokenFails)if(f.until<n
 // from someone connecting directly (who could write anything there).
 function visitorIP(req){const peer=String(req?.socket?.remoteAddress||'');const local=/^(127\.|::1$|::ffff:127\.)/.test(peer);
  if(local){const h=req.headers||{},f=h['cf-connecting-ip']||String(h['x-forwarded-for']||'').split(',')[0].trim()||h['x-real-ip'];if(f)return String(f);}return peer||'local';}
-function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws.ip||'local').slice(0,64);ws.uid=id();ws.name='Crew';ws.actions=0;ws.window=Date.now();ws.seq=-1;ws.alive=true;ws.on('pong',()=>ws.alive=true);ws.on('message',raw=>{if(ws.flooded)return;try{
+function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws.ip||'local').slice(0,64);ws.uid=id();uidSockets.set(ws.uid,ws);ws.name='Crew';ws.actions=0;ws.window=Date.now();ws.seq=-1;ws.alive=true;ws.on('pong',()=>ws.alive=true);ws.on('message',raw=>{if(ws.flooded)return;try{
  if(Date.now()-ws.window>1000){ws.window=Date.now();ws.actions=0;}if(++ws.actions>90){if(ws.actions===91)send(ws,{type:'error',message:'Too many messages — slow down.'});if(ws.actions>400){ws.flooded=true;console.warn('[security] closing a flooding connection from '+ws.ip);(ws.terminate||ws.close)?.call(ws);}return;}
  {const size=typeof raw==='string'?raw.length:raw?.length||0;if(size>SMALL_MESSAGE){const head=(typeof raw==='string'?raw:Buffer.from(raw).toString('utf8',0,48)).slice(0,48);if(!/^\s*\{\s*"type"\s*:\s*"(import|eval)"/.test(head))throw Error('Message too large');}}
  const m=JSON.parse(raw);if(!m||typeof m!=='object'||Array.isArray(m))throw Error('Invalid message');
@@ -159,15 +166,15 @@ function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws
  if(m.type==='ping')return send(ws,{type:'pong',t:Number(m.t)||0});
  if(m.type==='list')return send(ws,{type:'rooms',rooms:list(ws)});
  if(m.type==='leaderboard')return send(ws,{type:'leaderboard',ships:leaderboard(),you:ws.room?.id||null});
- if(m.type==='create'){if(owned(ws)>=MAX_OWNED)throw Error('Four ships per owner. Delete one first.');if(!underLimit(shipMade,ws.owner,6,10*60000))throw Error('That\'s a lot of new ships — wait a few minutes.');return join(ws,record(m.name,ws.owner));}
- if(m.type==='import'){if(ws.room)throw Error('Leave the current ship before importing');if(!underLimit(shipMade,ws.owner,6,10*60000))throw Error('That\'s a lot of new ships — wait a few minutes.');if(owned(ws)>=MAX_OWNED)throw Error('Four ships per owner. Delete one first.');const saved=codec.decode(m.data);const r=record(m.name||'Imported ship',ws.owner,saved);try{return join(ws,r);}catch(e){rooms.delete(r.id);throw e;}}
- if(m.type==='join'){if(!underLimit(joinsMade,ws.owner||ws.uid,30,60000))throw Error('Joining too often — wait a moment.');const r=rooms.get(m.room);if(!r)throw Error('Ship not found');return join(ws,r,m.key);}
+ if(m.type==='create'){if(owned(ws)>=MAX_OWNED)throw Error('Four ships per owner. Delete one first.');if(!underLimit(shipMade,ws.owner,6,10*60000))throw Error('That\'s a lot of new ships — wait a few minutes.');return join(ws,record(m.name,ws.owner)).catch(e=>send(ws,{type:'error',message:String(e.message).slice(0,180)}));}
+ if(m.type==='import'){if(ws.room)throw Error('Leave the current ship before importing');if(!underLimit(shipMade,ws.owner,6,10*60000))throw Error('That\'s a lot of new ships — wait a few minutes.');if(owned(ws)>=MAX_OWNED)throw Error('Four ships per owner. Delete one first.');const saved=codec.decode(m.data);const r=record(m.name||'Imported ship',ws.owner,saved);return join(ws,r).catch(e=>{if(!r.loaded&&!r.members.size)rooms.delete(r.id);send(ws,{type:'error',message:String(e.message).slice(0,180)});});}
+ if(m.type==='join'){if(!underLimit(joinsMade,ws.owner||ws.uid,30,60000))throw Error('Joining too often — wait a moment.');const r=rooms.get(m.room);if(!r)throw Error('Ship not found');return join(ws,r,m.key).catch(e=>send(ws,{type:'error',message:String(e.message).slice(0,180)}));}
  if(m.type==='leave'){leave(ws);return send(ws,{type:'rooms',rooms:list(ws)});}
- if(m.type==='delete'){const r=rooms.get(m.room);if(!r)throw Error('Ship not found');if(r.owner!==ws.owner)throw Error('Only the captain can delete this ship');if(r.members.size)throw Error('Everyone must leave the ship first');if(r.game){try{r.game.dispose();}catch{}r.game=null;}rooms.delete(r.id);fs.rmSync(path.join(dataDir,r.id+'.json'),{force:true});return send(ws,{type:'rooms',rooms:list(ws)});}
+ if(m.type==='delete'){const r=rooms.get(m.room);if(!r)throw Error('Ship not found');if(r.owner!==ws.owner)throw Error('Only the captain can delete this ship');if(r.members.size)throw Error('Everyone must leave the ship first');if(r.loaded||r.loading){const sh=r.shard??zoneOwner[spawnZone(r.saved)]??0;shards[sh]?.post({t:'dispose',id:r.id});r.loaded=false;}rooms.delete(r.id);fs.rmSync(path.join(dataDir,r.id+'.json'),{force:true});return send(ws,{type:'rooms',rooms:list(ws)});}
  if(!ws.room)throw Error('Join a ship first');
- if(m.type==='chat')return chat(ws,m.text);
- if(m.type==='commsState')return ws.room&&send(ws,txState(ws.room));if(m.type==='comms')return chat(ws,m.text,true);
- if(m.type==='crew')return send(ws,crewReport(ws.room,ws));
+ if(m.type==='chat')return chat(ws,m.text).catch(e=>send(ws,{type:'error',message:String(e.message).slice(0,180)}));
+ if(m.type==='commsState')return ws.room&&send(ws,txState(ws.room));if(m.type==='comms')return chat(ws,m.text,true).catch(e=>send(ws,{type:'error',message:String(e.message).slice(0,180)}));
+ if(m.type==='crew')return crewReport(ws.room,ws).then(x=>send(ws,x));
  // Ship settings: privacy and the invite link (the link's key only goes to the captain and crew).
  if(m.type==='shipsettings'){const r=ws.room;return send(ws,{type:'shipsettings',id:r.id,private:!!r.private,invite:insider(r,ws)?r.invite:null,captain:isCap(r,ws)});}
  if(m.type==='privacy'||m.type==='newinvite'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can change who can join');
@@ -178,12 +185,12 @@ function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws
  if(m.type==='rank'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can set ranks');if(!['captain','crew','guest'].includes(m.rank))throw Error('Unknown rank');
   // By crew id (online) or by short account id from the crew list (offline too).
   const target=[...r.members].find(x=>x.uid===m.crew||(m.account&&shortId(x.owner)===m.account));const owner=target?.owner||Object.keys(r.people||{}).find(o=>m.account&&r.people[o].short===m.account);
-  if(!owner||owner===ws.owner)throw Error('Crew member not found');if(!mayManage(r,ws,owner))throw Error(owner===r.owner?'The ship\'s owner is always captain.':'Only the ship\'s owner can change another captain\'s rank.');r.ranks??={};r.ranks[owner]=m.rank;if(target){r.game.setRank(target.uid,m.rank);send(target,{type:'error',message:'The captain made you '+m.rank+'.'});}
-  logEvent(r,ws,'set '+(r.people?.[owner]?.short||'')+' ('+(r.people?.[owner]?.name||'?')+') to '+m.rank+'.','rank');persist(r);if(m.report)send(ws,crewReport(r,ws));return;}
+  if(!owner||owner===ws.owner)throw Error('Crew member not found');if(!mayManage(r,ws,owner))throw Error(owner===r.owner?'The ship\'s owner is always captain.':'Only the ship\'s owner can change another captain\'s rank.');r.ranks??={};r.ranks[owner]=m.rank;if(target){if(r.loaded)post(r,{t:'rank',uid:target.uid,rank:m.rank});send(target,{type:'error',message:'The captain made you '+m.rank+'.'});}
+  logEvent(r,ws,'set '+(r.people?.[owner]?.short||'')+' ('+(r.people?.[owner]?.name||'?')+') to '+m.rank+'.','rank');persist(r);if(m.report)crewReport(r,ws).then(x=>send(ws,x));return;}
  if(m.type==='ban'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can ban');const owner=Object.keys(r.people||{}).find(o=>r.people[o].short===m.account);if(!owner||owner===ws.owner)throw Error('Crew member not found');if(!mayManage(r,ws,owner))throw Error('You cannot ban the ship\'s owner or another captain.');
   r.bans??={};const p=r.people[owner];if(m.banned===false){delete r.bans[owner];logEvent(r,ws,'unbanned '+p.short+' ('+p.name+').','ban');}
   else{r.bans[owner]=true;logEvent(r,ws,'banned '+p.short+' ('+p.name+').','ban');const target=[...r.members].find(x=>x.owner===owner);if(target)removeFromShip(r,target,'You were banned from the ship by the captain.');notice(r,p.name+' was banned from the ship.');}
-  persist(r);if(m.report)send(ws,crewReport(r,ws));return;}
+  persist(r);if(m.report)crewReport(r,ws).then(x=>send(ws,x));return;}
  if(m.type==='votekick'){const r=ws.room;if(rankOf(r,ws)==='guest')throw Error('Only crew can vote to kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');if(rankOf(r,target)!=='guest')throw Error('Only guests can be vote-kicked');
   r.votes??={};const now=Date.now();let v=r.votes[target.owner];if(!v||now-v.at>VOTE_MS)v=r.votes[target.owner]={at:now,voters:new Set()};
   // Voters who have left no longer count.
@@ -191,52 +198,110 @@ function onConnection(ws,req){clients.add(ws);ws.ip=String(req?visitorIP(req):ws
   if(v.voters.has(ws.owner))throw Error('You already voted to kick '+target.name);v.voters.add(ws.owner);const need=votesNeeded(r);
   logEvent(r,ws,'voted to kick '+shortId(target.owner)+' ('+target.name+') — '+v.voters.size+'/'+need+'.','vote');notice(r,ws.name+' voted to kick '+target.name+' ('+v.voters.size+'/'+need+').');
   if(v.voters.size>=need){delete r.votes[target.owner];r.tempBans??={};r.tempBans[target.owner]=now+VOTEKICK_BAN_MS;logEvent(r,null,shortId(target.owner)+' ('+target.name+') was vote-kicked.','kick');removeFromShip(r,target,'You were vote-kicked from the ship by its crew.');notice(r,target.name+' was vote-kicked.');}
-  if(m.report)send(ws,crewReport(r,ws));return;}
- if(m.type==='kick'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');if(!mayManage(r,ws,target.owner))throw Error('You cannot kick the ship\'s owner or another captain.');logEvent(r,ws,'kicked '+shortId(target.owner)+' ('+target.name+').','kick');leave(target);send(target,{type:'error',message:'You were removed from the ship by the captain.'});send(target,{type:'rooms',rooms:list(target)});if(m.report)send(ws,crewReport(r,ws));return;}
- if(m.type==='export'){return send(ws,{type:'export',data:codec.encode(ws.room.game.run('durableState()'))});}
+  if(m.report)crewReport(r,ws).then(x=>send(ws,x));return;}
+ if(m.type==='kick'){const r=ws.room;if(!isCap(r,ws))throw Error('Only the captain can kick');const target=[...r.members].find(x=>x.uid===m.crew);if(!target||target===ws)throw Error('Crew member not found');if(!mayManage(r,ws,target.owner))throw Error('You cannot kick the ship\'s owner or another captain.');logEvent(r,ws,'kicked '+shortId(target.owner)+' ('+target.name+').','kick');leave(target);send(target,{type:'error',message:'You were removed from the ship by the captain.'});send(target,{type:'rooms',rooms:list(target)});if(m.report)crewReport(r,ws).then(x=>send(ws,x));return;}
+ if(m.type==='export'){const r=ws.room;return shipRequest(r,{t:'state'}).then(res=>{if(!res.state)throw Error('The ship is not loaded.');send(ws,{type:'export',data:codec.encode(res.state)});}).catch(e=>send(ws,{type:'error',message:String(e.message).slice(0,180)}));}
  // Dev live code (host token only): run in this ship's simulation or in its shared zone; the answer goes back to the sender.
- if(m.type==='eval'){const r=ws.room,id=Number.isSafeInteger(m.id)?m.id:0;if(!ws.admin){send(ws,{type:'evalResult',id,ok:false,error:'Live code needs the host token.'});return;}if(!r?.game){send(ws,{type:'evalResult',id,ok:false,error:'Join a ship first.'});return;}
+ if(m.type==='eval'){const r=ws.room,id=Number.isSafeInteger(m.id)?m.id:0;if(!ws.admin){send(ws,{type:'evalResult',id,ok:false,error:'Live code needs the host token.'});return;}if(!r?.loaded){send(ws,{type:'evalResult',id,ok:false,error:'Join a ship first.'});return;}
   const code=String(m.code||'').slice(0,200000),fail=e=>send(ws,{type:'evalResult',id,ok:false,error:String(e?.stack||e).split('\n').slice(0,6).join('\n').slice(0,2000)});
-  try{let p;if(m.target==='zone'){const sim=bus.simOf(r);if(!sim)throw Error('This ship is not in a shared zone right now.');p=sim.evalCode(code);}else if(m.target==='server')p=serverEval(ws,code);else p=r.game.evalCode(ws.uid,code);
+  try{let p;if(m.target==='server')p=serverEval(ws,code);else p=shipRequest(r,{t:'eval',uid:ws.uid,code,target:m.target==='zone'?'zone':'ship'},r.shard).then(o=>{if(o.ok===false||o.missing)throw Error(o.error||'The ship is not loaded.');return o;});
    Promise.resolve(p).then(o=>send(ws,{type:'evalResult',id,ok:true,result:o.result,logs:o.logs}),fail);}catch(e){fail(e);}
   console.log('[live code] '+(ws.name||'?')+' ran '+code.length+' chars on '+(m.target==='zone'?'the zone':m.target==='server'?'the server':'ship '+r.id));return;}
- if(m.type==='action'){if(!Number.isSafeInteger(m.seq)||m.seq<=ws.seq)return;ws.seq=m.seq;ws.room.game.command(ws.uid,m);}
+ if(m.type==='action'){if(!Number.isSafeInteger(m.seq)||m.seq<=ws.seq)return;ws.seq=m.seq;if(ws.ready&&ws.room.loaded)post(ws.room,{t:'command',uid:ws.uid,msg:m});}
  }catch(e){send(ws,{type:'error',message:String(e.message).slice(0,180)});}});
- ws.on('close',()=>{leave(ws);clients.delete(ws);{const set=sessions.get(ws.token);if(set){set.delete(ws);if(!set.size)sessions.delete(ws.token);}}});ws.on('error',()=>{});send(ws,{type:'hello',protocol:1});}
+ ws.on('close',()=>{leave(ws);clients.delete(ws);uidSockets.delete(ws.uid);{const set=sessions.get(ws.token);if(set){set.delete(ws);if(!set.size)sessions.delete(ws.token);}}});ws.on('error',()=>{});send(ws,{type:'hello',protocol:1});}
 wss.on('connection',onConnection);
 // Classic mode (Internet Explorer 6 / Windows 2000 and other very old browsers): the server runs a headless copy of
 // the game client per player, draws its view and serves it as pictures over plain HTTP.
 const classic=require('./classic.cjs').createClassic({onConnection,root});
 
-// ---- Simulation loop -------------------------------------------------------------------------------------
-let previous=performance.now(),acc=0,frames=0,farPass=0,tickMs=0,perf={worst:0,behind:0,calls:0,since:Date.now(),last:null};
-const timer=setInterval(()=>{const now=performance.now();acc+=Math.min((now-previous)/1000,.1);previous=now;let steps=0;const t0=performance.now();
- while(acc>=1/60&&steps++<3){const active=[];/* empty ships stay in the world (others see them, bots can still shoot them) until they despawn */for(const r of rooms.values())if(r.game&&(r.members.size||!r.returned)){try{/* nobody aboard: the hull stays in the zone, its inside isn't simulated (saves the server's time; it despawns after RETURN_MS) */if(r.members.size){r.game.tick(1/60);r.tick++;}active.push(r);}catch(e){recover(r,e);}}
-  try{bus.step(active,1/60);}catch(e){console.error('Zone bus step failed',e.stack);}
-  acc-=1/60;frames++;}
- if(steps>=3){acc=Math.min(acc,1/60);perf.behind++;}{const ms=performance.now()-t0;tickMs=tickMs*.9+ms*.1;perf.worst=Math.max(perf.worst,ms);perf.calls++;
-  /* every 10 s: the worst tick and how often the server couldn't keep up (it then drops time — everything runs slow) */if(Date.now()-perf.since>10000){perf.last={worstMs:+perf.worst.toFixed(1),fellBehindPct:+(perf.behind/Math.max(1,perf.calls)*100).toFixed(1),avgMs:+tickMs.toFixed(2),egressKBps:+(sentBytes/1024/((Date.now()-perf.since)/1000)).toFixed(1)};sentBytes=0;if(perf.last.fellBehindPct>5)console.warn('Server is falling behind: '+perf.last.fellBehindPct+'% of ticks in the last 10 s (worst '+perf.last.worstMs+' ms)');perf.worst=0;perf.behind=0;perf.calls=0;perf.since=Date.now();}}
- // 20 snapshots a second (every 3rd 60 Hz tick).
- if(frames>=3){frames=0;const loaded=[...rooms.values()].filter(r=>r.game&&(r.members.size||!r.returned)),live=loaded.filter(r=>r.members.size);
-  // Pass 1: every ship's exterior (layout hash changes only when the ship is rebuilt), so pass 2 never
-  // lists a ship to others before its hull is known.
-  // Only ships someone else can see in full need this (interest management, zone-bus.cjs VIEW_RANGE).
-  const watched=bus.watched(live);farPass=(farPass+1)%4;
-  for(const r of loaded){if(!watched.has(r)){r.unwatched=true;continue;}const fresh=r.unwatched!==false;r.unwatched=false;try{const layout=r.game.zone.exteriorLayout(),key=crypto.createHash('sha1').update(JSON.stringify(layout)).digest('base64').slice(0,12);if(r.layoutCache?.key!==key)r.layoutCache={key,layout};r.crewCache=r.game.zone.exteriorCrew();r.machinesCache=r.game.zone.exteriorMachines();/* other ships' live view: every snapshot; a full item list once a second */r.livePass=((r.livePass||0)+1)%20;r.liveCache=r.game.zone.exteriorLive(r.livePass===1||fresh);r.json={crew:JSON.stringify(r.crewCache),machines:JSON.stringify(r.machinesCache),live:JSON.stringify(r.liveCache)};}catch(e){recover(r,e);}}
-  for(const r of live){if(!r.game)continue;try{/* a player whose connection hasn't taken the last few snapshots skips this one (built for nobody, so their deltas stay right) instead of queueing seconds of stale ones */const members=[...r.members].filter(ws=>ws.readyState===WebSocket.OPEN&&(ws.bufferedAmount||0)<SNAPSHOT_BACKLOG);if(!members.length)continue;const pass=r.game.snapshotPass(members.map(ws=>ws.uid));members.forEach((ws,k)=>{const st=pass.own[k];
-    // Log: helm use, and zone changes (credited to whoever is at the helm).
-    const pil=!!st?.self?.piloting;if(pil&&!ws.wasPiloting)logEvent(r,ws,'started using helm.','helm');ws.wasPiloting=pil;
-    if(st&&r.lastZone&&st.zone!==r.lastZone&&!r.zoneLogged){const pilot=[...r.members].find(x=>x.wasPiloting);logEvent(r,pilot||null,'teleported the ship to '+(era.ZONES[st.zone]?.name||st.zone)+'.','zone');r.zoneLogged=true;}
-    sendSnapshot(ws,r.tick,st,bus.others(r,ws.layoutSeen),pass.shared,bus.warFor(r,ws)+(farPass===0||ws.farZone!==st?.zone?(ws.farZone=st?.zone,',"far":'+JSON.stringify(bus.far(r))):''));});
-   const z=zoneOf(r);r.zoneLogged=false;r.lastZone=z;}catch(e){recover(r,e);}}}
-},1000/60);
-const saves=setInterval(()=>{for(const r of rooms.values())if(r.game&&r.members.size)persist(r,true);try{bus.save();}catch(e){console.error('Zone save failed',e.message);}
- for(const r of rooms.values())if(r.game&&!r.members.size&&Date.now()-r.emptySince>IDLE_UNLOAD_MS)unload(r);},SAVE_INTERVAL_MS);
+// ---- Shards (multithreading) -------------------------------------------------------------------------------------
+// The simulation runs on shards (server/shard.cjs): each owns some zones — their shared worlds and every ship in them —
+// and steps them on its own thread, in parallel with the others; this thread keeps the connections, accounts, ship
+// records and files. Zones are grouped so a combat zone shares a shard with the Freeport its ships are towed to (fewer
+// moves between threads); the mission zones and the server-wide mission schedule are on shard 0. WORKERS sets the number
+// of worker threads (one shard each, up to 8); by default it is one less than the CPU cores (so this thread keeps one
+// for networking), and 0 on a single-core machine, where one shard runs inside this process.
+const CORES=os.availableParallelism?.()||os.cpus().length||1;
+const WORKERS=process.env.WORKERS!=null&&process.env.WORKERS!==''?Math.max(0,Math.min(8,Math.floor(Number(process.env.WORKERS))||0)):(CORES>=2?Math.min(8,CORES-1):0);
+const SHARD_COUNT=Math.max(1,WORKERS),ZONE_GROUPS=[['pits','canary'],['freeport','finch'],['freeport3','sparrow'],['freeport2','finch2']];
+const zoneOwner={};{if(SHARD_COUNT<=ZONE_GROUPS.length)ZONE_GROUPS.forEach((g,i)=>{for(const z of g)zoneOwner[z]=i%SHARD_COUNT;});else{for(const z of ZONE_GROUPS[0])zoneOwner[z]=0;ZONE_GROUPS.slice(1).flat().forEach((z,i)=>zoneOwner[z]=1+i%(SHARD_COUNT-1));}for(const z of Object.keys(era.ZONES))zoneOwner[z]??=0;}
+// Zone progress (seed, mined rock, regeneration timers) and the mission schedule: zones.json, written here from what
+// the shards report.
+const zonesFile=path.join(dataDir,'zones.json');let zonesState={},zonesDirty=false;try{if(fs.existsSync(zonesFile))zonesState=JSON.parse(fs.readFileSync(zonesFile,'utf8'))||{};}catch(e){console.error('Ignoring unreadable zones.json:',e.message);}
+function saveZones(){if(!zonesDirty)return;try{const tmp=zonesFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(zonesState),{mode:0o600});fs.renameSync(tmp,zonesFile);zonesDirty=false;}catch(e){console.error('Zone save failed',e.message);}}
+const shards=[],restarts=[];let reqSeq=0,shuttingDown=false;const pending=new Map();
+function startShard(i){const data={index:i,zoneOwner,savedZones:zonesState},zones=Object.keys(zoneOwner).filter(z=>zoneOwner[z]===i);let s;
+ if(WORKERS>0){const w=new Worker(path.join(__dirname,'shard-worker.cjs'),{workerData:data});s={index:i,worker:w,zones,ships:0,perf:null,started:Date.now(),post:m=>w.postMessage(m)};
+  w.on('message',m=>fromShard(s,m));w.on('error',e=>console.error('Shard '+i+' crashed:',e?.stack||e));w.on('exit',code=>{if(shuttingDown||shards[i]!==s)return;shardLost(i);
+   // Restarted at once, or after a growing pause (up to 30 s) if it keeps stopping soon after starting.
+   const quick=Date.now()-s.started<60000;restarts[i]=quick?(restarts[i]||0)+1:0;const wait=restarts[i]>1?Math.min(30000,500*2**restarts[i]):0;
+   console.error('Shard '+i+' stopped (exit code '+code+'); restarting it'+(wait?' in '+wait/1000+' s':'')+'.');setTimeout(()=>{if(!shuttingDown)startShard(i);},wait);});}
+ else{const {createShard}=require('./shard.cjs');s={index:i,worker:null,zones,ships:0,perf:null};const sh=createShard({...data,savedZones:structuredClone(zonesState),warm:false,post:m=>{const c=structuredClone(m);setImmediate(()=>fromShard(s,c));}});s.post=m=>{const c=structuredClone(m);setImmediate(()=>sh.handle(c));};}
+ shards[i]=s;return s;}
+// A shard's thread died: its ships go back to their last save and their crews to the lobby; pending answers fail.
+function shardLost(i){for(const [req,p] of pending)if(p.shard===i){pending.delete(req);p.rej(Error('The ship\'s simulation restarted.'));}
+ for(const r of rooms.values())if(r.loaded&&r.shard===i){r.loaded=false;r.saved=r.lastGood;for(const ws of [...r.members]){send(ws,{type:'error',message:'The server restarted this ship\'s simulation. Your last save is kept.'});leave(ws,false);send(ws,{type:'rooms',rooms:list(ws)});}}}
+function request(shard,msg,timeout=15000){return new Promise((res,rej)=>{const req=++reqSeq,s=shards[shard];if(!s)return rej(Error('No such shard'));pending.set(req,{res,rej,shard});s.post({...msg,req});setTimeout(()=>{if(pending.delete(req))rej(Error('The ship\'s simulation did not answer.'));},timeout).unref?.();});}
+const post=(r,msg)=>shards[r.shard]?.post({...msg,id:r.id});
+// A request about one ship goes to the shard that has it; if it moved to another shard on the way, it is asked again there.
+async function shipRequest(r,msg,shard=r.shard){for(let k=0;k<40;k++){if(shard==null)return {missing:true};const res=await request(shard,{...msg,id:r.id});if(!res.missing)return res;await new Promise(f=>setTimeout(f,25));shard=r.shard;}return {missing:true};}
+function fromShard(s,m){try{switch(m.t){
+ case 'reply':{const p=pending.get(m.req);if(p){pending.delete(m.req);p.res(m);}break;}
+ case 'snap':{for(const [uid,text] of m.list){const ws=uidSockets.get(uid);if(ws?.ready&&ws.readyState===WebSocket.OPEN){sentBytes+=text.length;ws.send(text);}}break;}
+ case 'send':{const ws=uidSockets.get(m.uid);if(ws)send(ws,m.msg);break;}
+ case 'info':{s.perf=m.perf;s.ships=m.rooms.length;s.zoneCounts=m.zones;for(const [id,name,score,zone,lag] of m.rooms){const r=rooms.get(id);if(r?.loaded&&r.shard===s.index){r.info={name,score,zone};r.name=name||r.name;r.score=score;r.lagMs=lag;}}break;}
+ case 'log':{const r=rooms.get(m.id);if(!r)break;const ws=m.uid?uidSockets.get(m.uid)||null:null;if(m.kind==='zone')logEvent(r,ws,'teleported the ship to '+(era.ZONES[m.zoneTo]?.name||m.zoneTo)+'.','zone');else logEvent(r,ws,m.text,m.kind);break;}
+ // A ship changed zone into another shard's: hand it over, with only the crew still aboard.
+ case 'migrate':{const r=rooms.get(m.id);if(!r)break;r.shard=m.to;const aboard=new Set([...r.members].map(ws=>ws.uid));if(m.state?.crew)m.state.crew=m.state.crew.filter(c=>aboard.has(c.id));
+  shards[m.to].post({t:'adopt',id:r.id,name:r.name,state:m.state,tick:m.tick,lastGood:m.lastGood,members:(m.members||[]).filter(x=>aboard.has(x.uid)),inbox:m.inbox||[]});break;}
+ case 'state':{const r=rooms.get(m.id);if(r?.loaded&&r.shard===s.index)writeShip(r,m.state,!!m.periodic);break;}
+ case 'closed':{const r=rooms.get(m.id);if(!r)break;r.loaded=false;r.saved=r.lastGood;for(const ws of [...r.members]){send(ws,{type:'error',message:m.message});leave(ws,false);send(ws,{type:'rooms',rooms:list(ws)});}break;}
+ case 'zones':{Object.assign(zonesState,m.records);zonesDirty=true;saveZones();break;}
+ case 'mission':{zonesState._mission=m.m;for(const o of shards)if(o&&o!==s)o.post({t:'mission',m:m.m});break;}
+ case 'missionEvent':{shards[0].post({t:'missionEvent',e:m.e});break;}
+ // A message that reached a ship's old shard just after it moved: on to the new one.
+ case 'forward':{shards[m.to]?.post(m.msg);break;}
+ case 'broadcast':{for(const o of shards)if(o!==s)o.post({t:'broadcast',text:m.text});break;}
+ }}catch(e){console.error('Shard message '+m?.t+' failed:',e.stack||e);}}
+for(let i=0;i<SHARD_COUNT;i++)startShard(i);
+// Players whose connection is backed up: their shard skips them until it drains (checked 20 times a second).
+const backlogTimer=setInterval(()=>{const per=shards.map(()=>[]);for(const r of rooms.values()){if(!r.loaded)continue;for(const ws of r.members)if(ws.readyState!==WebSocket.OPEN||(ws.bufferedAmount||0)>=SNAPSHOT_BACKLOG)per[r.shard]?.push(ws.uid);}
+ per.forEach((l,i)=>{const k=l.sort().join();if(shards[i]&&shards[i].backlogKey!==k){shards[i].backlogKey=k;shards[i].post({t:'backlog',uids:l});}});},50);
+// For /health: the busiest shard's tick time, its worst tick and how often it fell behind (last 10 s), and what this
+// thread sent to players.
+let egress={since:Date.now(),kbps:0};const egressTimer=setInterval(()=>{egress.kbps=+(sentBytes/1024/((Date.now()-egress.since)/1000)).toFixed(1);sentBytes=0;egress.since=Date.now();},10000);egressTimer.unref();
+function shardTickMs(){return Math.max(0,...shards.map(x=>x.perf?.tickMs||0));}
+function last10s(){const l=shards.map(x=>x.perf?.last10s).filter(Boolean);if(!l.length)return null;return {worstMs:Math.max(...l.map(x=>x.worstMs)),fellBehindPct:Math.max(...l.map(x=>x.fellBehindPct)),avgMs:Math.max(...l.map(x=>x.avgMs)),egressKBps:egress.kbps};}
+function zoneCounts(){const z={};for(const x of shards)for(const [k,n] of Object.entries(x.zoneCounts||{}))z[k]=(z[k]||0)+n;return z;}
+const saves=setInterval(()=>{saveZones();for(const r of rooms.values())if(r.loaded&&!r.members.size&&Date.now()-r.emptySince>IDLE_UNLOAD_MS)unload(r);},SAVE_INTERVAL_MS);
 // Empty ships: a minute after the last crew member leaves, the ship is sent back to the Freeport tied to its zone
 // (and unloaded). Ships not in memory just get the flag and go home the next time they load.
 function returnEmptyShips(){const now=Date.now();for(const r of rooms.values()){if(r.members.size||r.returned||now-r.emptySince<RETURN_MS)continue;r.returned=true;{const z=zoneOf(r),home=era.HOME_FREEPORT[z];if(home&&home!==z&&era.ZONES[z]?.kind!=='safe')logEvent(r,null,'despawned and was returned to '+era.ZONES[home].name+' (empty for '+Math.round(RETURN_MS/60000)+' minutes).','zone');}
- if(r.game){try{r.game.run('returnToFreeport("empty")');}catch(e){console.error('Return failed',r.id,e.message);}unload(r);}else r.returnDue=true;}}
+ if(r.loaded&&!r.loading){r.loaded=false;r.unloading=shipRequest(r,{t:'returnHome'}).then(res=>{if(res.state)writeShip(r,res.state);r.saved=r.lastGood;}).catch(e=>console.error('Return failed',r.id,e.message)).finally(()=>{r.unloading=null;});}}}
 const returns=setInterval(returnEmptyShips,Math.min(1000,RETURN_MS/4));
+// ---- Nightly backups ---------------------------------------------------------------------------------------------
+// Once a night (BACKUP_HOUR, server time; 3 by default, before the 04:30 update) every loaded ship is saved and the
+// whole data folder is copied to backups/<date-time>/ beside it (BACKUP_DIR to choose another place). The newest
+// BACKUP_KEEP (14) are kept. A server that starts with no backup from the last day makes one a minute after starting.
+// To restore: stop the server, copy one backup folder's files back into data/, start it again.
+const BACKUP_DIR=path.resolve(process.env.BACKUP_DIR||path.join(path.dirname(dataDir),'backups')),BACKUP_KEEP=Math.max(1,Number(process.env.BACKUP_KEEP)||14),BACKUP_HOUR=Number(process.env.BACKUP_HOUR??3);
+let lastBackup=null,backupRunning=false;
+function backupFolders(){try{return fs.readdirSync(BACKUP_DIR,{withFileTypes:true}).filter(e=>e.isDirectory()&&/^\d{4}-\d\d-\d\dT/.test(e.name)).map(e=>e.name).sort();}catch{return [];}}
+async function backup(){if(backupRunning)return lastBackup;backupRunning=true;try{
+ await Promise.all([...rooms.values()].filter(r=>r.loaded).map(persist));saveZones();
+ const stamp=new Date().toISOString().replace(/:/g,'-').slice(0,19),dest=path.join(BACKUP_DIR,stamp);fs.mkdirSync(BACKUP_DIR,{recursive:true,mode:0o700});
+ await fs.promises.cp(dataDir,dest,{recursive:true,filter:src=>!src.endsWith('.tmp')});
+ const old=backupFolders();for(const name of old.slice(0,Math.max(0,old.length-BACKUP_KEEP)))fs.rmSync(path.join(BACKUP_DIR,name),{recursive:true,force:true});
+ lastBackup={at:new Date().toISOString(),folder:dest,kept:Math.min(old.length,BACKUP_KEEP)};console.log('[backup] data saved to '+dest);return lastBackup;}
+ catch(e){console.error('[backup] failed: '+(e?.message||e));lastBackup={at:new Date().toISOString(),error:String(e?.message||e)};return lastBackup;}finally{backupRunning=false;}}
+{const newest=backupFolders().at(-1);if(newest){const t=Date.parse(newest.slice(0,10)+'T'+newest.slice(11).replace(/-/g,':')+'Z');lastBackup={at:new Date(t).toISOString(),folder:path.join(BACKUP_DIR,newest)};}}
+let backupDay=null;const backups=setInterval(()=>{const now=new Date(),day=now.toDateString();
+ const stale=!lastBackup?.at||Date.now()-Date.parse(lastBackup.at)>26*3600*1000;
+ if((now.getHours()===BACKUP_HOUR&&backupDay!==day)||stale){backupDay=day;backup();}},Number(process.env.BACKUP_CHECK_MS)||60000);backups.unref?.();
 const heartbeat=setInterval(()=>{for(const ws of clients){if(!ws.alive)ws.terminate();else{ws.alive=false;ws.ping();}}},15000);
-function shutdown(){clearInterval(timer);try{classic.dispose();}catch{}clearInterval(returns);clearInterval(saves);clearInterval(heartbeat);for(const ws of clients)leave(ws);for(const r of rooms.values())persist(r);try{bus.save();}catch{}wss.close();server.close(()=>process.exit(0));for(const ws of clients)ws.close();setTimeout(()=>process.exit(0),1000).unref();}process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
+// Shutting down: every shard stops and hands over its ships' states and zone records, which are written before exit.
+async function shutdown(){if(shuttingDown)return;shuttingDown=true;for(const t of [backlogTimer,backups,returns,saves,heartbeat,egressTimer])clearInterval(t);try{classic.dispose();}catch{}for(const ws of clients)leave(ws,false);
+ await Promise.all(shards.map((x,i)=>request(i,{t:'stop'},5000).then(res=>{for(const [id,state] of res.states||[]){const r=rooms.get(id);if(r)writeShip(r,state);}if(res.zones){Object.assign(zonesState,res.zones);zonesDirty=true;}}).catch(e=>console.error('Shard '+i+' did not stop cleanly:',e.message))));
+ saveZones();for(const ws of clients){try{ws.close(1012,'Server restarting');}catch{}}server.close();setTimeout(()=>process.exit(0),150);}process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
 server.listen(port,process.env.HOST||'127.0.0.1',()=>{console.log('notdred.io server listening on '+(process.env.HOST||'127.0.0.1')+':'+port);console.log('Dev token (paste it into the Token box on the main menu for the dev menu): '+process.env.DEV_TOKEN);});

@@ -89,18 +89,20 @@ function exteriorLayout(){return {bounds:{...bounds},helm:{x:helm.x,y:helm.y},br
 const LIVE_TERRAIN=['door','fabricator','loader','pusher_block','recycler','comms','spawn','ejector','shredder','hatch','starter_hatch'];
 // Physics machines (fabricators, recyclers, comms) move, so they go to other ships with every snapshot, not in the layout.
 function exteriorMachines(){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100;return [...terrain.values()].filter(t=>t.body).map(t=>{const o={};if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);if((t.hp??100)<100)o.hp=Math.round(t.hp);return [t.type,r2(t.x),r2(t.y),o];});}
-// Other ships' view of this one, every snapshot (20 a second). Loose items: a full list on `full` passes (once a second),
-// otherwise only the ones that moved, changed or appeared, plus the ids that went away — resting piles cost nothing.
-let liveSeq=0,livePrev=new Set();
-function exteriorLive(full=true){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100,now=new Set(),il=[];
- for(const i of items){const id=i.nid||(i.nid=++liveSeq);now.add(id);const b=i.body;if(!full&&livePrev.has(id)&&!b.isAwake()&&i.liveCount===i.count)continue;i.liveCount=i.count;const p=b.getPosition(),v=b.getLinearVelocity();il.push([id,i.type,i.count,r2(p.x),r2(p.y),r2(b.getAngle()),r2(v.x),r2(v.y)]);}
- const gone=full?[]:[...livePrev].filter(id=>!now.has(id));livePrev=now;
+// Other ships' view of this one, every snapshot (20 a second). Loose items: every one, as [id,type,count,x,y,angle,vx,vy]
+// — a resting item keeps the same record (the same array), so the zone bus (zone-bus.cjs, others()) can send each viewer
+// only what changed since *that viewer's* last update. (A delta shared by all viewers lost items for anyone who skipped
+// an update: ghost copies that never went away and items that vanished until the next full list.)
+let liveSeq=0;
+function exteriorLive(){const left=v=>v>clock?+(v-clock).toFixed(2):0,r2=v=>Math.round(v*100)/100,il=[];
+ for(const i of items){const id=i.nid||(i.nid=++liveSeq),b=i.body,p=b.getPosition(),v=b.getLinearVelocity(),rec=[id,i.type,i.count,r2(p.x),r2(p.y),r2(b.getAngle()),r2(v.x),r2(v.y)],o=i.liveRec;
+  il.push(o&&o.every((x,k)=>x===rec[k])?o:(i.liveRec=rec));}
  return {m:mounts.map(m=>[m.aim==null?null:r2(m.aim),left(m.recoilUntil||0),m.active?1:0,m.ammo||0,m.thrustDirection?[r2(m.thrustDirection.x),r2(m.thrustDirection.y)]:0,m.ammoType&&m.ammoType!=='ammo'?m.ammoType:0]),
   t:[...terrain.values()].filter(t=>!t.body&&LIVE_TERRAIN.includes(t.type)).map(t=>{const o={};if(t.access)o.access=t.access;if(t.filterMode&&t.filterMode!=='all')o.filterMode=t.filterMode;if(t.type==='fabricator'){o.kind=t.kind;o.materials=t.materials;if(t.job)o.job={type:t.job.type,progress:r2(t.job.progress||0)};}if(t.type==='loader'){o.phase=r2(t.phase??1);if(t.cargo?.length)o.cargo=[{type:t.cargo[0].type}];}if(t.type==='pusher_block'){o.beam=r2(t.beam||0);if(t.pull)o.pull=true;o.beamMode=t.beamMode||(t.pull?'pull':'push');}if(t.type==='recycler'){o.busy=left(t.busy||0);if(o.busy)o.lastOut=t.lastOut;}if(t.type==='comms')o.sent=left(t.sent||0);if(t.flash)o.flash=left(t.flash);if(t.chewing)o.chewing=left(t.chewing);return [t.x,t.y,o];}),
   // Battle damage others can see: [x, y, health %] for each hurt block or placed piece, and each turret/thruster's health.
   d:(()=>{const d=[];for(const t of blocks.values())if((t.hp??100)<100)d.push([t.x,t.y,Math.round(t.hp)]);for(const t of terrain.values())if(!t.body&&(t.hp??100)<100)d.push([t.x,t.y,Math.round(t.hp)]);return d;})(),
   md:mounts.some(m=>(m.hp??100)<100)?mounts.map(m=>Math.round(m.hp??100)):0,
-  i:il,gone,full:full?1:0,
+  i:il,
   b:boxes.map(b=>{const p=b.body.getPosition(),v=b.body.getLinearVelocity();return [r2(p.x),r2(p.y),r2(b.body.getAngle()),b.size,b.materials,r2(v.x),r2(v.y)];})};}
 // Move this ship to free space if another ship in the zone overlaps it (Freeports: the next free berth).
 function clearSpawnSpot(){const p0=ship.getPosition().clone();if(!shipClashes(p0))return false;let p=null;if(zoneDef().kind==='safe')p=safeArrival();else for(let k=1;k<40&&!p;k++){const a=k*2.4,d=10+k*3,q=V(p0.x+Math.cos(a)*d,p0.y+Math.sin(a)*d),e=shipExtents();if(!shipClashes(q)&&!(typeof zoneSolid==='function'&&[[e.l,e.t],[e.r,e.t],[e.l,e.b],[e.r,e.b],[0,0]].some(([dx,dy])=>zoneSolid(q.x+dx,q.y+dy))))p=q;}if(!p||shipClashes(p))return false;docked=null;ship.setType('dynamic');ship.setFixedRotation(true);ship.setTransform(p,0);ship.setLinearVelocity(V(0,0));zonePlaced=true;return true;}
@@ -128,6 +130,15 @@ function spawnInFreeport(){criticalFor=0;if(zoneDef().kind!=='safe'){snapshotZon
  if(inside!==was&&currentCrew)playerFilter(player,currentCrew.rank||'guest');
  /* the old worlds' native copies are freed (they used to stay in memory) */if(inside!==was&&typeof nativeStepDestroy==='function'){try{nativeStepDestroy(was);}catch{}if(world!==wasWorld)try{nativeStepDestroy(wasWorld);}catch{}}
  return out;};}
+// Moving a ship to another shard (server/shard.cjs, when it changes zone): the whole ship as it is now plus every crew
+// member — where they stand, what they hold, rank, dev toggles — so they carry on where they were.
+function migrationState(){storeCrew();const s=JSON.parse(JSON.stringify(state()));s.stacks=[null,null,null,null,null];s.slots=[null,null,null,null,null];s.inventory={};
+ const out=[...crew.values()].map(m=>{const p=m.player.getPosition(),v=m.player.getLinearVelocity();return {id:m.id,name:m.name,admin:!!m.admin,rank:m.rank||'guest',noclip:!!m.noclip,sandbox:!!m.sandbox,slots:[...m.slots],stackCounts:[...m.stackCounts],selected:m.selected,tool:m.tool,piloting:!!m.piloting,climbing:!!m.climbing,ladderX:m.ladderX||0,facing:m.facing||1,buildRotation:m.buildRotation||0,pusherPull:!!m.pusherPull,manning:m.manning||null,active:m.player.isActive(),gs:m.player.getGravityScale(),x:p.x,y:p.y,vx:v.x,vy:v.y,notices:m.notices||[]};});
+ return {ship:s,crew:out,shipNoclip,criticalFor:typeof criticalFor==='number'?criticalFor:0};}
+function adoptCrew(list){for(const c of list||[]){newCrew(c.id,c.name);const m=crew.get(c.id);m.admin=!!c.admin;setCrewRank(c.id,c.rank||'guest');m.noclip=!!c.noclip;m.sandbox=!!c.sandbox;m.notices=c.notices||[];
+  bindCrew(c.id);slots=c.slots;stackCounts=c.stackCounts;selected=c.selected;tool=c.tool;piloting=c.piloting;climbing=c.climbing;ladderX=c.ladderX;facing=c.facing;buildRotation=c.buildRotation;pusherPull=c.pusherPull;manning=c.manning;
+  player.setTransform(V(c.x,c.y),0);player.setLinearVelocity(V(c.vx,c.vy));player.setActive(c.active);player.setGravityScale(c.gs);storeCrew();}currentCrew=null;}
+function adoptState(o){if(typeof o?.shipNoclip==='boolean')shipNoclip=o.shipNoclip;if(Number.isFinite(o?.criticalFor)&&typeof criticalFor==='number')criticalFor=o.criticalFor;adoptCrew(o?.crew);}
 function remoteMined(id){if(!removeRock(id))return false;zoneData[zone].mined.push(id);return true;}
 let lastHitNotice=-99;
 function pvpHit(amount,localPoint,dir,ammo,shooter){if(!isCombatZone()||!(amount>0))return;if(docked)releaseDock();const imp=AMMO[ammo]?.impulse||0;if(imp){ship.applyLinearImpulse(V(dir.x*ship.getMass()*5*imp,dir.y*ship.getMass()*5*imp),ship.getWorldCenter(),true);noteKick(dir.x*5*imp,dir.y*5*imp);}const okDir=dir&&Number.isFinite(dir.x)&&Number.isFinite(dir.y);let out=null;const before=shipHP;if(shipHP<=0&&okDir){hullEntryHit(V(localPoint.x,localPoint.y));out={pierce:true};}else damageShip(amount,V(localPoint.x,localPoint.y),okDir?V(dir.x,dir.y):null);/* for the zone's war record: what this hit did */out={...(out||{}),dealt:before>0?Math.min(before,amount):amount,critical:before>0&&shipHP<=0};if(clock-lastHitNotice>4){lastHitNotice=clock;toastAll(shooter?'Under fire from '+shooter+'!':'Hit by your own shot!');}return out;}
