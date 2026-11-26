@@ -41,7 +41,7 @@ static J shipOp(const std::string& op,const J& q){
  Ship& s=shipOf(q);
  if(op=="ship.join"){Crew& c=s.newCrew(str(field(q,"uid")),str(field(q,"name")));c.admin=flag(q,"admin");s.setRank(c.id,str(field(q,"rank",J("guest"))));s.spawnKit(c);return {{"ok",true}};}
  if(op=="ship.command"){s.command(str(field(q,"uid")),field(q,"msg",J::object()));return {{"ok",true}};}
- if(op=="ship.state"){J st=s.state();J hands=J::object();for(auto& [id,c]:s.crew){J h=J::array();for(int i=0;i<5;i++)h.push_back(c.slots[i].empty()?J():J({{"type",c.slots[i]},{"count",c.counts[i]}}));hands[id]={{"stacks",h},{"selected",c.selected},{"tool",c.tool},{"notices",c.notices}};}st["crew"]=hands;return st;}
+ if(op=="ship.state"){J st=s.state();J hands=J::object();for(auto& [id,c]:s.crew){J h=J::array();for(int i=0;i<5;i++)h.push_back(c.slots[i].empty()?J():J({{"type",c.slots[i]},{"count",c.counts[i]}}));hands[id]={{"stacks",h},{"selected",c.selected},{"tool",c.tool},{"notices",c.notices},{"piloting",c.piloting},{"buildRotation",c.buildRotation},{"manning",c.manning},{"activeFab",c.activeFab}};}st["crew"]=hands;return st;}
  // Internal rules one at a time, for the differential tests.
  if(op=="ship.query"){const std::string fn=str(field(q,"fn"));const J a=field(q,"args",J::array());auto n=[&](size_t i){return i<a.size()&&a[i].is_number()?a[i].get<double>():0.0;};auto t=[&](size_t i){return i<a.size()?str(a[i]):std::string();};
   if(fn=="mountHit"){const Mount* m=s.mountHit({n(0),n(1)});if(!m)return {{"result",nullptr}};return {{"result",{{"side",m->side},{"at",m->at},{"type",m->type}}}};}

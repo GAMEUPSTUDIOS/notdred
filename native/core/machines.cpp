@@ -23,8 +23,8 @@ Tile& Ship::spawnMachine(const std::string& type,V2 p,const J& fields,const std:
  Tile t;t.type=type;t.x=p.x-(w-1)/2.0;t.y=p.y-(h-1)/2.0;t.rotation=0;t.id=id;
  if(type=="fabricator"){t.extra["materials"]={{"iron",0},{"explosives",0}};t.extra["queue"]=J::array();t.extra["job"]=nullptr;t.extra["repeat"]=false;}
  if(fields.is_object())for(auto& [k,v]:fields.items()){if(k=="hp"&&v.is_number()){t.hp=v.get<double>();t.hpSet=true;}else if(k=="rotation"&&v.is_number())t.rotation=(int)v.get<double>();else if(k=="access"&&v.is_string())t.access=v.get<std::string>();else t.extra[k]=v;}
- b2BodyDef d;d.position=bv(p);t.body=inside.w.CreateBody(&d);return terrain.set(id,t);}
-void Ship::syncMachines(){for(auto& [k,t]:terrain)if(t.body){int w,h;sizeOf(t.type,w,h);b2Vec2 p=t.body->GetPosition();t.x=p.x-(w-1)/2.0;t.y=p.y-(h-1)/2.0;}}
+ b2BodyDef d;d.position=bv(p);t.body=inside->w.CreateBody(&d);t.mpos=p;return terrain.set(id,t);}
+void Ship::syncMachines(){for(auto& [k,t]:terrain)if(t.body){int w,h;sizeOf(t.type,w,h);V2 p=t.mpos;t.x=p.x-(w-1)/2.0;t.y=p.y-(h-1)/2.0;}}
 static bool among(const std::string& t,std::initializer_list<const char*> l){for(const char* s:l)if(t==s)return true;return false;}
 bool Ship::machineSpace(const std::string& type,V2 p,const Crew* standing)const{int w,h;sizeOf(type,w,h);const double hw=w/2.0,hh=h/2.0;
  if(p.x-hw<bounds.l+.5||p.x+hw>bounds.r-.5||p.y-hh<bounds.t+.5||p.y+hh>bounds.b-.5)return false;
@@ -32,7 +32,7 @@ bool Ship::machineSpace(const std::string& type,V2 p,const Crew* standing)const{
  for(auto [cx,cy]:helmCells())if(std::fabs(cx-p.x)<hw+.5&&std::fabs(cy-p.y)<hh+.5)return false;
  if(standing){b2Vec2 q=standing->body->GetPosition();if(std::fabs(q.x-p.x)<hw+.24&&std::fabs(q.y-p.y)<hh+.63)return false;}
  for(auto& b:boxes){b2Vec2 q=b->body->GetPosition();if(std::fabs(q.x-p.x)<(b->size/2+hw)&&std::fabs(q.y-p.y)<(b->size/2+hh))return false;}
- for(auto& [k,t]:terrain)if(t.body){int w2,h2;sizeOf(t.type,w2,h2);b2Vec2 q=t.body->GetPosition();if(std::fabs(q.x-p.x)<(w2+w)/2.0&&std::fabs(q.y-p.y)<(h2+h)/2.0)return false;}
+ for(auto& [k,t]:terrain)if(t.body){int w2,h2;sizeOf(t.type,w2,h2);V2 q=t.mpos;if(std::fabs(q.x-p.x)<(w2+w)/2.0&&std::fabs(q.y-p.y)<(h2+h)/2.0)return false;}
  return true;}
 bool Ship::supportsMachine(int x,int y)const{if(blocks.has(key(x,y)))return true;const Tile* t=terrainAt(x,y);return t&&(t->type=="walkway"||t->type=="glass");}
 bool Ship::fabFits(int x,int y,bool checkSupport,const std::string& type)const{int w=2,h=3;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(type);if(it!=m.end()){w=(*it)[0];h=(*it)[1];}}
@@ -40,7 +40,7 @@ bool Ship::fabFits(int x,int y,bool checkSupport,const std::string& type)const{i
  for(auto [cx,cy]:terrainCells(probe)){if(!interiorCell(cx,cy)||blocks.has(key(cx,cy))||terrainAt(cx,cy))return false;for(auto [hx,hy]:hc)if(hx==cx&&hy==cy)return false;}
  if(!checkSupport||y+h-1==bounds.b-1)return true;for(int i=0;i<w;i++)if(!supportsMachine(x+i,y+h))return false;return true;}
 static bool standingMachine(const std::string& t){for(auto& s:data().raw.at("STANDING_MACHINES"))if(s==t)return true;return false;}
-const Tile* Ship::machineOnTop(int x,int y)const{for(auto& [k,f]:terrain)if(f.body){int w,h;sizeOf(f.type,w,h);b2Vec2 p=f.body->GetPosition();if(std::fabs(y-.5-(p.y+h/2.0))<.08&&x+.5>p.x-w/2.0+.01&&x-.5<p.x+w/2.0-.01)return &f;}
+const Tile* Ship::machineOnTop(int x,int y)const{for(auto& [k,f]:terrain)if(f.body){int w,h;sizeOf(f.type,w,h);V2 p=f.mpos;if(std::fabs(y-.5-(p.y+h/2.0))<.08&&x+.5>p.x-w/2.0+.01&&x-.5<p.x+w/2.0-.01)return &f;}
  for(auto& [k,f]:terrain)if(!f.body&&standingMachine(f.type)){int w,h;sizeOf(f.type,w,h);if(x>=f.x&&x<f.x+w&&y==f.y+h)return &f;}return nullptr;}
 // A random spawn point set exactly to this rank (ℵ14), else none (the helm).
 const Tile* Ship::spawnPointFor(const std::string& rank){std::vector<const Tile*> list;for(auto& [k,t]:terrain)if(t.type=="spawn"&&(t.access.empty()?"crew":t.access)==rank)list.push_back(&t);

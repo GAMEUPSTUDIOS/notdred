@@ -15,6 +15,7 @@ struct Block{int x=0,y=0,rotation=0;b2Fixture* f=nullptr;double hp=100;};
 // A placed piece. Grid pieces sit at integer x,y; physics machines (fabricators, recyclers, comms stations) have a
 // fixture-less static body and an id (their key), with x,y the top-left cell centre following that body.
 struct Tile{std::string type,id;double x=0,y=0;int rotation=0;b2Fixture* f=nullptr;b2Body* body=nullptr;std::string access;J extra=J::object();double hp=100;bool hpSet=false;   // hpSet: a machine's health is saved only once it has one
+ V2 mpos;            // a physics machine's centre (kept in doubles, as the JavaScript did: machines never move)
  int ix()const{return (int)x;}int iy()const{return (int)y;}};
 // A hull attachment (thruster, turret, starter thruster/RC, ejector, turret controller): its side and first tile.
 struct Mount{std::string type,kind,side,ammoType="ammo";J burnKind;bool starterRC=false,active=false;int at=0,rotation=0;double hp=100,fuelItems=0,explosiveItems=0,burnRemaining=0,ammo=0;J extra=J::object();};
@@ -25,14 +26,17 @@ struct Crew{std::string id,name,rank="guest";b2Body* body=nullptr;Keys keys;bool
  // the five hands (game.js slots/stackCounts: an empty slot is "")
  std::string slots[5]={"wrench","","","",""};int counts[5]={1,0,0,0,0};int selected=0;std::string tool="walk";
  V2 mouse{0,0};bool mouseActive=true;   // the aim, in ship coordinates
+ int buildRotation=0;J buildJob;bool pusherPull=false,pusherHeld=false;std::string activeFab;
  std::vector<std::string> notices;};
 // A loose stack aboard (cargo.js spawnItem).
 struct Item{std::string type;b2Body* body=nullptr;int count=1;double grace=0,stuck=0;J intakeFrom;long nid=0;};
 // An expando box (cargo.js spawnBox): one item type, grows a quarter tile per 64 items.
 struct Box{b2Body* body=nullptr;b2Fixture* fixture=nullptr;double size=2;J materials=J::object();};
 struct Ship{
- Bounds bounds;struct{int x=1,y=2;}helm;
- World inside{V2(0,20)};b2Body* interior=nullptr;b2Body* skinBody=nullptr;bool skinDirty=true;
+ Bounds bounds;struct{int x=1,y=2,rotation=0;}helm;
+ J effects=J::array();               // short-lived visual effects (build flashes, labels), sent to the crew
+ V2* placingAim=nullptr;             // a delayed build places where it was aimed when it began
+ std::unique_ptr<World> inside=std::make_unique<World>(V2(0,20));b2Body* interior=nullptr;b2Body* skinBody=nullptr;bool skinDirty=true;
  std::vector<b2Fixture*> shell;
  OMap<std::string,Block> blocks;OMap<std::string,Tile> terrain;std::vector<Mount> mounts;int machineSeq=0;
  OMap<std::string,Crew> crew;
@@ -114,6 +118,36 @@ struct Ship{
  void tickSafeguards(double dt);
  void tickHullLeaks();
  void tickTrashDecay(double dt);
+ // building and the click (construction.js, game.js edit/interact)
+ V2 localMouse(const Crew& c)const;std::pair<int,int> cursorCell(const Crew& c)const;
+ void actionEffect(double x,double y,const std::string& color,const std::string& label,const Crew& c);
+ bool rayBlocked(const Crew& c,V2 cell,b2Fixture* ignore,double ox,double oy);
+ bool buildBlocked(const Crew& c,V2 cell,b2Fixture* ignore);
+ std::vector<std::pair<int,int>> footprintCells(const std::string& t,int x,int y,int r)const;
+ std::pair<int,int> buildAnchor(const std::string& t,V2 m,const Crew& who)const;
+ std::pair<int,int> buildCell(const std::string& t,const Crew& c)const;
+ double supportTopBelow(double x0,double x1,double yFrom)const;
+ bool placementPoint(std::pair<int,int> c,const std::string& type,const Crew& who,V2& out)const;
+ std::string cellTaken(int x,int y,bool ignoreHelm)const;
+ std::string validity(std::pair<int,int> c,const std::string& t,Crew& who);
+ bool beginBuild(Crew& c,std::pair<int,int> cell,const std::string& t);
+ void tickBuild(Crew& c,double dt);
+ void commitBuild(Crew& c,std::pair<int,int> cell,const std::string& t,int rotation);
+ void resizeCut(Crew& c,std::pair<int,int> cell,bool grow);
+ void load(const J& saved);
+ void reloadAfterResize(const J& r);          // initialize (game.js): everything from a saved ship, in a fresh interior world
+ void rebuildMounts();
+ void dropContents(Tile& t,V2 p);
+ void dropMachine(const std::string& key,Crew& who);
+ void removeAt(Crew& c,std::pair<int,int> cell);
+ bool setDoorAccess(Tile& t,const std::string& access);
+ b2Fixture* makeDoorFixture(int x,int y,int r,const std::string& access);
+ void rotateSelection(Crew& c);
+ bool nearHelm(const Crew& c)const;void recover(Crew& c);void takeHelm(Crew& c);
+ double fabDistance(const Crew& c,const Tile& f)const;bool fabInSight(Crew& c,const Tile& f);bool fabReach(Crew& c,const Tile* f);Tile* nearFab(Crew& c);void openCraft(Crew& c,Tile* fab);
+ std::vector<const Mount*> controlledTurrets(const Mount& ctrl)const;bool toggleController(Crew& c);
+ void ejectTurretAmmo(Crew& c,Mount& m);
+ void interact(Crew& c);bool pickupAt(Crew& c,V2 p);bool useBox(Crew& c,V2 p);void edit(Crew& c);void secondaryAt(Crew& c,std::pair<int,int> cell);
  // commands (room-runtime command): the parts ported so far
  void command(const std::string& id,const J& msg);
  J state()const;   // the durable parts ported so far, in game.js state() form
@@ -121,6 +155,9 @@ struct Ship{
  uint64_t seed=0x9e3779b97f4a7c15ull;
 };
 int stackLimit(const std::string& type);
+std::string nameOf(const std::string& type);
+std::string physicsMachineType(const std::string& t);
+bool placeable(const std::string& t);
 // game.js fixItemType / fixMaterials: unknown types dropped, blank ones read as standard ammo ("" = dropped).
 std::string fixItemType(const std::string& t);
 J fixMaterials(const J& m);

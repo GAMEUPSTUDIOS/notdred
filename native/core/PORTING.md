@@ -34,7 +34,7 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 2 | interior physics world, hull shell/skin, crew controller on foot (walk, jump, ladders, ice, walkways, wedges, nets) | tests/core-crew.cjs | done (identical to the mm); piloting/thrusters move to stage 7 with the exterior |
 | 3 | crew inventory (slots, stacks, carried/addCarried/takeItem/giveItem/moveStack/refund), loose items (spawnItem, scatter, dropItem, pickupAt, mergeTouchingCargo, wakeCargoNear), expando boxes (spawnBox, boxSpace, resizeBox, boxInsert, useBox), commands select/drop/moveStack/dev give | tests/core-cargo.cjs | done (within 3 cm; hands, notices, counts and boxes exact) |
 | 4 | loading saves (every migration in initialize), mounts (mountAt, mountValid, mountWidth, mountPoint, mountHit, inward), physics machines (spawnMachine, machineSpace, supportsMachine, machineOnTop, fabFits, syncMachines), spawn points, placement helpers | tests/core-ship-parts.cjs | done (exact; mount fixtures wait for the exterior, stage 7) |
-| 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut/resizeShip, helm moves; game.js edit/interact) | | |
+| 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut; game.js edit/interact/takeHelm/recover; pickupAt, useBox, turret ammo load/eject, turret controllers) | tests/core-build.cjs | done (edit's branches for later systems are marked TODO and do nothing) |
 | 5b | machinery (fabricators, loaders, pushers, recycler, shredder, comms, ejectors, spawns), hatches | | |
 | 6 | zone generator, zones (rocks, mining, docks, Freeport, portals), missions | | |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
@@ -59,6 +59,12 @@ totals, counts and logic everywhere.
 ## Not yet ported inside stage 2's files (marked TODO in the code)
 - storage tiles (expando boxes) and physics machines are skipped when a ship is built: stages 4 and 5.
 - doors open/close for nearby crew (doorOpen) and noclip flight: stage 5 / stage 8.
+
+## Notes
+- Physics machines keep their centre in doubles (`Tile::mpos`), as the planck bodies did; their Box2D body is only a
+  marker (fixture-less, static).
+- resizeCut reloads the ship from its own shifted save in a fresh world mid-tick (`reloadAfterResize`), as
+  initialize did, so the rest of that tick runs on the new ship.
 
 ## Next steps (resume here)
 The room's command surface is `command(id,msg)` in server/room-runtime.js: input, select, interact, leave, edit,

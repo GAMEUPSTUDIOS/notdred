@@ -26,12 +26,12 @@ void Ship::moveStack(Crew& c,int from,int to,bool split){if(from==to||c.slots[fr
  else if(!split){std::swap(c.slots[from],c.slots[to]);std::swap(c.counts[from],c.counts[to]);}selectSlot(c,to);}
 void Ship::refund(Crew& c,const std::string& type,const V2* p){int added=addCarried(c,type,1);if(!added&&p)scatter(type,1,{p->x,p->y+.4});else if(!added)scatter(type,1,vv(c.body->GetPosition()));}
 // ---- Loose items -------------------------------------------------------------------------------------------------
-Item& Ship::spawnItem(const std::string& type,V2 p,V2 velocity,int count){b2BodyDef d;d.type=b2_dynamicBody;d.position=bv(p);d.bullet=true;d.angularDamping=3;b2Body* b=inside.w.CreateBody(&d);
+Item& Ship::spawnItem(const std::string& type,V2 p,V2 velocity,int count){b2BodyDef d;d.type=b2_dynamicBody;d.position=bv(p);d.bullet=true;d.angularDamping=3;b2Body* b=inside->w.CreateBody(&d);
  b2PolygonShape s;s.SetAsBox(.32f,.32f);b2FixtureDef fd;fd.shape=&s;fd.density=3;fd.friction=.8f;fd.restitution=.08f;fd.filter.categoryBits=8;fd.filter.maskBits=1|2|8|16|256|512;b->CreateFixture(&fd);b->SetLinearVelocity(bv(velocity));
  auto it=std::make_unique<Item>();it->type=type;it->body=b;it->count=std::min(stackLimit(type),count);items.push_back(std::move(it));return *items.back();}
 void Ship::scatter(const std::string& type,int count,V2 p,J intakeFrom){while(count>0){int n=std::min(stackLimit(type),count);double x=clamp(p.x+((int)(items.size()%5)-2)*.3,bounds.l+.9,bounds.r-.9);
   spawnItem(type,{x,clamp(p.y-.4,bounds.t+.9,bounds.b-.9)},{0,0},n).intakeFrom=intakeFrom;count-=n;}}
-void Ship::destroyItem(size_t i){inside.destroy(items[i]->body);items.erase(items.begin()+i);}
+void Ship::destroyItem(size_t i){inside->destroy(items[i]->body);items.erase(items.begin()+i);}
 void Ship::dropItem(Crew& c,bool split){const std::string t=c.slots[c.selected];if(c.piloting||t.empty()||!c.counts[c.selected]){toast("Select a carried item while on foot.");return;}
  V2 p=vv(c.body->GetPosition()),aim=c.mouseActive?c.mouse:V2(p.x+c.facing,p.y-.3),dir=aim-p;if(dir.len()<.01)dir.x=c.facing;{double l=dir.len();if(l>=1e-9){dir.x/=l;dir.y/=l;}}
  const V2 cand[4]={{p.x+dir.x*.9,p.y+dir.y*.9},{p.x-c.facing*.9,p.y-.3},{p.x,p.y-.95},{p.x,p.y}};const V2* q=nullptr;
@@ -59,14 +59,14 @@ void Ship::wakeCargoNear(V2 p,double radius){for(auto& i:items)if((vv(i->body->G
 // ---- Expando boxes -------------------------------------------------------------------------------------------------
 static b2Fixture* boxFixture(b2Body* b,double size){b2PolygonShape s;s.SetAsBox((float)(size/2),(float)(size/2));b2FixtureDef fd;fd.shape=&s;fd.density=.35f;fd.friction=.18f;fd.filter.categoryBits=8;fd.filter.maskBits=1|2|8|16|256|512;return b->CreateFixture(&fd);}
 Box& Ship::spawnBox(V2 p,const J& materials){const double size=2+std::floor(total(materials)/64)*.25;b2BodyDef d;d.type=b2_dynamicBody;d.position=bv(p);d.angularDamping=5;d.linearDamping=.1f;d.bullet=true;
- auto b=std::make_unique<Box>();b->body=inside.w.CreateBody(&d);b->size=size;b->materials=materials.is_object()?materials:J::object();b->fixture=boxFixture(b->body,size);boxes.push_back(std::move(b));return *boxes.back();}
+ auto b=std::make_unique<Box>();b->body=inside->w.CreateBody(&d);b->size=size;b->materials=materials.is_object()?materials:J::object();b->fixture=boxFixture(b->body,size);boxes.push_back(std::move(b));return *boxes.back();}
 std::vector<std::pair<int,int>> Ship::helmCells()const{return {{helm.x,helm.y},{helm.x+1,helm.y},{helm.x,helm.y-1},{helm.x+1,helm.y-1}};}
 static bool among(const std::string& t,std::initializer_list<const char*> l){for(const char* s:l)if(t==s)return true;return false;}
 bool Ship::boxSpace(V2 p,double size,const Box* ignore,bool growing,const Crew* standing)const{const double h=size/2,e=growing?.04:0;
  if(p.x-h<bounds.l+.5-e||p.x+h>bounds.r-.5+e||p.y-h<bounds.t+.5-e||p.y+h>bounds.b-.5+e)return false;
  if(!growing&&standing){V2 q=vv(standing->body->GetPosition());if(std::fabs(q.x-p.x)<h+.24&&std::fabs(q.y-p.y)<h+.63)return false;}
  auto cellHit=[&](int x,int y){return std::fabs(x-p.x)<h+.49-e&&std::fabs(y-p.y)<h+.49-e;};
- for(auto& [k,t]:terrain){if(t.body){int w2=1,h2=1;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(t.type);if(it!=m.end()){w2=(*it)[0];h2=(*it)[1];}}b2Vec2 q=t.body->GetPosition();if(std::fabs(q.x-p.x)<w2/2.0+h-e&&std::fabs(q.y-p.y)<h2/2.0+h-e)return false;continue;}
+ for(auto& [k,t]:terrain){if(t.body){int w2=1,h2=1;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(t.type);if(it!=m.end()){w2=(*it)[0];h2=(*it)[1];}}V2 q=t.mpos;if(std::fabs(q.x-p.x)<w2/2.0+h-e&&std::fabs(q.y-p.y)<h2/2.0+h-e)return false;continue;}
   if(among(t.type,{"wedge","walkway_wedge","glass","net","door","hatch","starter_hatch","pusher_block","paint","anchor","spawn"})){
    int w=1,hh=1;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(t.type);if(it!=m.end()){w=(*it)[0];hh=(*it)[1];}}
    const bool turns=!among(t.type,{"anchor","spawn","fabricator","storage","ladder","recycler","comms"});const int r=turns?((t.rotation%4)+4)%4:0;
@@ -96,7 +96,7 @@ V2 Ship::safeCell(V2 p,bool cargo)const{if(!std::isfinite(p.x)||!std::isfinite(p
   for(auto [dx,dy]:std::initializer_list<std::pair<int,int>>{{1,0},{-1,0},{0,1},{0,-1}}){C n{c.x+dx,c.y+dy};if(n.x<=bounds.l||n.x>=bounds.r||n.y<=bounds.t||n.y>=bounds.b)continue;std::string k=key(n.x,n.y);if(seen.count(k))continue;seen.insert(k);q.push_back(n);}}
  return {(double)helm.x,helm.y-1.0};}
 bool Ship::wedgedInSolid(b2Body* body)const{b2Vec2 c=body->GetPosition();b2Fixture* own=body->GetFixtureList();uint16_t cat=own?own->GetFilterData().categoryBits:1,mask=own?own->GetFilterData().maskBits:0xffff;bool stuck=false;
- const_cast<World&>(inside).queryAABB({c.x-.05,c.y-.05},{c.x+.05,c.y+.05},[&](b2Fixture* f){if(f->GetBody()==interior&&f->GetFilterData().categoryBits==1&&(skinMaskOf(f)&cat)&&(mask&1)&&f->TestPoint(c)){stuck=true;return false;}return true;});return stuck;}
+ inside->queryAABB({c.x-.05,c.y-.05},{c.x+.05,c.y+.05},[&](b2Fixture* f){if(f->GetBody()==interior&&f->GetFilterData().categoryBits==1&&(skinMaskOf(f)&cat)&&(mask&1)&&f->TestPoint(c)){stuck=true;return false;}return true;});return stuck;}
 void Ship::rescueBody(b2Body* b,bool cargo){b->SetTransform(bv(safeCell(vv(b->GetPosition()),cargo)),0);b->SetLinearVelocity(b2Vec2(0,0));b->SetAngularVelocity(0);b->SetAwake(true);}
 static void clampSpeed(b2Body* b,double max){V2 v=vv(b->GetLinearVelocity());double s=v.len();if(s>max)b->SetLinearVelocity(b2Vec2((float)(v.x*max/s),(float)(v.y*max/s)));}
 int Ship::mergeLooseStacks(){const size_t before=items.size();OMap<std::string,std::vector<Item*>> byType;for(auto& i:items){auto* l=byType.get(i->type);if(!l)l=&byType.set(i->type,{});l->push_back(i.get());}
