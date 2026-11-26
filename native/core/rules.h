@@ -24,4 +24,10 @@ std::string cleanColor(const std::string& c);
 std::u16string toU16(const std::string& s);
 std::string fromU16(const std::u16string& s);
 bool jsSpace(char16_t c);
+// String(number) as JavaScript writes it (shortest round-trip digits, its rules for exponents), so keys built from
+// numbers ("x,y") match.
+std::string jsNum(double v);
+// +v.toFixed(digits) (|v| < 1e21): rounded on the exact decimal value, halves away from zero as JavaScript does (the C
+// library rounds exact halves to even); -0 comes back as 0, as JSON.stringify writes it.
+double jsFixed(double v,int digits);
 }

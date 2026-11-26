@@ -37,7 +37,8 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut; game.js edit/interact/takeHelm/recover; pickupAt, useBox, turret ammo load/eject, turret controllers) | tests/core-build.cjs | done (edit's branches for later systems are marked TODO and do nothing) |
 | 5b | machinery (fabricators, loaders, pushers and the handheld pusher, recyclers, shredders, repairs, thruster tanks, comms, hatch filters, door/spawn/sign/paint settings) | tests/core-machines.cjs | done (ejectors and hatches' zone side wait for the exterior) |
 | 6a | zone generator (caves, pit, block) | tests/core-zonegen.cjs | done (bit for bit, every zone and seed) |
-| 6 | zones (zones.js: rocks and chunks, mining, docks, Freeport layout and berths, portals, arrivals, loot, boulders), missions.js | | next |
+| 6m | JavaScript's Math functions (V8 12.4's fdlibm copied in as jsmath, V8's Math.hypot) | tests/core-jsmath.cjs | done (bit for bit, 2.4 million values) |
+| 6 | zones (zone.h: rock cells and greedy chunk rectangles, mining, the Freeport harbour, portals and the mission portal, arrivals and berths, boulders, loot, treasure ranks) | tests/core-zones.cjs | done (exact, every zone; travelling, regeneration and the mission schedule go with the ship's exterior and the zone bus: stages 7 and 8) |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
 | 9 | server on the core (all server tests pass), page prediction on the WebAssembly core | | |
@@ -60,6 +61,18 @@ totals, counts and logic everywhere.
 ## Not yet ported inside stage 2's files (marked TODO in the code)
 - storage tiles (expando boxes) and physics machines are skipped when a ship is built: stages 4 and 5.
 - doors open/close for nearby crew (doorOpen) and noclip flight: stage 5 / stage 8.
+
+## Numbers as JavaScript computes them
+- `Math.sin`, `cos`, `atan2`, `pow`, `hypot`… are `jsmath::` (V8's own code), never the C library's: zone rock kinds hash
+  through `Math.sin`, and glibc's and musl's sin differ from V8's in the last bit for a few inputs in a hundred.
+- Vectors follow planck: a length is `sqrt(x²+y²)` (not `Math.hypot`, which rounds differently), `normalize` multiplies
+  by `1/length`, local and world points use the double transform (V8's sin/cos of the body angle). Positions read
+  from Box2D are widened to doubles (`vv`) before any arithmetic, as the old rules read planck's doubles.
+- Keys built from numbers use `jsNum` (String(number)); snapshot rounding uses `jsFixed` (+toFixed: halves up, where
+  printf rounds exact halves to even). Replies write -0 as 0, as JSON.stringify does.
+- Builds use `-ffp-contract=off` (no fused multiply-add), so x86, ARM and WebAssembly give the same doubles.
+- Box2D computes body masses from fixtures in floats; the old bridge passed planck's double masses (rounded to floats).
+  The difference is in the last float bit and only shows in chaotic cases (see above).
 
 ## Notes
 - `extra` (a tile's JavaScript fields) is an insertion-ordered object stored in a vector: adding a key moves the

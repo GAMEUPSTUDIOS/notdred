@@ -1,5 +1,23 @@
 #include "rules.h"
+#include <cstdio>
+#include <cstdlib>
 namespace nd {
+std::string jsNum(double v){
+ if(std::isnan(v))return "NaN";if(std::isinf(v))return v<0?"-Infinity":"Infinity";if(v==0)return "0";
+ const bool neg=v<0;const double a=std::fabs(v);char buf[40];std::string digits;int n=0;
+ for(int p=1;p<=17;p++){std::snprintf(buf,sizeof buf,"%.*e",p-1,a);if(std::strtod(buf,nullptr)==a||p==17){const char* e=std::strchr(buf,'e');for(const char* c=buf;c<e;c++)if(*c!='.')digits+=*c;n=std::atoi(e+1)+1;break;}}
+ while(digits.size()>1&&digits.back()=='0')digits.pop_back();const int k=(int)digits.size();std::string out=neg?"-":"";
+ if(k<=n&&n<=21){out+=digits;out.append(n-k,'0');}
+ else if(0<n&&n<=21){out+=digits.substr(0,n)+"."+digits.substr(n);}
+ else if(-6<n&&n<=0){out+="0.";out.append(-n,'0');out+=digits;}
+ else{out+=digits.substr(0,1);if(k>1)out+="."+digits.substr(1);const int e=n-1;out+=e<0?"e-":"e+";out+=std::to_string(std::abs(e));}
+ return out;}
+double jsFixed(double v,int f){if(!std::isfinite(v))return v;
+ // the exact decimal digits (60 more than kept: no double near a rounding boundary has that many nines or zeros there)
+ char buf[512];std::snprintf(buf,sizeof buf,"%.*f",f+60,std::fabs(v));const std::string s=buf;const size_t dot=s.find('.');
+ std::string kept=s.substr(0,dot+(f?1+f:0));
+ if(s[dot+1+f]>='5'){int i=(int)kept.size()-1;for(;i>=0;i--){if(kept[i]=='.')continue;if(kept[i]=='9'){kept[i]='0';continue;}kept[i]++;break;}if(i<0)kept="1"+kept;}  // halves go up ("pick the larger n")
+ const double out=std::strtod(kept.c_str(),nullptr);return (v<0?-out:out)+0.0;}
 const J& zoneDef(const std::string& id){const auto& z=data().zones;auto it=z.find(id);if(it!=z.end())return *it;return z.at(data().startZone);}
 bool isCombatZone(const std::string& id){return val(zoneDef(id),"kind","")=="combat";}
 Half zoneHalf(const std::string& id){const J& d=zoneDef(id);
