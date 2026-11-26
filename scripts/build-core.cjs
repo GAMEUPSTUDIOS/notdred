@@ -14,7 +14,7 @@ const inc=['-Inative/vendor','-Inative/core','-Inative/vendor/box2d-2.4.1/includ
 function run(cmd,args){const r=spawnSync(cmd,args,{stdio:'inherit'});if(r.error)throw r.error;if(r.status)process.exit(r.status);}
 if(!wasm){
  fs.mkdirSync('build',{recursive:true});
- const args=['-std=c++17','-O2','-shared','-fPIC','-DNAPI_VERSION=8',...inc,...core,'native/core/bind_node.cpp',...box2d,'-o','build/core.node'];
+ const args=['-std=c++17','-O2','-ffp-contract=off','-shared','-fPIC','-DNAPI_VERSION=8',...inc,...core,'native/core/bind_node.cpp',...box2d,'-o','build/core.node'];
  if(process.platform==='darwin')args.push('-undefined','dynamic_lookup');
  run(process.env.CXX||'g++',args);console.log('Built build/core.node');
 }else{
@@ -22,7 +22,7 @@ if(!wasm){
  if(!sdk||!fs.existsSync(path.join(sdk,'bin','clang++'))){console.error('wasi-sdk not found: set WASI_SDK (https://github.com/WebAssembly/wasi-sdk/releases).');process.exit(1);}
  // Objects one by one (Box2D is big), then one link.
  const out='build/core-wasm';fs.mkdirSync(out,{recursive:true});const objs=[];
- const flags=['--target=wasm32-wasip1','-std=c++17','-O2','-fno-exceptions','-DND_NO_EXCEPTIONS','-DJSON_NOEXCEPTION',...inc];
+ const flags=['--target=wasm32-wasip1','-std=c++17','-O2','-ffp-contract=off','-fno-exceptions','-DND_NO_EXCEPTIONS','-DJSON_NOEXCEPTION',...inc];
  for(const src of [...core,'native/core/bind_wasm.cpp',...box2d]){const o=path.join(out,src.replace(/[\\/]/g,'_')+'.o');objs.push(o);
   if(fs.existsSync(o)&&fs.statSync(o).mtimeMs>fs.statSync(src).mtimeMs&&!/native[\\/]core/.test(src))continue;run(path.join(sdk,'bin','clang++'),[...flags,'-c',src,'-o',o]);}
  run(path.join(sdk,'bin','clang++'),['--target=wasm32-wasip1','-O2','-mexec-model=reactor','-Wl,--strip-all',...objs,'-o','dist/core.wasm']);

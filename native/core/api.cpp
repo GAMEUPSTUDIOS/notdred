@@ -2,6 +2,8 @@
 #include "rules.h"
 #include "ship.h"
 #include "zonegen.h"
+#include "jsmath.h"
+#include <cstring>
 #include <memory>
 namespace nd {
 #ifdef ND_NO_EXCEPTIONS
@@ -70,6 +72,15 @@ static J dispatch(const J& q){const std::string op=str(field(q,"op",J("")));
  if(op=="init"){const J d=field(q,"data");if(d.is_null())fail("init needs data");loadData(d.is_string()?d.get<std::string>():d.dump());return {{"ok",true}};}
  if(op=="rule"){J a=field(q,"args",J::array());return {{"result",rule(str(field(q,"fn")),a.is_array()?a:J::array())}};}
  if(op=="version")return {{"core",1}};
+ // Math functions over doubles given as 16 hex digits (exact, and NaN/Infinity survive), for the jsmath tests.
+ if(op=="math"){const std::string fn=str(field(q,"fn"));const J a=field(q,"a",J::array()),b=field(q,"b",J::array());
+  auto bits=[](const J& v){double d=0;if(v.is_string()){unsigned long long u=std::strtoull(v.get<std::string>().c_str(),nullptr,16);std::memcpy(&d,&u,8);}return d;};
+  auto hex=[](double d){unsigned long long u;std::memcpy(&u,&d,8);char t[17];std::snprintf(t,sizeof t,"%016llx",u);return std::string(t);};
+  using F1=double(*)(double);using F2=double(*)(double,double);F1 f1=nullptr;F2 f2=nullptr;
+  static const std::pair<const char*,F1> one[]={{"acos",jsmath::acos},{"acosh",jsmath::acosh},{"asin",jsmath::asin},{"asinh",jsmath::asinh},{"atan",jsmath::atan},{"cos",jsmath::cos},{"exp",jsmath::exp},{"atanh",jsmath::atanh},{"log",jsmath::log},{"log1p",jsmath::log1p},{"log2",jsmath::log2},{"log10",jsmath::log10},{"expm1",jsmath::expm1},{"cbrt",jsmath::cbrt},{"sin",jsmath::sin},{"tan",jsmath::tan},{"cosh",jsmath::cosh},{"sinh",jsmath::sinh},{"tanh",jsmath::tanh}};
+  static const std::pair<const char*,F2> two[]={{"atan2",jsmath::atan2},{"pow",jsmath::pow},{"hypot",jsmath::hypot}};
+  for(auto& [n,f]:one)if(fn==n)f1=f;for(auto& [n,f]:two)if(fn==n)f2=f;if(!f1&&!f2)fail("unknown math function "+fn);
+  J r=J::array();for(size_t i=0;i<a.size();i++)r.push_back(hex(f1?f1(bits(a[i])):f2(bits(a[i]),i<b.size()?bits(b[i]):0)));return {{"r",r}};}
  if(op=="zone.generate"){ZoneGrid g=generateZone(num(q,"seed",0),field(q,"opts",J::object()));return g.toJSON(true);}
  fail("unknown op "+op);return J();}
 std::string call(const std::string& request){
