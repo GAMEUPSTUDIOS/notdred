@@ -32,15 +32,25 @@ both core builds, and compares results: exactly for rules, within stated toleran
 |---|---|---|---|
 | 1 | build (native + wasm), data file, era.js rules | tests/core-rules.cjs | done |
 | 2 | interior physics world, hull shell/skin, crew controller on foot (walk, jump, ladders, ice, walkways, wedges, nets) | tests/core-crew.cjs | done (identical to the mm); piloting/thrusters move to stage 7 with the exterior |
-| 3 | construction (placement, edit/remove/rotate, footprints, mounts), embiggener/shrinker | | |
-| 4 | cargo (items, stacks, merging, boxes), hatches, safeguards | | |
-| 5 | machinery (fabricators, loaders, pushers, recycler, shredder, comms, doors, spawns) | | |
+| 3 | crew inventory (slots, stacks, carried/addCarried/takeItem/giveItem/moveStack/refund), loose items (spawnItem, scatter, dropItem, pickupAt, mergeTouchingCargo, wakeCargoNear), expando boxes (spawnBox, boxSpace, resizeBox, boxInsert, useBox), commands select/drop/moveStack/dev give | tests/core-cargo.cjs | done (within 3 cm; hands, notices, counts and boxes exact) |
+| 4 | mounts (mountAt, mountValid, mountWidth, mountPoint, rebuildMounts, mountHit, inward), physics machines (spawnMachine, machineSpace, supportsMachine, machineOnTop, fabFits, syncMachines), doors (doorOpen), safeguards | | |
+| 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut/resizeShip, helm moves; game.js edit/interact) | | |
+| 5b | machinery (fabricators, loaders, pushers, recycler, shredder, comms, ejectors, spawns), hatches | | |
 | 6 | zone generator, zones (rocks, mining, docks, Freeport, portals), missions | | |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
 | 9 | server on the core (all server tests pass), page prediction on the WebAssembly core | | |
 
+## Where physics can't match bit for bit
+The old server's native interiors created each Box2D body one tick late, in reverse order of creation (the bridge
+walks planck's body list), and its fixtures and broadphase proxies in that order too. Where the outcome hangs on solver
+order — bodies spawned overlapping, a box tipping on a corner — the core (which creates bodies at once, in order) can
+settle differently. Those are chaotic either way; the tests keep to cases with one physical answer, and check exact
+totals, counts and logic everywhere.
+
 ## Fixed in the JavaScript while porting (so both agree)
+- A loose item squeezed inside a block was never rescued: the collision skin had already set the block's mask to 0,
+  and the wedge check read the current mask. It reads the mask from before the skin now (safeguards.js).
 - The last crew member stepped each tick lost ladder cooldown twice as fast (game.js step and serverCrewStep both
   counted it down).
 - Only the last crew member stepped was held at the top of a ladder (clampToLadder ran once, in step); the others
@@ -49,3 +59,10 @@ both core builds, and compares results: exactly for rules, within stated toleran
 ## Not yet ported inside stage 2's files (marked TODO in the code)
 - storage tiles (expando boxes) and physics machines are skipped when a ship is built: stages 4 and 5.
 - doors open/close for nearby crew (doorOpen) and noclip flight: stage 5 / stage 8.
+
+## Next steps (resume here)
+The room's command surface is `command(id,msg)` in server/room-runtime.js: input, select, interact, leave, edit,
+remove, rotate, helm, drop, portal, moveStack, craft, material, clearQueue, repeat, door, spawnrank, sign, paint,
+pusher, hatch, recover, rename, dev. The core grows a matching `ship.command {ship, uid, msg}` so the differential
+tests send the very same messages to the JavaScript room and the core. Stage 2's test ops (`ship.input`,
+`ship.place`) stay for physics-only checks.

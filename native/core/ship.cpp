@@ -29,6 +29,27 @@ Ship::Ship(const J& saved){
   Tile* n=addTerrain(type,x,y,t.value("rotation",0));if(!n)continue;
   if(type=="door"&&t.contains("access")&&t["access"].is_string()){std::string a=t["access"];if(a=="captain"||a=="crew"||a=="guest"){n->access=a;if(n->f){interior->DestroyFixture(n->f);skinDirty=true;b2PolygonShape s=doorBox(x,y,n->rotation);n->f=fixture(s,.2f,DOOR_BIT,doorMask(a));}}}
   if(type=="spawn"&&t.contains("access")&&t["access"].is_string()){std::string a=t["access"];if(a=="captain"||a=="crew"||a=="guest")n->access=a;}}
+ // TODO stage 4: mounts, machines (game.js creates them here, before the first crew body)
+ // The first crew member's body exists with the ship (game.js initialize), before the cargo: body order matters to Box2D.
+ spare=makeCrewBody(2|32);
+ if(saved.is_object()&&saved.contains("position")&&saved["position"].is_object()){shipPos.x=saved["position"].value("x",0.0);shipPos.y=saved["position"].value("y",0.0);}
+ if(saved.is_object()&&saved.contains("items")&&saved["items"].is_array())for(auto& i:saved["items"]){if(!i.is_object())continue;std::string type=i.contains("type")&&i["type"].is_string()?i["type"].get<std::string>():"";
+  const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),type)==ty.end()){if(type.empty()||type=="empty"||type=="undefined"||type=="null")type="ammo";else continue;}
+  auto n=[&](const char* k){return i.contains(k)&&i[k].is_number()?i[k].get<double>():0.0;};int count=i.contains("count")&&i["count"].is_number()&&i["count"].get<double>()?(int)i["count"].get<double>():1;
+  spawnItem(type,{clamp(n("x"),bounds.l+.9,bounds.r-.9),clamp(n("y"),bounds.t+.9,bounds.b-.9)},{0,0},count).intakeFrom=i.contains("intakeFrom")?i["intakeFrom"]:J();}
+ if(saved.is_object()&&saved.contains("boxes")&&saved["boxes"].is_array())for(auto& b:saved["boxes"]){if(!b.is_object())continue;J mats=J::object();
+  if(b.contains("materials")&&b["materials"].is_object())for(auto& [k,v]:b["materials"].items()){std::string t=k;const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),t)==ty.end()){if(t.empty()||t=="empty"||t=="undefined"||t=="null")t="ammo";else continue;}
+   if(v.is_number()&&v.get<double>()>0)mats[t]=(mats.contains(t)?mats[t].get<double>():0)+v.get<double>();}
+  auto n=[&](const char* k){return b.contains(k)&&b[k].is_number()?b[k].get<double>():0.0;};Box& x=spawnBox({n("x"),n("y")},mats);x.body->SetTransform(x.body->GetPosition(),(float)n("angle"));}
+ if(saved.is_object()&&saved.contains("stacks")&&saved["stacks"].is_array())savedStacks=saved["stacks"];
+ else if(saved.is_object()){
+  // A save from before hands existed (no "stacks"): the old inventory — a wrench and 16 blocks, ladders, walkways and
+  // nets, plus whatever it listed — is handed out type by type in TYPES order; what doesn't fit drops at the helm.
+  J inv=J::object();for(auto& t:data().types)inv[t]=0;inv["wrench"]=1;inv["block"]=16;inv["ladder"]=16;inv["walkway"]=16;inv["net"]=16;
+  if(saved.contains("inventory")&&saved["inventory"].is_object())for(auto& t:data().types){auto it=saved["inventory"].find(t);if(it!=saved["inventory"].end()&&it->is_number())inv[t]=std::max(0.0,std::floor(it->get<double>()));}
+  Crew tmp;for(int i=0;i<5;i++){tmp.slots[i].clear();tmp.counts[i]=0;}tmp.body=spare;
+  for(auto& t:data().types){int n=(int)inv[t].get<double>();if(n>0){int added=addCarried(tmp,t,n);if(n>added)scatter(t,n-added,vv(spare->GetPosition()));}}
+  savedStacks=J::array();for(int i=0;i<5;i++)savedStacks.push_back(tmp.slots[i].empty()?J():J({{"type",tmp.slots[i]},{"count",tmp.counts[i]}}));}
 }
 Ship::~Ship(){}
 b2Fixture* Ship::fixture(const b2Shape& shape,float friction,uint16_t cat,uint16_t mask,float density){b2FixtureDef fd;fd.shape=&shape;fd.friction=friction;fd.density=density;fd.filter.categoryBits=cat;fd.filter.maskBits=mask;skinDirty=true;return interior->CreateFixture(&fd);}
@@ -90,12 +111,26 @@ void Ship::syncSkin(){if(!skinDirty)return;skinDirty=false;if(skinBody)inside.de
   b2FixtureDef fd;fd.shape=&ch;fd.friction=g.friction;fd.filter.categoryBits=g.cat;fd.filter.maskBits=g.mask;skinBody->CreateFixture(&fd);}}
 
 // ---- Crew --------------------------------------------------------------------------------------------------------
-Crew& Ship::newCrew(const std::string& id,const std::string& name){if(crew.size()>=8)fail("Ship crew is full");
- b2BodyDef d;d.type=b2_dynamicBody;d.position=b2Vec2((float)helm.x,(float)helm.y-.15f);d.fixedRotation=true;d.bullet=true;b2Body* b=inside.w.CreateBody(&d);
+b2Body* Ship::makeCrewBody(uint16_t cat){b2BodyDef d;d.type=b2_dynamicBody;d.position=b2Vec2((float)helm.x,(float)helm.y-.15f);d.fixedRotation=true;d.bullet=true;b2Body* b=inside.w.CreateBody(&d);
  const b2Vec2 vs[8]={{-.15f,-.62f},{.15f,-.62f},{.23f,-.54f},{.23f,.54f},{.15f,.62f},{-.15f,.62f},{-.23f,.54f},{-.23f,-.54f}};b2PolygonShape s;s.Set(vs,8);
- b2FixtureDef fd;fd.shape=&s;fd.density=1;fd.friction=0;fd.restitution=0;fd.filter.categoryBits=2|128;fd.filter.maskBits=1|4|8|256;b->CreateFixture(&fd);
- Crew c;c.id=id;c.name=name;c.body=b;return crew.set(id,c);}
-void Ship::removeCrew(const std::string& id){Crew* c=crew.get(id);if(!c)return;inside.destroy(c->body);crew.erase(id);}
+ b2FixtureDef fd;fd.shape=&s;fd.density=1;fd.friction=0;fd.restitution=0;fd.filter.categoryBits=cat;fd.filter.maskBits=1|4|8|256;b->CreateFixture(&fd);return b;}
+// newCrew (room-runtime): the first to join takes the ship's own body and hands (saved with the ship); others start at
+// the helm with a wrench. spawnKit: only captains keep a wrench.
+Crew& Ship::newCrew(const std::string& id,const std::string& name){if(crew.size()>=8)fail("Ship crew is full");
+ Crew c;c.id=id;c.name=name;
+ if(crew.size()==0&&spare){c.body=spare;spare=nullptr;if(savedStacks.is_array()){for(int i=0;i<5;i++){const J& a=savedStacks[i];c.slots[i]=a.is_object()&&a.contains("type")&&a["type"].is_string()?a["type"].get<std::string>():"";c.counts[i]=a.is_object()&&a.contains("count")&&a["count"].is_number()?a["count"].get<int>():0;}savedStacks=J();}}
+ else c.body=makeCrewBody(2|128);
+ return crew.set(id,c);}
+void Ship::spawnKit(Crew& c){const bool cap=c.rank=="captain";for(int i=0;i<5;i++)if(c.slots[i]=="wrench"&&!cap){c.slots[i].clear();c.counts[i]=0;}
+ bool has=false;for(auto& s:c.slots)if(s=="wrench")has=true;if(cap&&!has){for(int i=0;i<5;i++)if(c.slots[i].empty()){c.slots[i]="wrench";c.counts[i]=1;break;}}
+ int w=-1;for(int i=0;i<5;i++)if(c.slots[i]=="wrench"){w=i;break;}selectSlot(c,std::max(0,w));
+ // TODO stage 4: spawn points (spawnPointFor)
+}
+// removeCrew: their stacks (but a wrench) drop where they stood; the last one's body stays for the next to join.
+void Ship::removeCrew(const std::string& id){Crew* c=crew.get(id);if(!c)return;Crew* was=actor;actor=c;V2 p=vv(c->body->GetPosition());
+ for(int n=0;n<5;n++){if(!c->slots[n].empty()&&c->slots[n]!="wrench")scatter(c->slots[n],c->counts[n],p);c->slots[n].clear();c->counts[n]=0;}
+ if(crew.size()>1)inside.destroy(c->body);else{spare=c->body;spare->SetEnabled(true);spare->SetTransform(b2Vec2((float)helm.x,(float)helm.y-.15f),0);}
+ actor=was==c?nullptr:was;crew.erase(id);}
 // playerFilter (game.js): a crew member collides as their rank (doors read it).
 void Ship::setRank(const std::string& id,const std::string& rank){Crew* c=crew.get(id);if(!c||(rank!="captain"&&rank!="crew"&&rank!="guest"))return;c->rank=rank;
  b2Fixture* f=c->body->GetFixtureList();if(!f)return;uint16_t cat=2|rankBit(rank),mask=1|4|8|DOOR_BIT;b2Filter fl=f->GetFilterData();if(fl.categoryBits!=cat||fl.maskBits!=mask){fl.categoryBits=cat;fl.maskBits=mask;fl.groupIndex=0;f->SetFilterData(fl);}}
@@ -124,8 +159,9 @@ void Ship::clampToLadder(Crew& c){if(!c.climbing)return;double lo=1e18,hi=-1e18;
  if(!any)return;V2 p=vv(c.body->GetPosition());double y=clamp(p.y,lo-1.13,hi+.4);if(y!=p.y){setTransform(c.body,{c.ladderX,y});setVel(c.body,{0,0});}}
 // One tick (game.js step + room-runtime serverCrewStep/serverCrewAfterStep), the parts ported so far.
 void Ship::tick(double dt){clock+=dt;
- for(auto& [id,c]:crew){c.ladderCooldown=std::max(0.0,c.ladderCooldown-dt);stepController(c,dt);}
- syncSkin();inside.step(dt);
+ mergeTouchingCargo();tickHullLeaks();tickTrashDecay(dt);
+ for(auto& [id,c]:crew){actor=&c;c.inputAge+=dt;if(c.inputAge>.5)c.keys=Keys();c.ladderCooldown=std::max(0.0,c.ladderCooldown-dt);stepController(c,dt);}actor=nullptr;
+ syncSkin();inside.step(dt);tickSafeguards(dt);
  const double maxSpeed=data().raw.at("SAFETY").at("maxCrewSpeed").get<double>();
  for(auto& [id,c]:crew){clampToLadder(c);if(c.piloting)continue;b2Body* b=c.body;V2 p=vv(b->GetPosition()),v=vv(b->GetLinearVelocity());
   if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(v.x)||!std::isfinite(v.y)){c.climbing=false;b->SetEnabled(true);b->SetGravityScale(1);setTransform(b,{(double)helm.x,helm.y-.15});setVel(b,{0,0});continue;}
@@ -133,4 +169,34 @@ void Ship::tick(double dt){clock+=dt;
   if(!c.noclip){double x=clamp(p.x,bounds.l+.75,bounds.r-.75),y=clamp(p.y,bounds.t+1.13,bounds.b-1.13);if(x!=p.x||y!=p.y)setTransform(b,{x,y});}}}
 J Ship::crewState()const{J out=J::array();for(auto& [id,c]:crew){auto p=c.body->GetPosition(),v=c.body->GetLinearVelocity();
  out.push_back({{"id",id},{"p",{{"x",p.x},{"y",p.y}}},{"v",{{"x",v.x},{"y",v.y}}},{"climbing",c.climbing},{"grounded",c.grounded},{"facing",c.facing},{"ladderX",c.ladderX},{"awake",c.body->IsAwake()}});}return out;}
+}
+
+namespace nd {
+// ---- Commands (room-runtime command): the parts ported so far ------------------------------------------------------
+static bool isInt(const J& v){return v.is_number_integer()||(v.is_number_float()&&std::floor(v.get<double>())==v.get<double>());}
+void Ship::command(const std::string& id,const J& msg){Crew* m=crew.get(id);if(!m||!msg.is_object())return;actor=m;
+ const std::string a=msg.contains("action")&&msg["action"].is_string()?msg["action"].get<std::string>():"";
+ auto allowed=[&](){if(m->rank=="captain"||a=="dev")return true;if(a=="rename"||a=="door"||a=="spawnrank")return false;if(m->rank=="guest"&&a=="sign")return false;return true;};
+ if(!allowed()){if(a!="input")toast(a=="rename"||a=="door"||a=="spawnrank"?"Only the captain can do that.":"Guests cannot do that here — ask the captain to make you crew.");actor=nullptr;return;}
+ auto vec=[&](const char* k,V2& out){auto it=msg.find(k);if(it==msg.end()||!it->is_object())return false;auto x=it->find("x"),y=it->find("y");if(x==it->end()||y==it->end()||!x->is_number()||!y->is_number())return false;
+  double X=x->get<double>(),Y=y->get<double>();if(!std::isfinite(X)||!std::isfinite(Y)||std::fabs(X)>=10000||std::fabs(Y)>=10000)return false;out={X,Y};return true;};
+ V2 aim;if(vec("aim",aim)){m->mouse=aim-shipPos;m->mouseActive=true;}if(vec("local",aim)){m->mouse=aim;m->mouseActive=true;}
+ auto flagOf=[&](const char* k){auto it=msg.find(k);return it!=msg.end()&&((it->is_boolean()&&it->get<bool>())||(it->is_number()&&it->get<double>()!=0)||(it->is_string()&&!it->get_ref<const std::string&>().empty())||it->is_object()||it->is_array());};
+ auto intOf=[&](const char* k,int& out){auto it=msg.find(k);if(it==msg.end()||!it->is_number()||!isInt(*it))return false;out=(int)it->get<double>();return true;};
+ if(a=="input"){m->keys=Keys::from(msg.contains("keys")?msg["keys"]:J());m->inputAge=0;}
+ else if(a=="select"){int n;if(intOf("slot",n)&&n>=0&&n<5)selectSlot(*m,n);}
+ else if(a=="drop")dropItem(*m,flagOf("half"));
+ else if(a=="moveStack"){int f,t;if(intOf("from",f)&&intOf("to",t)&&f>=0&&f<5&&t>=0&&t<5)moveStack(*m,f,t,flagOf("half"));}
+ else if(a=="dev"&&m->admin){const std::string op=msg.contains("op")&&msg["op"].is_string()?msg["op"].get<std::string>():"";
+  if(op=="noclip"){m->noclip=!m->noclip;toast(std::string("Noclip ")+(m->noclip?"on: WASD/Space fly through anything, Shift for speed.":"off."));}
+  else if(op=="sandbox"){m->sandbox=!m->sandbox;toast(std::string("Sandbox build mode ")+(m->sandbox?"on: building is instant and uses no items.":"off."));}
+  else if(op=="give"&&msg.contains("item")&&msg["item"].is_string()){std::string item=msg["item"];const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),item)!=ty.end()){
+   double c=msg.contains("count")&&msg["count"].is_number()?std::floor(msg["count"].get<double>()):0;int n=(int)clamp(c&&std::isfinite(c)?c:1,1,512);giveItem(*m,item,n);}}}
+ // TODO later stages: interact, leave, edit, remove, rotate, helm, portal, craft, material, clearQueue, repeat, door,
+ // spawnrank, sign, paint, pusher, hatch, recover, rename, the other dev ops.
+ actor=nullptr;}
+J Ship::state()const{J out=J::object();out["bounds"]={{"l",bounds.l},{"r",bounds.r},{"t",bounds.t},{"b",bounds.b}};out["helm"]={{"x",helm.x},{"y",helm.y}};
+ J it=J::array();for(auto& i:items){auto p=i->body->GetPosition();it.push_back({{"type",i->type},{"count",i->count},{"intakeFrom",i->intakeFrom},{"x",p.x},{"y",p.y}});}out["items"]=it;
+ J bx=J::array();for(auto& b:boxes){auto p=b->body->GetPosition(),v=b->body->GetLinearVelocity();bx.push_back({{"x",p.x},{"y",p.y},{"angle",b->body->GetAngle()},{"materials",b->materials},{"size",b->size},{"vx",v.x},{"vy",v.y}});}out["boxes"]=bx;
+ return out;}
 }

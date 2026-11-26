@@ -39,9 +39,12 @@ static J shipOp(const std::string& op,const J& q){
  if(op=="ship.new"){int id=nextShip++;ships[id]=std::make_unique<Ship>(field(q,"saved",J::object()));return {{"ship",id}};}
  if(op=="ship.dispose"){ships.erase((int)num(q,"ship",0));return {{"ok",true}};}
  Ship& s=shipOf(q);
- if(op=="ship.join"){Crew& c=s.newCrew(str(field(q,"uid")),str(field(q,"name")));s.setRank(c.id,str(field(q,"rank",J("guest"))));return {{"ok",true}};}
+ if(op=="ship.join"){Crew& c=s.newCrew(str(field(q,"uid")),str(field(q,"name")));c.admin=flag(q,"admin");s.setRank(c.id,str(field(q,"rank",J("guest"))));s.spawnKit(c);return {{"ok",true}};}
+ if(op=="ship.command"){s.command(str(field(q,"uid")),field(q,"msg",J::object()));return {{"ok",true}};}
+ if(op=="ship.state"){J st=s.state();J hands=J::object();for(auto& [id,c]:s.crew){J h=J::array();for(int i=0;i<5;i++)h.push_back(c.slots[i].empty()?J():J({{"type",c.slots[i]},{"count",c.counts[i]}}));hands[id]={{"stacks",h},{"selected",c.selected},{"tool",c.tool},{"notices",c.notices}};}st["crew"]=hands;return st;}
+ if(op=="ship.boxInsert"){size_t k=(size_t)num(q,"box",0);if(k>=s.boxes.size())fail("no such box");return {{"inserted",s.boxInsert(*s.boxes[k],str(field(q,"type")),(int)num(q,"n",0))}};}
  if(op=="ship.leave"){s.removeCrew(str(field(q,"uid")));return {{"ok",true}};}
- if(op=="ship.input"){Crew* c=s.crew.get(str(field(q,"uid")));if(c)c->keys=Keys::from(field(q,"keys",J::object()));return {{"ok",c!=nullptr}};}
+ if(op=="ship.input"){Crew* c=s.crew.get(str(field(q,"uid")));if(c){c->keys=Keys::from(field(q,"keys",J::object()));c->inputAge=0;}return {{"ok",c!=nullptr}};}
  if(op=="ship.place"){Crew* c=s.crew.get(str(field(q,"uid")));if(!c)fail("no such crew member");c->body->SetTransform(b2Vec2((float)num(q,"x",0),(float)num(q,"y",0)),0);c->body->SetLinearVelocity(b2Vec2((float)num(q,"vx",0),(float)num(q,"vy",0)));c->body->SetAwake(true);return {{"ok",true}};}
  if(op=="ship.tick"){int n=std::max(1,std::min(100000,(int)num(q,"n",1)));double dt=clamp(num(q,"dt",1.0/60),0,1.0/15);J trace=J::array();bool tr=flag(q,"trace");
   for(int i=0;i<n;i++){s.tick(dt);if(tr)trace.push_back(s.crewState());}return tr?J({{"trace",trace}}):J({{"ok",true}});}

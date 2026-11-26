@@ -1,6 +1,7 @@
 #pragma once
 #include "physics.h"
 #include "rules.h"
+#include <memory>
 // A ship: its interior (tiles, the hull shell, the collision skin, crew bodies) and the rules that act on them.
 // Ported from dist/game.js (initialize, rebuildShell, addBlock, addTerrain, syncSkin, cellLoops, unitCell, doorBox,
 // playerFilter, clampToLadder, step), dist/modules/controller.js (stepController) and server/room-runtime.js
@@ -14,15 +15,27 @@ struct Block{int x=0,y=0,rotation=0;b2Fixture* f=nullptr;double hp=100;};
 struct Tile{std::string type;int x=0,y=0,rotation=0;b2Fixture* f=nullptr;std::string access;J extra=J::object();double hp=100;};
 struct Keys{bool w=false,a=false,s=false,d=false,up=false,down=false,left=false,right=false,space=false,shift=false;
  static Keys from(const J& k);bool moveRight()const{return d||right;}bool moveLeft()const{return a||left;}bool upKey()const{return w||up;}bool downKey()const{return s||down;}};
-struct Crew{std::string id,name,rank="guest";b2Body* body=nullptr;Keys keys;bool climbing=false,piloting=false,jumpWas=false,grounded=false,noclip=false;
- double ladderX=0,ladderCooldown=0,jumpTime=0;int facing=1;std::string manning;};
+struct Crew{std::string id,name,rank="guest";b2Body* body=nullptr;Keys keys;bool climbing=false,piloting=false,jumpWas=false,grounded=false,noclip=false,admin=false,sandbox=false;
+ double ladderX=0,ladderCooldown=0,jumpTime=0,inputAge=0;int facing=1;std::string manning;
+ // the five hands (game.js slots/stackCounts: an empty slot is "")
+ std::string slots[5]={"wrench","","","",""};int counts[5]={1,0,0,0,0};int selected=0;std::string tool="walk";
+ V2 mouse{0,0};bool mouseActive=true;   // the aim, in ship coordinates
+ std::vector<std::string> notices;};
+// A loose stack aboard (cargo.js spawnItem).
+struct Item{std::string type;b2Body* body=nullptr;int count=1;double grace=0,stuck=0;J intakeFrom;long nid=0;};
+// An expando box (cargo.js spawnBox): one item type, grows a quarter tile per 64 items.
+struct Box{b2Body* body=nullptr;b2Fixture* fixture=nullptr;double size=2;J materials=J::object();};
 struct Ship{
  Bounds bounds;struct{int x=1,y=2;}helm;
  World inside{V2(0,20)};b2Body* interior=nullptr;b2Body* skinBody=nullptr;bool skinDirty=true;
  std::vector<b2Fixture*> shell;
  OMap<std::string,Block> blocks;OMap<std::string,Tile> terrain;
  OMap<std::string,Crew> crew;
- double clock=0;
+ std::vector<std::unique_ptr<Item>> items;std::vector<std::unique_ptr<Box>> boxes;
+ V2 shipPos{0,0};                       // the hull's position in its zone (the exterior arrives in a later stage)
+ J savedStacks;                         // the saved hands, for the first crew member to join (game.js keeps them on the ship)
+ double clock=0,safetyTimer=0;int mergePass=0;long liveSeq=0;
+ Crew* actor=nullptr;                   // whose action is being applied (their notices), else everyone's
  explicit Ship(const J& saved);
  ~Ship();
  // tiles
@@ -36,12 +49,55 @@ struct Ship{
  void syncSkin();
  // crew
  Crew& newCrew(const std::string& id,const std::string& name);
+ void spawnKit(Crew& c);
+ b2Body* makeCrewBody(uint16_t cat);
+ b2Body* spare=nullptr;          // the body the next first crew member takes (game.js keeps one player body always)
  void removeCrew(const std::string& id);
  void setRank(const std::string& id,const std::string& rank);
  void stepController(Crew& c,double dt);
  void clampToLadder(Crew& c);
  void tick(double dt);
  J crewState()const;
+ // notices (room-runtime notify/toast)
+ void toast(const std::string& text);void toastAll(const std::string& text);
+ // hands (game.js carried/addCarried/selectSlot/setTool, cargo.js takeItem/giveItem/moveStack/refund)
+ int carried(const Crew& c,const std::string& type)const;
+ int addCarried(Crew& c,const std::string& type,int count);
+ void takeItem(Crew& c,const std::string& type,int count);
+ int giveItem(Crew& c,const std::string& type,int count);
+ void selectSlot(Crew& c,int n);
+ void moveStack(Crew& c,int from,int to,bool split);
+ void refund(Crew& c,const std::string& type,const V2* p);
+ // loose items (cargo.js)
+ Item& spawnItem(const std::string& type,V2 p,V2 velocity,int count);
+ void scatter(const std::string& type,int count,V2 p,J intakeFrom=J());
+ void dropItem(Crew& c,bool split);
+ void destroyItem(size_t index);
+ void mergeTouchingCargo();
+ void wakeCargoNear(V2 p,double radius);
+ // expando boxes (cargo.js)
+ Box& spawnBox(V2 p,const J& materials);
+ bool boxSpace(V2 p,double size,const Box* ignore,bool growing,const Crew* standing)const;
+ bool resizeBox(Box& b);
+ int boxInsert(Box& b,const std::string& type,int n);
+ Box* boxAt(V2 p);Box* boxNear(V2 p,double pad);
+ std::vector<std::pair<int,int>> helmCells()const;
+ // safeguards.js
+ bool solidCell(int x,int y,bool cargo)const;
+ V2 safeCell(V2 p,bool cargo)const;
+ bool wedgedInSolid(b2Body* b)const;
+ static uint16_t skinMaskOf(b2Fixture* f){auto p=f->GetUserData().pointer;return p?(uint16_t)(p&0xffff):f->GetFilterData().maskBits;}
+ void rescueBody(b2Body* b,bool cargo);
+ int mergeLooseStacks();
+ void tickSafeguards(double dt);
+ void tickHullLeaks();
+ void tickTrashDecay(double dt);
+ // commands (room-runtime command): the parts ported so far
+ void command(const std::string& id,const J& msg);
+ J state()const;   // the durable parts ported so far, in game.js state() form
+ double random();  // the core's own dice (xorshift, seeded per ship)
+ uint64_t seed=0x9e3779b97f4a7c15ull;
 };
+int stackLimit(const std::string& type);
 std::vector<std::vector<std::pair<double,double>>> cellLoops(const std::vector<std::pair<int,int>>& cells);
 }

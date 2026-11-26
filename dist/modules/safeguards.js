@@ -22,7 +22,7 @@ function safeCell(p,cargo=false){if(!finiteVec(p))p=V(helm.x,helm.y-1);const sta
  return V(helm.x,helm.y-1);}
 // Is this body's centre inside a solid interior shape (block, glass, wedge, pusher, hull)?
 // Only shapes the body actually collides with count (cargo resting on a loader, a background machine, is not stuck).
-function wedgedInSolid(body){const c=body.getPosition(),own=body.getFixtureList();const cat=own?own.getFilterCategoryBits():1,mask=own?own.getFilterMaskBits():0xffff;let stuck=false;inside.queryAABB(new P.AABB(V(c.x-.05,c.y-.05),V(c.x+.05,c.y+.05)),f=>{if(f.getBody()===interior&&f.getFilterCategoryBits()===1&&(f.getFilterMaskBits()&cat)&&(mask&1)&&f.testPoint(c)){stuck=true;return false;}return true;});return stuck;}
+function wedgedInSolid(body){const c=body.getPosition(),own=body.getFixtureList();const cat=own?own.getFilterCategoryBits():1,mask=own?own.getFilterMaskBits():0xffff;let stuck=false;inside.queryAABB(new P.AABB(V(c.x-.05,c.y-.05),V(c.x+.05,c.y+.05)),f=>{/* a tile the collision skin took over has mask 0 now: what it collided with before counts */if(f.getBody()===interior&&f.getFilterCategoryBits()===1&&((f.__skinMask??f.getFilterMaskBits())&cat)&&(mask&1)&&f.testPoint(c)){stuck=true;return false;}return true;});return stuck;}
 function clampSpeed(body,max){const v=body.getLinearVelocity(),s=v.length();if(s>max)body.setLinearVelocity(V(v.x*max/s,v.y*max/s));}
 function rescueBody(body,cargo=false){body.setTransform(safeCell(body.getPosition(),cargo),0);body.setLinearVelocity(V(0,0));body.setAngularVelocity(0);body.setAwake(true);}
 // Combine same-type loose stacks (up to the stack limit) without losing a single item.
