@@ -1,6 +1,7 @@
 #include "api.h"
 #include "rules.h"
 #include "ship.h"
+#include "zonegen.h"
 #include <memory>
 namespace nd {
 #ifdef ND_NO_EXCEPTIONS
@@ -69,6 +70,7 @@ static J dispatch(const J& q){const std::string op=str(field(q,"op",J("")));
  if(op=="init"){const J d=field(q,"data");if(d.is_null())fail("init needs data");loadData(d.is_string()?d.get<std::string>():d.dump());return {{"ok",true}};}
  if(op=="rule"){J a=field(q,"args",J::array());return {{"result",rule(str(field(q,"fn")),a.is_array()?a:J::array())}};}
  if(op=="version")return {{"core",1}};
+ if(op=="zone.generate"){ZoneGrid g=generateZone(num(q,"seed",0),field(q,"opts",J::object()));return g.toJSON(true);}
  fail("unknown op "+op);return J();}
 std::string call(const std::string& request){
  J q=J::parse(request,nullptr,false);if(q.is_discarded()||!q.is_object())return R"({"error":"request is not a JSON object"})";

@@ -36,7 +36,8 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 4 | loading saves (every migration in initialize), mounts (mountAt, mountValid, mountWidth, mountPoint, mountHit, inward), physics machines (spawnMachine, machineSpace, supportsMachine, machineOnTop, fabFits, syncMachines), spawn points, placement helpers | tests/core-ship-parts.cjs | done (exact; mount fixtures wait for the exterior, stage 7) |
 | 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut; game.js edit/interact/takeHelm/recover; pickupAt, useBox, turret ammo load/eject, turret controllers) | tests/core-build.cjs | done (edit's branches for later systems are marked TODO and do nothing) |
 | 5b | machinery (fabricators, loaders, pushers and the handheld pusher, recyclers, shredders, repairs, thruster tanks, comms, hatch filters, door/spawn/sign/paint settings) | tests/core-machines.cjs | done (ejectors and hatches' zone side wait for the exterior) |
-| 6 | zone generator, zones (rocks, mining, docks, Freeport, portals), missions | | |
+| 6a | zone generator (caves, pit, block) | tests/core-zonegen.cjs | done (bit for bit, every zone and seed) |
+| 6 | zones (rocks, mining, docks, Freeport, portals), missions | | |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
 | 9 | server on the core (all server tests pass), page prediction on the WebAssembly core | | |
