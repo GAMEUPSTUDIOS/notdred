@@ -1,5 +1,5 @@
 'use strict';
-// C++ core, stage 6: machines match the JavaScript game — fabricators (loading and ejecting bins, crafting queues,
+// C++ core, stage 5b: machines match the JavaScript game — fabricators (loading and ejecting bins, crafting queues,
 // repeat, clearing with refunds, finished items set down at the item doors), loaders (from the floor, through walkways,
 // into fabricators, boxes, turrets, thrusters and the floor; filters; hold or drop what's refused; recyclers'
 // output), pushers (push, pull, filters, beams through walkways and glass, settings), the handheld pusher, recyclers
