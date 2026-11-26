@@ -25,7 +25,10 @@ struct Error:std::runtime_error{using std::runtime_error::runtime_error;};
 #endif
 struct V2{double x=0,y=0;V2(){}V2(double a,double b):x(a),y(b){}
  V2 operator+(V2 o)const{return {x+o.x,y+o.y};}V2 operator-(V2 o)const{return {x-o.x,y-o.y};}V2 operator*(double k)const{return {x*k,y*k};}
- double len()const{return std::hypot(x,y);}double dot(V2 o)const{return x*o.x+y*o.y;}};
+ // planck.js Vec2 semantics (the old rules' vectors): length is sqrt(x²+y²) — not Math.hypot, which rounds differently
+ // (jsmath::hypot is Math.hypot) — and normalize multiplies by 1/length, leaving vectors shorter than 1e-9 alone.
+ double len()const{return std::sqrt(x*x+y*y);}double dot(V2 o)const{return x*o.x+y*o.y;}
+ void normalize(){const double l=len();if(l<1e-9)return;const double k=1/l;x*=k;y*=k;}};
 inline double clamp(double v,double a,double b){return std::max(a,std::min(b,v));}
 // Ship bounds in ship tiles (left, right, top, bottom: inclusive hull rows/columns).
 struct Bounds{int l=-5,r=5,t=-4,b=3;};

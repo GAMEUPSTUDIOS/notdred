@@ -47,7 +47,7 @@ bool Ship::placementPoint(std::pair<int,int> c,const std::string& type,const Cre
 // Why tile p can't take a piece ("" when it can). ignoreHelm: moving the helm may overlap where it stands now.
 std::string Ship::cellTaken(int x,int y,bool ignoreHelm)const{if(!interiorCell(x,y))return "Build inside the ship.";if(blocks.has(key(x,y))||terrainAt(x,y))return "This cell is occupied.";
  if(!ignoreHelm)for(auto [hx,hy]:helmCells())if(hx==x&&hy==y)return "The 2×2 helm is here.";
- for(auto& b:boxes){b2Vec2 q=b->body->GetPosition();if(std::fabs(q.x-x)<b->size/2+.47&&std::fabs(q.y-y)<b->size/2+.47)return "An expando box is in the way.";}
+ for(auto& b:boxes){V2 q=vv(b->body->GetPosition());if(std::fabs(q.x-x)<b->size/2+.47&&std::fabs(q.y-y)<b->size/2+.47)return "An expando box is in the way.";}
  for(auto& [k,t]:terrain)if(t.body){int w,h;sizeOf(t.type,w,h);V2 q=t.mpos;if(std::fabs(q.x-x)<w/2.0+.47&&std::fabs(q.y-y)<h/2.0+.47){
    const J& n=names();return t.type=="fabricator"?"A fabricator is in the way.":n.contains(t.type)?"The "+lower(nameOf(t.type))+" is in the way.":"A machine is in the way.";}}
  return "";}
@@ -64,7 +64,7 @@ std::string Ship::validity(std::pair<int,int> c,const std::string& t,Crew& who){
  for(auto [x,y]:cells){std::string r=cellTaken(x,y,t=="helm");if(!r.empty()){if(t=="door"&&r=="This cell is occupied.")return "A door needs two clear tiles, one above the other.";
    if(cells.size()>1&&r=="This cell is occupied.")return (t=="helm"?std::string("Helm"):nameOf(t))+" needs a clear "+std::to_string(w)+"×"+std::to_string(h)+" space.";return r;}}
  if(inTable("SOLID_PIECES",t)){V2 pl=pos(who);for(auto [x,y]:cells)if(std::fabs(x-pl.x)<.75&&std::fabs(y-pl.y)<1.15)return "You are standing here.";
-  for(auto [x,y]:cells)for(auto& i:items){b2Vec2 q=i->body->GetPosition();if(std::fabs(q.x-x)<.85&&std::fabs(q.y-y)<.85)return "Pick up the item here first.";}}
+  for(auto [x,y]:cells)for(auto& i:items){V2 q=vv(i->body->GetPosition());if(std::fabs(q.x-x)<.85&&std::fabs(q.y-y)<.85)return "Pick up the item here first.";}}
  if(t=="helm"&&!(c.second==bounds.b-1||(supportsMachine(c.first,c.second+1)&&supportsMachine(c.first+1,c.second+1))))return "Place this on the floor, a block or a walkway.";
  if(inTable("STANDING_MACHINES",t)){bool ok=c.second+h-1==bounds.b-1;if(!ok){ok=true;for(int k=0;k<w;k++)if(!supportsMachine(c.first+k,c.second+h))ok=false;}
   if(!ok)return nameOf(t)+" needs a clear "+std::to_string(w)+"×"+std::to_string(h)+" area, supported across its bottom.";}

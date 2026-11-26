@@ -38,5 +38,9 @@ template<class K,class Vv> struct OMap{
  void clear(){items.clear();index.clear();}
  auto begin(){return items.begin();}auto end(){return items.end();}auto begin()const{return items.begin();}auto end()const{return items.end();}
 };
+// planck.js body.getLocalPoint / getWorldPoint, in doubles: the old rules ran on planck's copy of each body — the
+// position Box2D handed back, and the sine and cosine of its angle as V8 computes them (not Box2D's float rotation).
+V2 localPoint(const b2Body* b,V2 p);
+V2 worldPoint(const b2Body* b,V2 local);
 inline std::string key(int x,int y){return std::to_string(x)+","+std::to_string(y);}
 }

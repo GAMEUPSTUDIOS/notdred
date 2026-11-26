@@ -1,6 +1,7 @@
 // The zone generator (dist/zone-generator.js), ported bit for bit: the same seed gives the same caves, holes and
 // block as the JavaScript (the page and every server generate zones from seeds, so they must agree exactly).
 #include "zonegen.h"
+#include "jsmath.h"
 namespace nd {
 // JavaScript's ToInt32 (|0, Math.imul's operands): a double wrapped to 32 bits.
 static int32_t toInt32(double v){if(!std::isfinite(v))return 0;double t=std::trunc(v);double m=std::fmod(t,4294967296.0);if(m<0)m+=4294967296.0;uint32_t u=(uint32_t)m;return (int32_t)u;}
@@ -39,7 +40,7 @@ static ZoneGrid generateBlock(double seed,const J& o){int CLX,CLY;clearCL(o,CLX,
  const double b0=2+ring,b1=g.width-3-ring,c0=2+ring,c1=g.height-3-ring,half=std::max(b1-b0,c1-c0)/2;int mineable=0;
  const double coreR=optOr(o,"coreRadius",.5),fluxEdge=optNullish(o,"fluxEdge",.015),fluxCore=optNullish(o,"fluxCore",.6),turretOre=optNullish(o,"turretOre",.025),iron=optNullish(o,"iron",.16);
  for(int y=2;y<g.height-2;y++)for(int x=2;x<g.width-2;x++){const int i=idx(x,y);if(x<b0||x>b1||y<c0||y>c1){g.solid[i]=0;g.kinds[i]=0;continue;}
-  const double d=std::max(std::fabs(x-cx),std::fabs(y-cy))/half,core=std::max(0.0,1-d/coreR),flux=fluxEdge+fluxCore*std::pow(core,1.3),r=hash(x,y,1);
+  const double d=std::max(std::fabs(x-cx),std::fabs(y-cy))/half,core=std::max(0.0,1-d/coreR),flux=fluxEdge+fluxCore*jsmath::pow(core,1.3),r=hash(x,y,1);
   g.kinds[i]=r<flux?4:r<flux+turretOre?3:r<flux+turretOre+iron?5:2;mineable++;}
  fitCenters(g,CLX,CLY);const double ex=0,ey=g.minY+(c0-ring/2-.5)*g.cell;g.start=idx((int)cx,(int)jsRound((ey-g.minY)/g.cell));g.connectors=0;g.version=CLX>3?2:1;
  g.extra={{"mineable",mineable},{"block",{{"x0",b0},{"x1",b1},{"y0",c0},{"y1",c1},{"cx",cx},{"cy",cy},{"half",half}}},{"entry",{{"x",ex},{"y",ey}}}};return g;}

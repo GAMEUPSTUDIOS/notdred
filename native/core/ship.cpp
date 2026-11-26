@@ -1,4 +1,5 @@
 #include "ship.h"
+#include "jsmath.h"
 namespace nd {
 uint16_t rankBit(const std::string& r){return r=="captain"?32:r=="crew"?64:r=="guest"?128:32;}
 static bool doorAllows(const std::string& access,const std::string& rank){return access=="guest"||rank=="captain"||(access=="crew"&&rank=="crew");}
@@ -167,7 +168,7 @@ Tile* Ship::addTerrain(const std::string& type,int x,int y,int rotation){if(type
  if(inList("PHYSICS_MACHINES",type)){int w,h;machineSize(type,w,h);return &spawnMachine(type,{x+(w-1)/2.0,y+(h-1)/2.0},J::object(),"");}
  Tile t;t.type=type;t.x=x;t.y=y;t.rotation=rotation;b2Fixture* f=nullptr;
  if(type=="wedge"||type=="walkway_wedge"){double a=rotation*M_PI/2;b2Vec2 vs[3];const double pts[3][2]={{-.5,-.5},{.5,.5},{-.5,.5}};
-  for(int i=0;i<3;i++)vs[i]=b2Vec2((float)(x+pts[i][0]*std::cos(a)-pts[i][1]*std::sin(a)),(float)(y+pts[i][0]*std::sin(a)+pts[i][1]*std::cos(a)));
+  for(int i=0;i<3;i++)vs[i]=b2Vec2((float)(x+pts[i][0]*jsmath::cos(a)-pts[i][1]*jsmath::sin(a)),(float)(y+pts[i][0]*jsmath::sin(a)+pts[i][1]*jsmath::cos(a)));
   b2PolygonShape s;s.Set(vs,3);f=type=="walkway_wedge"?fixture(s,.65f,CAT_WALKWAY,2|512):fixture(s,.65f);}
  if(type=="walkway"){auto s=boxShape(.5,.5,{(double)x,(double)y});f=fixture(s,.7f,CAT_WALKWAY,2|512);}
  if(type=="glass"){auto s=boxShape(.5,.5,{(double)x,(double)y});f=fixture(s,.02f);}

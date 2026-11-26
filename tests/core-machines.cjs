@@ -60,5 +60,5 @@ function compare(name,label,want,got){
    else if(st[0]==='tick'){for(let i=0;i<st[1];i++){g.command('a',{action:'input',keys:{}});g.tick(1/60);}for(const c of cores)for(let i=0;i<st[1];i++){c.core.call({op:'ship.command',ship:c.ship,uid:'a',msg:{action:'input',keys:{}}});c.core.call({op:'ship.command',ship:c.ship,uid:'b',msg:{action:'input',keys:{}}});c.core.call({op:'ship.tick',ship:c.ship,n:1});}}
    n++;const want=jsState();for(const c of cores){compare(c.name,label+' (step '+n+': '+JSON.stringify(st).slice(0,60)+')',want,coreState(c));checks++;}}
   g.dispose?.();for(const c of cores)c.core.call({op:'ship.dispose',ship:c.ship});}
- console.log('PASS: C++ core stage 6 — fabricators, loaders, pushers, recyclers, shredders, repairs and machine settings match the JavaScript game in both builds ('+scenarios.length+' scenarios, '+checks+' comparisons).');process.exit(0);
+ console.log('PASS: C++ core stage 5b — fabricators, loaders, pushers, recyclers, shredders, repairs and machine settings match the JavaScript game in both builds ('+scenarios.length+' scenarios, '+checks+' comparisons).');process.exit(0);
 })().catch(e=>{console.error(e);process.exit(1);});

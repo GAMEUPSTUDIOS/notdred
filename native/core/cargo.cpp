@@ -1,6 +1,7 @@
 // Hands, loose items, expando boxes and the cargo safeguards: dist/modules/cargo.js, dist/modules/safeguards.js and
 // the inventory helpers of dist/game.js, ported one for one.
 #include "ship.h"
+#include "jsmath.h"
 namespace nd {
 static const char* SINGLE[]={"wrench","fabricator","thruster","turret","turret_burst","turret_auto","turret_controller","starter_rc","starter","storage","shredder","shredder_gold","pusher","repair","pusher_block","fab_starter","fab_machine","fab_engineering","fab_munitions","loader","recycler","anchor","comms","spawn"};
 int stackLimit(const std::string& type){for(const char* s:SINGLE)if(type==s)return 1;return 16;}
@@ -33,7 +34,7 @@ void Ship::scatter(const std::string& type,int count,V2 p,J intakeFrom){while(co
   spawnItem(type,{x,clamp(p.y-.4,bounds.t+.9,bounds.b-.9)},{0,0},n).intakeFrom=intakeFrom;count-=n;}}
 void Ship::destroyItem(size_t i){inside->destroy(items[i]->body);items.erase(items.begin()+i);}
 void Ship::dropItem(Crew& c,bool split){const std::string t=c.slots[c.selected];if(c.piloting||t.empty()||!c.counts[c.selected]){toast("Select a carried item while on foot.");return;}
- V2 p=vv(c.body->GetPosition()),aim=c.mouseActive?c.mouse:V2(p.x+c.facing,p.y-.3),dir=aim-p;if(dir.len()<.01)dir.x=c.facing;{double l=dir.len();if(l>=1e-9){dir.x/=l;dir.y/=l;}}
+ V2 p=vv(c.body->GetPosition()),aim=c.mouseActive?c.mouse:V2(p.x+c.facing,p.y-.3),dir=aim-p;if(dir.len()<.01)dir.x=c.facing;dir.normalize();
  const V2 cand[4]={{p.x+dir.x*.9,p.y+dir.y*.9},{p.x-c.facing*.9,p.y-.3},{p.x,p.y-.95},{p.x,p.y}};const V2* q=nullptr;
  for(const V2& o:cand){if(!(o.x>bounds.l+.85&&o.x<bounds.r-.85&&o.y>bounds.t+.85&&o.y<bounds.b-.85))continue;bool hit=false;
   for(auto& [k,b]:blocks)if(std::fabs(b.x-o.x)<.85&&std::fabs(b.y-o.y)<.85){hit=true;break;}
@@ -42,7 +43,7 @@ void Ship::dropItem(Crew& c,bool split){const std::string t=c.slots[c.selected];
  if(!q){toast("Make room to drop the item.");return;}int count=split?(c.counts[c.selected]+1)/2:c.counts[c.selected];c.counts[c.selected]-=count;if(!c.counts[c.selected])c.slots[c.selected].clear();
  spawnItem(t,*q,{dir.x*5,dir.y*5},count);selectSlot(c,c.selected);}
 static double cargoHalf(b2Body* b){b2Fixture* f=b->GetFixtureList();if(f&&f->GetType()==b2Shape::e_polygon)return std::fabs(((b2PolygonShape*)f->GetShape())->m_vertices[0].x);return .32;}
-static bool cargoNear(b2Body* a,b2Body* b){auto p=a->GetPosition(),q=b->GetPosition();return std::hypot(p.x-q.x,p.y-q.y)<(cargoHalf(a)+cargoHalf(b))*1.15;}
+static bool cargoNear(b2Body* a,b2Body* b){V2 p=vv(a->GetPosition()),q=vv(b->GetPosition());return jsmath::hypot(p.x-q.x,p.y-q.y)<(cargoHalf(a)+cargoHalf(b))*1.15;}
 // Stacks of one type that touch (or sit face to face within a few hundredths) become one; resting ones are looked at
 // every MERGE_FULL ticks, awake ones every tick.
 void Ship::mergeTouchingCargo(){const int MERGE_FULL=data().raw.at("MERGE_FULL");const bool full=(++mergePass%MERGE_FULL)==0;
@@ -82,8 +83,8 @@ bool Ship::resizeBox(Box& box){const double size=2+std::floor(total(box.material
 int Ship::boxInsert(Box& box,const std::string& type,int n){if(n<=0)return 0;{std::string have;for(auto& [k,v]:box.materials.items())if(v.is_number()&&v.get<int>()>0){have=k;break;}if(!have.empty()&&have!=type)return 0;}
  const int t=total(box.materials);auto add=[&](int k){box.materials[type]=(box.materials.contains(type)?box.materials[type].get<int>():0)+k;};
  add(n);if(resizeBox(box))return n;add(-n);const int fits=std::min(n,(t/64+1)*64-1-t);if(fits<=0)return 0;add(fits);if(resizeBox(box))return fits;add(-fits);return 0;}
-Box* Ship::boxAt(V2 p){for(auto& b:boxes){b2Vec2 q=b->body->GetLocalPoint(bv(p));if(std::fabs(q.x)<b->size/2&&std::fabs(q.y)<b->size/2)return b.get();}return nullptr;}
-Box* Ship::boxNear(V2 p,double pad){if(Box* b=boxAt(p))return b;for(auto& b:boxes){b2Vec2 q=b->body->GetLocalPoint(bv(p));if(std::fabs(q.x)<b->size/2+pad&&std::fabs(q.y)<b->size/2+pad)return b.get();}return nullptr;}
+Box* Ship::boxAt(V2 p){for(auto& b:boxes){V2 q=localPoint(b->body,p);if(std::fabs(q.x)<b->size/2&&std::fabs(q.y)<b->size/2)return b.get();}return nullptr;}
+Box* Ship::boxNear(V2 p,double pad){if(Box* b=boxAt(p))return b;for(auto& b:boxes){V2 q=localPoint(b->body,p);if(std::fabs(q.x)<b->size/2+pad&&std::fabs(q.y)<b->size/2+pad)return b.get();}return nullptr;}
 // ---- Safeguards (safeguards.js) -------------------------------------------------------------------------------------
 bool Ship::solidCell(int x,int y,bool cargo)const{if(blocks.has(key(x,y)))return true;const Tile* t=terrainAt(x,y);
  return t&&among(t->type,{"door","wedge","glass","pusher_block","loader","paint","fabricator","net","walkway","walkway_wedge"})&&!(cargo&&t->type=="loader");}
@@ -91,7 +92,7 @@ V2 Ship::safeCell(V2 p,bool cargo)const{if(!std::isfinite(p.x)||!std::isfinite(p
  struct C{int x,y;};C start{(int)clamp(jsRound(p.x),bounds.l+1,bounds.r-1),(int)clamp(jsRound(p.y),bounds.t+1,bounds.b-1)};std::unordered_set<std::string> seen{key(start.x,start.y)};std::vector<C> q{start};
  auto hc=helmCells();
  for(size_t i=0;i<q.size();i++){C c=q[i];bool helmHere=false;for(auto [hx,hy]:hc)if(hx==c.x&&hy==c.y)helmHere=true;
-  bool boxHere=false;if(cargo)for(auto& b:boxes){b2Vec2 w=b->body->GetPosition();if(std::fabs(w.x-c.x)<b->size/2+.4&&std::fabs(w.y-c.y)<b->size/2+.4){boxHere=true;break;}}
+  bool boxHere=false;if(cargo)for(auto& b:boxes){V2 w=vv(b->body->GetPosition());if(std::fabs(w.x-c.x)<b->size/2+.4&&std::fabs(w.y-c.y)<b->size/2+.4){boxHere=true;break;}}
   if(!solidCell(c.x,c.y,cargo)&&!helmHere&&!boxHere)return {(double)c.x,(double)c.y};
   for(auto [dx,dy]:std::initializer_list<std::pair<int,int>>{{1,0},{-1,0},{0,1},{0,-1}}){C n{c.x+dx,c.y+dy};if(n.x<=bounds.l||n.x>=bounds.r||n.y<=bounds.t||n.y>=bounds.b)continue;std::string k=key(n.x,n.y);if(seen.count(k))continue;seen.insert(k);q.push_back(n);}}
  return {(double)helm.x,helm.y-1.0};}
@@ -113,7 +114,7 @@ void Ship::tickSafeguards(double dt){const J& S=data().raw.at("SAFETY");const do
  // TODO stage 7 (exterior): past hardLooseStacks the oldest excess stacks are ejected into the zone as loot.
 }
 // Cargo pushed out through solid hull goes back in (a broken hull lets it out into the zone: stage 7, with the exterior).
-void Ship::tickHullLeaks(){for(auto& i:items){b2Vec2 p=i->body->GetPosition();if(p.x>bounds.l-.5&&p.x<bounds.r+.5&&p.y>bounds.t-.5&&p.y<bounds.b+.5)continue;if(std::isfinite(p.x)&&std::isfinite(p.y))rescueBody(i->body,true);}}
+void Ship::tickHullLeaks(){for(auto& i:items){V2 p=vv(i->body->GetPosition());if(p.x>bounds.l-.5&&p.x<bounds.r+.5&&p.y>bounds.t-.5&&p.y<bounds.b+.5)continue;if(std::isfinite(p.x)&&std::isfinite(p.y))rescueBody(i->body,true);}}
 void Ship::tickTrashDecay(double dt){const double life=val(data().ammo.at("trash"),"itemDecay",45.0);
  for(size_t k=items.size();k-->0;){Item& i=*items[k];if(i.type=="trash"&&random()<dt/life){i.count--;if(i.count<=0)destroyItem(k);}}
  for(auto& b:boxes){int n=b->materials.contains("trash")&&b->materials["trash"].is_number()?b->materials["trash"].get<int>():0;if(n>0&&random()<dt*std::min(16,n)/life/4)b->materials["trash"]=n-1;}}

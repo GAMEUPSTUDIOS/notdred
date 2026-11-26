@@ -30,8 +30,8 @@ bool Ship::machineSpace(const std::string& type,V2 p,const Crew* standing)const{
  if(p.x-hw<bounds.l+.5||p.x+hw>bounds.r-.5||p.y-hh<bounds.t+.5||p.y+hh>bounds.b-.5)return false;
  for(int x=(int)jsRound(p.x-hw+.5);x<=(int)jsRound(p.x+hw-.5);x++)for(int y=(int)jsRound(p.y-hh+.5);y<=(int)jsRound(p.y+hh-.5);y++){if(blocks.has(key(x,y)))return false;const Tile* t=terrainAt(x,y);if(t&&!among(t->type,{"ladder","walkway","net","sign"}))return false;}
  for(auto [cx,cy]:helmCells())if(std::fabs(cx-p.x)<hw+.5&&std::fabs(cy-p.y)<hh+.5)return false;
- if(standing){b2Vec2 q=standing->body->GetPosition();if(std::fabs(q.x-p.x)<hw+.24&&std::fabs(q.y-p.y)<hh+.63)return false;}
- for(auto& b:boxes){b2Vec2 q=b->body->GetPosition();if(std::fabs(q.x-p.x)<(b->size/2+hw)&&std::fabs(q.y-p.y)<(b->size/2+hh))return false;}
+ if(standing){V2 q=vv(standing->body->GetPosition());if(std::fabs(q.x-p.x)<hw+.24&&std::fabs(q.y-p.y)<hh+.63)return false;}
+ for(auto& b:boxes){V2 q=vv(b->body->GetPosition());if(std::fabs(q.x-p.x)<(b->size/2+hw)&&std::fabs(q.y-p.y)<(b->size/2+hh))return false;}
  for(auto& [k,t]:terrain)if(t.body){int w2,h2;sizeOf(t.type,w2,h2);V2 q=t.mpos;if(std::fabs(q.x-p.x)<(w2+w)/2.0&&std::fabs(q.y-p.y)<(h2+h)/2.0)return false;}
  return true;}
 bool Ship::supportsMachine(int x,int y)const{if(blocks.has(key(x,y)))return true;const Tile* t=terrainAt(x,y);return t&&(t->type=="walkway"||t->type=="glass");}

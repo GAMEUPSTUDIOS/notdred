@@ -3,6 +3,7 @@
 // the shredAt/pushAt parts of dist/game.js and repairAt of combat.js, ported one for one. A tile's settings and
 // working state live in its `extra` object under the JavaScript field names.
 #include "ship.h"
+#include "jsmath.h"
 namespace nd {
 std::string nameOf(const std::string& t);
 static bool among(const std::string& t,std::initializer_list<const char*> l){for(const char* s:l)if(t==s)return true;return false;}
@@ -58,7 +59,7 @@ bool Ship::configureHatch(Crew& c,std::pair<int,int> cell,const J& mode,const J&
  Tile& t=const_cast<Tile&>(*tc);t.extra["filterMode"]=mode;J uniq=J::array();for(auto& x:list){bool dup=false;for(auto& y:uniq)if(y==x)dup=true;if(!dup)uniq.push_back(x);}while(uniq.size()>data().types.size())uniq.erase(uniq.size()-1);t.extra["filterItems"]=uniq;
  if(t.type=="loader")t.extra["requireOutput"]=requireOutput;if(t.type=="pusher_block")t.extra["pull"]=pull;return true;}
 // ---- Pushers -----------------------------------------------------------------------------------------------------------
-static V2 pusherDirection(const Tile& t){const double a=t.rotation*M_PI/2;return {jsRound(std::cos(a)),jsRound(std::sin(a))};}
+static V2 pusherDirection(const Tile& t){const double a=t.rotation*M_PI/2;return {jsRound(jsmath::cos(a)),jsRound(jsmath::sin(a))};}
 static void pusherSettings(Tile& t){J& e=t.extra;if(e.contains("mode")&&!e["mode"].is_null()&&!(e["mode"].is_string()&&e["mode"].get<std::string>().empty()))return;
  const std::string fm=val(e,"filterMode",std::string("all"));const std::string base=fm=="off"?"off":val(e,"pull",false)?"pull":"push";J list=J::array();if(e.contains("filterItems")&&e["filterItems"].is_array())for(size_t i=0;i<e["filterItems"].size()&&i<3;i++)list.push_back(e["filterItems"][i]);
  e["maxBeam"]=data().raw.at("PUSHER_MAX_BEAM");e["speed"]=data().raw.at("PUSHER_SPEED");e["filterInv"]=false;J f=list;while(f.size()<3)f.push_back(nullptr);e["filters"]=f;
@@ -88,12 +89,12 @@ Ship::Beam Ship::pusherBeam(Tile& t){pusherSettings(t);const V2 d=pusherDirectio
  if(first&&firstFrac<wall)return {d,firstFrac*reach,first};return {d,wall*reach,nullptr};}
 void Ship::tickPushers(double dt){const double accel=data().raw.at("PUSHER_ACCEL").get<double>(),speed0=data().raw.at("PUSHER_SPEED").get<double>();
  for(auto& [k,t]:terrain){if(t.type!="pusher_block")continue;Beam b=pusherBeam(t);t.extra["beam"]=b.length;std::string mode=b.hit?pusherModeFor(t,b.hit):t.extra["mode"].get<std::string>();t.extra["beamMode"]=mode;if(!b.hit||mode=="off")continue;
-  const double sign=mode=="pull"?-1:1,target=num(t.extra,"speed",0)?num(t.extra,"speed"):speed0;b2Vec2 p=b.hit->GetPosition();const V2 d=b.d;
-  if(mode=="pull"&&std::fabs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){b2Vec2 v=b.hit->GetLinearVelocity();double along=v.x*d.x+v.y*d.y;if(along<0)b.hit->SetLinearVelocity(b2Vec2((float)(v.x-along*d.x),(float)(v.y-along*d.y)));continue;}
-  b2Vec2 v=b.hit->GetLinearVelocity();double along=(v.x*d.x+v.y*d.y)*sign;if(along>=target)continue;b.hit->SetAwake(true);const double m=b.hit->GetMass()*std::min(target-along,accel*dt)*sign;
+  const double sign=mode=="pull"?-1:1,target=num(t.extra,"speed",0)?num(t.extra,"speed"):speed0;V2 p=vv(b.hit->GetPosition());const V2 d=b.d;
+  if(mode=="pull"&&std::fabs((p.x-t.x)*d.x+(p.y-t.y)*d.y)<1.25){V2 v=vv(b.hit->GetLinearVelocity());double along=v.x*d.x+v.y*d.y;if(along<0)b.hit->SetLinearVelocity(b2Vec2((float)(v.x-along*d.x),(float)(v.y-along*d.y)));continue;}
+  V2 v=vv(b.hit->GetLinearVelocity());double along=(v.x*d.x+v.y*d.y)*sign;if(along>=target)continue;b.hit->SetAwake(true);const double m=b.hit->GetMass()*std::min(target-along,accel*dt)*sign;
   b.hit->ApplyLinearImpulse(b2Vec2((float)(d.x*m),(float)(d.y*m)),b.hit->GetWorldCenter(),true);}}
 // The handheld pusher (game.js pushAt): a beam from you to the aim, through what beams cross; the first object is pushed.
-void Ship::pushAt(Crew& c,V2 p,double dt){V2 from=pos(c),d{p.x-from.x,p.y-from.y};if(d.len()<.01)return;{double l=d.len();d.x/=l;d.y/=l;}const double R=data().raw.at("HAND_PUSHER_RANGE");V2 end{from.x+d.x*R,from.y+d.y*R};
+void Ship::pushAt(Crew& c,V2 p,double dt){V2 from=pos(c),d{p.x-from.x,p.y-from.y};if(d.len()<.01)return;d.normalize();const double R=data().raw.at("HAND_PUSHER_RANGE");V2 end{from.x+d.x*R,from.y+d.y*R};
  b2Body* hit=nullptr;V2 point=end;double fraction=1;inside->rayCast(from,end,[&](b2Fixture* f,b2Vec2 pt,b2Vec2,float t)->float{b2Body* body=f->GetBody();if(body==c.body||f->IsSensor())return -1;
   if(body==interior&&beamPasses(f,pt,d))return -1;if(body!=interior&&body->GetType()!=b2_dynamicBody)return -1;if(t<fraction){fraction=t;hit=body;point=vv(pt);}return t;});
  c.pusherVisual={{"from",{{"x",from.x},{"y",from.y}}},{"to",{{"x",point.x},{"y",point.y}}},{"pull",c.pusherPull},{"until",clock+.09}};
@@ -103,14 +104,14 @@ struct Ends{V2 d;std::pair<int,int> input,output;};
 static Ends loaderEnds(const Tile& t){V2 d=pusherDirection(t);return {d,{(int)(t.x-d.x),(int)(t.y-d.y)},{(int)(t.x+d.x),(int)(t.y+d.y)}};}
 std::vector<std::pair<int,int>> Ship::loaderInputCells(const Tile& t,std::pair<int,int> c)const{V2 d=pusherDirection(t);std::vector<std::pair<int,int>> cells{c};auto q=c;
  for(int n=0;n<4;n++){const Tile* there=terrainAt(q.first,q.second);if(!there||!inTable("LOADER_REACHES_THROUGH",there->type))break;q={q.first-(int)d.x,q.second-(int)d.y};cells.push_back(q);}return cells;}
-static bool inLoaderHotbox(const Tile& t,b2Vec2 p){V2 d=pusherDirection(t);const J& H=data().raw.at("LOADER_HOTBOX");const double rx=p.x-t.x,ry=p.y-t.y,back=-(rx*d.x+ry*d.y),side=std::fabs(rx*d.y-ry*d.x);
+static bool inLoaderHotbox(const Tile& t,V2 p){V2 d=pusherDirection(t);const J& H=data().raw.at("LOADER_HOTBOX");const double rx=p.x-t.x,ry=p.y-t.y,back=-(rx*d.x+ry*d.y),side=std::fabs(rx*d.y-ry*d.x);
  return back>H.at("near").get<double>()&&back<H.at("far").get<double>()&&side<H.at("half").get<double>();}
 bool Ship::loaderTake(Tile& t,std::pair<int,int> c,J& got){
  if(const Tile* src=terrainAt(c.first,c.second))if(src->type=="recycler"&&src->extra.contains("output")&&src->extra["output"].is_array()&&src->extra["output"].size()){J& out=const_cast<Tile*>(src)->extra["output"];
    for(size_t i=0;i<out.size();i++)if(hatchAllows(t,val(out[i],"type",""))){got={{"type",out[i]["type"]},{"count",out[i]["count"]}};out.erase(i);return true;}}
- auto cells=loaderInputCells(t,c);auto near=[&](b2Vec2 p,std::pair<int,int> q){const Tile* tq=terrainAt(q.first,q.second);bool walk=tq&&inTable("LOADER_REACHES_THROUGH",tq->type);return std::fabs(p.x-q.first)<.6&&p.y-q.second<.6&&q.second-p.y<(walk?1.1:.6);};
+ auto cells=loaderInputCells(t,c);auto near=[&](V2 p,std::pair<int,int> q){const Tile* tq=terrainAt(q.first,q.second);bool walk=tq&&inTable("LOADER_REACHES_THROUGH",tq->type);return std::fabs(p.x-q.first)<.6&&p.y-q.second<.6&&q.second-p.y<(walk?1.1:.6);};
  const std::string me=key((int)t.x,(int)t.y);
- for(Item* i:nearbyItems(t,cells)){b2Vec2 p=i->body->GetPosition();bool in=inLoaderHotbox(t,p);if(!in)for(auto& q:cells)if(near(p,q)){in=true;break;}
+ for(Item* i:nearbyItems(t,cells)){V2 p=vv(i->body->GetPosition());bool in=inLoaderHotbox(t,p);if(!in)for(auto& q:cells)if(near(p,q)){in=true;break;}
   if(in&&!(i->intakeFrom.is_string()&&i->intakeFrom.get<std::string>()==me)&&hatchAllows(t,i->type)){got={{"type",i->type},{"count",i->count}};i->taken=true;for(size_t k=0;k<items.size();k++)if(items[k].get()==i){destroyItem(k);break;}return true;}}
  Box* outBox=nullptr;{auto o=loaderEnds(t).output;outBox=boxNear({(double)o.first,(double)o.second},.55);}
  for(auto& q:cells){Box* b=boxAt({(double)q.first,(double)q.second});if(b&&b!=outBox){std::string type;for(auto& k:data().types)if(num(b->materials,k.c_str())>0&&hatchAllows(t,k)){type=k;break;}
@@ -131,15 +132,15 @@ int Ship::loaderGive(Tile& t,std::pair<int,int> c,J& stack){t.extra["refused"]=f
   if(m.type=="thruster"){if(type!="fuel"&&type!="explosives")return refuse();double& tank=type=="fuel"?m.fuelItems:m.explosiveItems;int n=std::min(count,data().raw.at("THRUSTER_TANK").get<int>()-(int)tank);if(n>0)tank+=n;return std::max(0,n);}}
  if(val(t.extra,"requireOutput",false)||!interiorCell(c.first,c.second)||blocks.has(key(c.first,c.second)))return 0;
  if(const Tile* there=terrainAt(c.first,c.second))if(among(there->type,{"wedge","glass","net","fabricator","loader","pusher_block","walkway_wedge"}))return 0;
- for(auto& i:items){b2Vec2 p=i->body->GetPosition();if(std::fabs(p.x-c.first)<.7&&std::fabs(p.y-c.second)<.7)return 0;}
+ for(auto& i:items){V2 p=vv(i->body->GetPosition());if(std::fabs(p.x-c.first)<.7&&std::fabs(p.y-c.second)<.7)return 0;}
  spawnItem(type,{(double)c.first,(double)c.second},{0,0},count).intakeFrom=key((int)t.x,(int)t.y);return count;}
 bool Ship::loaderDrop(Tile& t,const J& stack,std::pair<int,int> output,std::pair<int,int> input){auto open=[&](std::pair<int,int> c){if(!interiorCell(c.first,c.second)||blocks.has(key(c.first,c.second))||mountHit({(double)c.first,(double)c.second}))return false;
-   for(auto& b:boxes){b2Vec2 q=b->body->GetPosition();if(std::fabs(q.x-c.first)<b->size/2+.3&&std::fabs(q.y-c.second)<b->size/2+.3)return false;}
+   for(auto& b:boxes){V2 q=vv(b->body->GetPosition());if(std::fabs(q.x-c.first)<b->size/2+.3&&std::fabs(q.y-c.second)<b->size/2+.3)return false;}
    const Tile* tt=terrainAt(c.first,c.second);return !(tt&&among(tt->type,{"wedge","glass","net","loader","pusher_block","walkway_wedge","hatch","starter_hatch","door"}));};
  const std::pair<int,int> up{(int)t.x,(int)t.y-1};const std::pair<int,int>* c=nullptr;const std::pair<int,int>* opts[3]={&output,&up,&input};for(const auto* o:opts)if(open(*o)){c=o;break;}if(!c)return false;
  spawnItem(stack["type"],{(double)c->first,(double)c->second},{0,0},stack["count"]).intakeFrom=key((int)t.x,(int)t.y);return true;}
 void Ship::tickLoaders(double dt){bool any=false;for(auto& [k,t]:terrain)if(t.type=="loader"){any=true;break;}if(!any)return;
- itemGrid.clear();for(auto& i:items){b2Vec2 p=i->body->GetPosition();itemGrid[((long long)((int)std::floor(p.x/2)+32768)<<17)^((int)std::floor(p.y/2)+32768)].push_back(i.get());}
+ itemGrid.clear();for(auto& i:items){V2 p=vv(i->body->GetPosition());itemGrid[((long long)((int)std::floor(p.x/2)+32768)<<17)^((int)std::floor(p.y/2)+32768)].push_back(i.get());}
  const double half=data().raw.at("LOADER_CYCLE").get<double>()/2;
  for(auto& [k,t]:terrain){if(t.type!="loader")continue;J& e=t.extra;ensure(e,{"cooldown","cargo","phase","swing","refused","flash"});e["cooldown"]=std::max(0.0,num(e,"cooldown",0)-dt);if(!e.contains("cargo")||!e["cargo"].is_array())e["cargo"]=J::array();if(!e.contains("phase")||e["phase"].is_null())e["phase"]=0;
   std::string swing=e["swing"].is_string()?e["swing"].get<std::string>():std::string();if(swing.empty()){swing=e["cargo"].size()?"carry":(e["phase"].get<double>()>0?"return":"idle");e["swing"]=swing;}

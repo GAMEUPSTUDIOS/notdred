@@ -1,5 +1,8 @@
 #include "physics.h"
+#include "jsmath.h"
 namespace nd {
+V2 localPoint(const b2Body* b,V2 p){const V2 o=vv(b->GetPosition());const double a=b->GetAngle(),c=jsmath::cos(a),s=jsmath::sin(a),px=p.x-o.x,py=p.y-o.y;return {c*px+s*py,-s*px+c*py};}
+V2 worldPoint(const b2Body* b,V2 l){const V2 o=vv(b->GetPosition());const double a=b->GetAngle(),c=jsmath::cos(a),s=jsmath::sin(a);return {c*l.x-s*l.y+o.x,s*l.x+c*l.y+o.y};}
 void World::step(double dt){
  w.SetAutoClearForces(false);for(int i=0;i<2;i++)w.Step((float)dt*.5f,8,3);w.ClearForces();
  const float STILL_SLEEP=1.0f,lin=b2_linearSleepTolerance*b2_linearSleepTolerance,ang=b2_angularSleepTolerance*b2_angularSleepTolerance;
