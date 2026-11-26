@@ -42,6 +42,20 @@ static J shipOp(const std::string& op,const J& q){
  if(op=="ship.join"){Crew& c=s.newCrew(str(field(q,"uid")),str(field(q,"name")));c.admin=flag(q,"admin");s.setRank(c.id,str(field(q,"rank",J("guest"))));s.spawnKit(c);return {{"ok",true}};}
  if(op=="ship.command"){s.command(str(field(q,"uid")),field(q,"msg",J::object()));return {{"ok",true}};}
  if(op=="ship.state"){J st=s.state();J hands=J::object();for(auto& [id,c]:s.crew){J h=J::array();for(int i=0;i<5;i++)h.push_back(c.slots[i].empty()?J():J({{"type",c.slots[i]},{"count",c.counts[i]}}));hands[id]={{"stacks",h},{"selected",c.selected},{"tool",c.tool},{"notices",c.notices}};}st["crew"]=hands;return st;}
+ // Internal rules one at a time, for the differential tests.
+ if(op=="ship.query"){const std::string fn=str(field(q,"fn"));const J a=field(q,"args",J::array());auto n=[&](size_t i){return i<a.size()&&a[i].is_number()?a[i].get<double>():0.0;};auto t=[&](size_t i){return i<a.size()?str(a[i]):std::string();};
+  if(fn=="mountHit"){const Mount* m=s.mountHit({n(0),n(1)});if(!m)return {{"result",nullptr}};return {{"result",{{"side",m->side},{"at",m->at},{"type",m->type}}}};}
+  if(fn=="mountAt"){Mount m;if(!s.mountAt({n(0),n(1)},t(2),m))return {{"result",nullptr}};J o={{"type",m.type},{"starterRC",m.starterRC}};if(!m.kind.empty())o["kind"]=m.kind;o["side"]=m.side;o["at"]=m.at;o["active"]=false;return {{"result",o}};}
+  if(fn=="mountValidAt"){Mount m;if(!s.mountAt({n(0),n(1)},t(2),m))return {{"result",false}};return {{"result",s.mountValid(m)}};}
+  if(fn=="mountPoint"){if((size_t)n(0)>=s.mounts.size())return {{"result",nullptr}};V2 p=s.mountPoint(s.mounts[(size_t)n(0)]);return {{"result",{{"x",p.x},{"y",p.y}}}};}
+  if(fn=="machineSpace"){Crew* c=s.crew.size()?&s.crew.begin()->second:nullptr;return {{"result",s.machineSpace(t(0),{n(1),n(2)},c)}};}
+  if(fn=="fabFits")return {{"result",s.fabFits((int)n(0),(int)n(1),!(a.size()>2&&a[2].is_boolean()&&!a[2].get<bool>()),a.size()>3?t(3):std::string("fabricator"))}};
+  if(fn=="machineOnTop"){const Tile* m=s.machineOnTop((int)n(0),(int)n(1));return {{"result",m?J(m->type):J()}};}
+  if(fn=="supportsMachine")return {{"result",s.supportsMachine((int)n(0),(int)n(1))}};
+  if(fn=="terrainAt"){const Tile* m=s.terrainAt((int)n(0),(int)n(1));return {{"result",m?J(m->type):J()}};}
+  if(fn=="boxSpace"){Crew* c=s.crew.size()?&s.crew.begin()->second:nullptr;return {{"result",s.boxSpace({n(0),n(1)},n(2),nullptr,false,c)}};}
+  if(fn=="safeCell"){V2 p=s.safeCell({n(0),n(1)},a.size()>2&&a[2].is_boolean()&&a[2].get<bool>());return {{"result",{{"x",p.x},{"y",p.y}}}};}
+  fail("unknown query "+fn);}
  if(op=="ship.boxInsert"){size_t k=(size_t)num(q,"box",0);if(k>=s.boxes.size())fail("no such box");return {{"inserted",s.boxInsert(*s.boxes[k],str(field(q,"type")),(int)num(q,"n",0))}};}
  if(op=="ship.leave"){s.removeCrew(str(field(q,"uid")));return {{"ok",true}};}
  if(op=="ship.input"){Crew* c=s.crew.get(str(field(q,"uid")));if(c){c->keys=Keys::from(field(q,"keys",J::object()));c->inputAge=0;}return {{"ok",c!=nullptr}};}

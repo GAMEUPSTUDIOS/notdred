@@ -12,7 +12,12 @@ namespace nd {
 enum : uint16_t {CAT_TILE=1,CAT_CREW=2,CAT_WALKWAY=4,CAT_ITEM=8,CAT_NET=16,DOOR_BIT=256};
 uint16_t rankBit(const std::string& rank);
 struct Block{int x=0,y=0,rotation=0;b2Fixture* f=nullptr;double hp=100;};
-struct Tile{std::string type;int x=0,y=0,rotation=0;b2Fixture* f=nullptr;std::string access;J extra=J::object();double hp=100;};
+// A placed piece. Grid pieces sit at integer x,y; physics machines (fabricators, recyclers, comms stations) have a
+// fixture-less static body and an id (their key), with x,y the top-left cell centre following that body.
+struct Tile{std::string type,id;double x=0,y=0;int rotation=0;b2Fixture* f=nullptr;b2Body* body=nullptr;std::string access;J extra=J::object();double hp=100;bool hpSet=false;   // hpSet: a machine's health is saved only once it has one
+ int ix()const{return (int)x;}int iy()const{return (int)y;}};
+// A hull attachment (thruster, turret, starter thruster/RC, ejector, turret controller): its side and first tile.
+struct Mount{std::string type,kind,side,ammoType="ammo";J burnKind;bool starterRC=false,active=false;int at=0,rotation=0;double hp=100,fuelItems=0,explosiveItems=0,burnRemaining=0,ammo=0;J extra=J::object();};
 struct Keys{bool w=false,a=false,s=false,d=false,up=false,down=false,left=false,right=false,space=false,shift=false;
  static Keys from(const J& k);bool moveRight()const{return d||right;}bool moveLeft()const{return a||left;}bool upKey()const{return w||up;}bool downKey()const{return s||down;}};
 struct Crew{std::string id,name,rank="guest";b2Body* body=nullptr;Keys keys;bool climbing=false,piloting=false,jumpWas=false,grounded=false,noclip=false,admin=false,sandbox=false;
@@ -29,7 +34,7 @@ struct Ship{
  Bounds bounds;struct{int x=1,y=2;}helm;
  World inside{V2(0,20)};b2Body* interior=nullptr;b2Body* skinBody=nullptr;bool skinDirty=true;
  std::vector<b2Fixture*> shell;
- OMap<std::string,Block> blocks;OMap<std::string,Tile> terrain;
+ OMap<std::string,Block> blocks;OMap<std::string,Tile> terrain;std::vector<Mount> mounts;int machineSeq=0;
  OMap<std::string,Crew> crew;
  std::vector<std::unique_ptr<Item>> items;std::vector<std::unique_ptr<Box>> boxes;
  V2 shipPos{0,0};                       // the hull's position in its zone (the exterior arrives in a later stage)
@@ -82,6 +87,23 @@ struct Ship{
  int boxInsert(Box& b,const std::string& type,int n);
  Box* boxAt(V2 p);Box* boxNear(V2 p,double pad);
  std::vector<std::pair<int,int>> helmCells()const;
+ // mounts (game.js)
+ static int mountWidth(const Mount& m){return m.type=="starter"?1:3;}
+ V2 mountPoint(const Mount& m,const Bounds* b=nullptr)const;
+ static V2 inward(const Mount& m);
+ const Mount* mountHit(V2 c)const;
+ bool mountAt(V2 c,const std::string& type,Mount& out)const;
+ bool mountValid(const Mount& m,const Bounds* b=nullptr,const Mount* ignore=nullptr)const;
+ static std::string mountItem(const Mount& m);
+ // physics machines and standing pieces (game.js)
+ Tile& spawnMachine(const std::string& type,V2 p,const J& fields,const std::string& id);
+ void syncMachines();
+ bool machineSpace(const std::string& type,V2 p,const Crew* standing)const;
+ bool fabFits(int x,int y,bool checkSupport,const std::string& type)const;
+ const Tile* machineOnTop(int x,int y)const;
+ bool supportsMachine(int x,int y)const;
+ const Tile* spawnPointFor(const std::string& rank);
+ std::vector<std::pair<int,int>> terrainCells(const Tile& t)const;
  // safeguards.js
  bool solidCell(int x,int y,bool cargo)const;
  V2 safeCell(V2 p,bool cargo)const;
@@ -99,5 +121,8 @@ struct Ship{
  uint64_t seed=0x9e3779b97f4a7c15ull;
 };
 int stackLimit(const std::string& type);
+// game.js fixItemType / fixMaterials: unknown types dropped, blank ones read as standard ammo ("" = dropped).
+std::string fixItemType(const std::string& t);
+J fixMaterials(const J& m);
 std::vector<std::vector<std::pair<double,double>>> cellLoops(const std::vector<std::pair<int,int>>& cells);
 }

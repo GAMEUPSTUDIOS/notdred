@@ -18,6 +18,8 @@ bool isAmmo(const std::string& type);
 // null when the item can't be crafted; otherwise ingredient → amount (iron first, as in JavaScript).
 J recipeNeeds(const std::string& type);
 std::string cleanShipName(const std::string& name);
+// game.js cleanColor: '#rrggbb' (lower case) or "" when it isn't a colour.
+std::string cleanColor(const std::string& c);
 // JavaScript string helpers on UTF-16 code units, so lengths and slices match the page and the old server.
 std::u16string toU16(const std::string& s);
 std::string fromU16(const std::u16string& s);

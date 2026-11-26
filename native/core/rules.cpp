@@ -26,6 +26,8 @@ J recipeNeeds(const std::string& type){const GameData& g=data();
   if(extra!=g.recipeExtra.end()&&std::find(g.types.begin(),g.types.end(),type)!=g.types.end())return *extra;
   return J();}
  J out=J::object();out["iron"]=c->second;if(extra!=g.recipeExtra.end())for(auto& [k,v]:extra->items())out[k]=v;return out;}
+std::string cleanColor(const std::string& c0){std::u16string u=toU16(c0);size_t a=0,b=u.size();while(a<b&&jsSpace(u[a]))a++;while(b>a&&jsSpace(u[b-1]))b--;std::string s=fromU16(u.substr(a,b-a));
+ if(!s.empty()&&s[0]=='#')s=s.substr(1);if(s.size()!=6)return "";std::string o="#";for(char ch:s){if(!std::isxdigit((unsigned char)ch))return "";o+=(char)std::tolower((unsigned char)ch);}return o;}
 // ---- UTF-16 helpers --------------------------------------------------------------------------------------------
 std::u16string toU16(const std::string& s){std::u16string o;size_t i=0;while(i<s.size()){unsigned char c=s[i];uint32_t cp;int n;
   if(c<0x80){cp=c;n=1;}else if((c>>5)==6){cp=c&31;n=2;}else if((c>>4)==14){cp=c&15;n=3;}else if((c>>3)==30){cp=c&7;n=4;}else{o+=u'�';i++;continue;}

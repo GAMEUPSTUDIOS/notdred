@@ -4,6 +4,8 @@
 namespace nd {
 static const char* SINGLE[]={"wrench","fabricator","thruster","turret","turret_burst","turret_auto","turret_controller","starter_rc","starter","storage","shredder","shredder_gold","pusher","repair","pusher_block","fab_starter","fab_machine","fab_engineering","fab_munitions","loader","recycler","anchor","comms","spawn"};
 int stackLimit(const std::string& type){for(const char* s:SINGLE)if(type==s)return 1;return 16;}
+std::string fixItemType(const std::string& t){const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),t)!=ty.end())return t;if(t.empty()||t=="empty"||t=="undefined"||t=="null")return "ammo";return "";}
+J fixMaterials(const J& m){J out=J::object();if(!m.is_object())return out;for(auto& [k,v]:m.items()){std::string t=fixItemType(k);if(!t.empty()&&v.is_number()&&v.get<double>()>0)out[t]=(out.contains(t)?out[t].get<double>():0)+v.get<double>();}return out;}
 static bool isType(const std::string& t){const auto& ty=data().types;return std::find(ty.begin(),ty.end(),t)!=ty.end();}
 static int total(const J& m){int n=0;for(auto& [k,v]:m.items())if(v.is_number())n+=v.get<int>();return n;}
 double Ship::random(){seed^=seed<<13;seed^=seed>>7;seed^=seed<<17;return (seed>>11)*(1.0/9007199254740992.0);}
@@ -64,7 +66,8 @@ bool Ship::boxSpace(V2 p,double size,const Box* ignore,bool growing,const Crew* 
  if(p.x-h<bounds.l+.5-e||p.x+h>bounds.r-.5+e||p.y-h<bounds.t+.5-e||p.y+h>bounds.b-.5+e)return false;
  if(!growing&&standing){V2 q=vv(standing->body->GetPosition());if(std::fabs(q.x-p.x)<h+.24&&std::fabs(q.y-p.y)<h+.63)return false;}
  auto cellHit=[&](int x,int y){return std::fabs(x-p.x)<h+.49-e&&std::fabs(y-p.y)<h+.49-e;};
- for(auto& [k,t]:terrain){if(among(t.type,{"wedge","walkway_wedge","glass","net","door","hatch","starter_hatch","pusher_block","paint","anchor","spawn"})){
+ for(auto& [k,t]:terrain){if(t.body){int w2=1,h2=1;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(t.type);if(it!=m.end()){w2=(*it)[0];h2=(*it)[1];}}b2Vec2 q=t.body->GetPosition();if(std::fabs(q.x-p.x)<w2/2.0+h-e&&std::fabs(q.y-p.y)<h2/2.0+h-e)return false;continue;}
+  if(among(t.type,{"wedge","walkway_wedge","glass","net","door","hatch","starter_hatch","pusher_block","paint","anchor","spawn"})){
    int w=1,hh=1;{const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(t.type);if(it!=m.end()){w=(*it)[0];hh=(*it)[1];}}
    const bool turns=!among(t.type,{"anchor","spawn","fabricator","storage","ladder","recycler","comms"});const int r=turns?((t.rotation%4)+4)%4:0;
    for(int dx=0;dx<w;dx++)for(int dy=0;dy<hh;dy++){int ox=r==0?dx:r==1?-dy:r==2?-dx:dy,oy=r==0?dy:r==1?dx:r==2?-dy:-dx;if(cellHit(t.x+ox,t.y+oy))return false;}}}

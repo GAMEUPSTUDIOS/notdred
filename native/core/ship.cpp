@@ -7,8 +7,9 @@ static void rotOffset(int dx,int dy,int r,int& ox,int& oy){r=((r%4)+4)%4;if(r==0
 static bool inList(const char* table,const std::string& v){const J& t=data().raw.at(table);for(auto& x:t)if(x.is_string()&&x.get_ref<const std::string&>()==v)return true;return false;}
 static bool turnsWithRotation(const std::string& type){return !inList("PHYSICS_MACHINES",type)&&!inList("STANDING_MACHINES",type)&&type!="fabricator"&&type!="storage"&&type!="ladder";}
 static void machineSize(const std::string& type,int& w,int& h){const J& m=data().raw.at("MACHINE_SIZE");auto it=m.find(type);if(it!=m.end()){w=(*it)[0];h=(*it)[1];}else{w=1;h=1;}}
-static std::vector<std::pair<int,int>> terrainCells(const Tile& t){int w,h;machineSize(t.type,w,h);int r=turnsWithRotation(t.type)?t.rotation:0;std::vector<std::pair<int,int>> out;
- for(int dx=0;dx<w;dx++)for(int dy=0;dy<h;dy++){int ox,oy;rotOffset(dx,dy,r,ox,oy);out.push_back({t.x+ox,t.y+oy});}return out;}
+static std::vector<std::pair<int,int>> cellsOf(const Tile& t){int w,h;machineSize(t.type,w,h);int r=turnsWithRotation(t.type)?t.rotation:0;std::vector<std::pair<int,int>> out;
+ for(int dx=0;dx<w;dx++)for(int dy=0;dy<h;dy++){int ox,oy;rotOffset(dx,dy,r,ox,oy);out.push_back({t.ix()+ox,t.iy()+oy});}return out;}
+std::vector<std::pair<int,int>> Ship::terrainCells(const Tile& t)const{return cellsOf(t);}
 static b2PolygonShape boxShape(double hx,double hy,V2 c){b2PolygonShape s;s.SetAsBox((float)hx,(float)hy,bv(c),0);return s;}
 // doorBox (game.js): a 1×2 door, its second cell rotOffset(0,1) away, so the box sits half a tile toward it.
 static b2PolygonShape doorBox(int x,int y,int r){r=((r%4)+4)%4;const double dx=0,dy=.5;const double ox=r==0?dx:r==1?-dy:r==2?-dx:dy,oy=r==0?dy:r==1?dx:r==2?-dy:-dx;
@@ -25,11 +26,38 @@ Ship::Ship(const J& saved){
  if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;int x=b.value("x",0),y=b.value("y",0);if(interiorCell(x,y)&&!(x==helm.x&&y==helm.y))addBlock(x,y,b.value("rotation",0));}
  if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object())continue;std::string type=t.value("type","");int x=t.value("x",0),y=t.value("y",0);
   if(type.empty()||type=="fabricator"||!interiorCell(x,y)||blocks.has(key(x,y)))continue;
-  if(type=="storage")continue; // TODO stage 4: expando boxes (spawnBox)
+  if(type=="storage"){spawnBox({x+.5,y+.5},t.contains("materials")&&t["materials"].is_object()?t["materials"]:J::object());continue;}
   Tile* n=addTerrain(type,x,y,t.value("rotation",0));if(!n)continue;
+  if(t.contains("cargo")&&!n->body)n->extra["cargo"]=t["cargo"];
+  if(type=="sign"){std::u16string u=toU16(t.contains("text")&&t["text"].is_string()?t["text"].get<std::string>():"");for(auto& ch:u)if(ch<0x20||ch==0x7f)ch=u' ';int max=data().raw.at("SIGN_MAX");if((int)u.size()>max)u.resize(max);n->extra["text"]=fromU16(u);}
+  if(type=="paint"){std::string c=t.contains("color")&&t["color"].is_string()?t["color"].get<std::string>():"";std::string cc=cleanColor(c);n->extra["color"]=cc.empty()?data().raw.at("PAINT_DEFAULT").get<std::string>():cc;}
   if(type=="door"&&t.contains("access")&&t["access"].is_string()){std::string a=t["access"];if(a=="captain"||a=="crew"||a=="guest"){n->access=a;if(n->f){interior->DestroyFixture(n->f);skinDirty=true;b2PolygonShape s=doorBox(x,y,n->rotation);n->f=fixture(s,.2f,DOOR_BIT,doorMask(a));}}}
   if(type=="spawn"&&t.contains("access")&&t["access"].is_string()){std::string a=t["access"];if(a=="captain"||a=="crew"||a=="guest")n->access=a;}}
- // TODO stage 4: mounts, machines (game.js creates them here, before the first crew body)
+ // What an old save couldn't place goes back into its old inventory (handed out below, for saves without hands).
+ J oldInventory=J::object();
+ // Fabricators saved among the tiles (before they were physics machines): back where they fit, else at the floor.
+ // schema as JavaScript compares it: a save without one is neither old nor new (undefined < n is false)
+ const double schema=saved.is_object()&&saved.contains("schema")&&saved["schema"].is_number()?saved["schema"].get<double>():NAN;
+ if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object()||t.value("type","")!="fabricator")continue;int x=t.value("x",0),y=t.value("y",0);
+  if(std::isnan(schema)||!schema||schema<6){x=std::min(x,bounds.r-2);y-=2;}
+  if(fabFits(x,y,false,"fabricator")){Tile* f=addTerrain("fabricator",x,y,0);if(f&&schema>=6){f->extra["materials"]=t.contains("materials")?t["materials"]:J({{"iron",0},{"explosives",0}});f->extra["queue"]=t.contains("queue")?t["queue"]:J::array();f->extra["job"]=t.contains("job")?t["job"]:J();f->extra["repeat"]=t.value("repeat",false);}
+   if(f){std::string kind=t.contains("kind")&&t["kind"].is_string()?t["kind"].get<std::string>():"";f->extra["kind"]=data().raw.at("FABRICATORS").contains(kind)?kind:"legacy";}}
+  else{bool placed=false;for(int xx=bounds.r-2;xx>bounds.l;xx--)if(fabFits(xx,bounds.b-3,true,"fabricator")){addTerrain("fabricator",xx,bounds.b-3,0);placed=true;break;}if(!placed)oldInventory["fabricator"]=(oldInventory.contains("fabricator")?oldInventory["fabricator"].get<int>():0)+1;}}
+ // Hull attachments; a ship saved without the list gets the two starter thrusters.
+ bool replaceDefaults=false;J oldMounts=saved.is_object()&&saved.contains("mounts")&&saved["mounts"].is_array()?saved["mounts"]:J::array();
+ {const std::pair<const char*,int> oldDefault[4]={{"bottom",-2},{"top",0},{"left",0},{"right",0}};auto isDefault=[&](const J& m,const char* side,int at){return m.is_object()&&m.value("type","")=="thruster"&&m.value("side","")==side&&m.contains("at")&&m["at"].is_number()&&m["at"].get<double>()==at;};
+  if(schema<6){replaceDefaults=true;for(auto& [side,at]:oldDefault){bool any=false;for(auto& m:oldMounts)if(isDefault(m,side,at))any=true;if(!any)replaceDefaults=false;}}
+  if(replaceDefaults){J kept=J::array();for(auto& m:oldMounts){bool d=false;for(auto& [side,at]:oldDefault)if(isDefault(m,side,at))d=true;if(!d)kept.push_back(m);}oldMounts=kept;}}
+ if(saved.is_object()&&saved.contains("mounts")&&saved["mounts"].is_array()){for(auto& j:oldMounts){if(!j.is_object())continue;Mount m;
+   auto s=[&](const char* k){return j.contains(k)&&j[k].is_string()?j[k].get<std::string>():std::string();};auto n=[&](const char* k,double d){return j.contains(k)&&j[k].is_number()?j[k].get<double>():d;};
+   m.type=s("type");m.kind=s("kind");m.side=s("side");m.at=(int)n("at",0);m.starterRC=j.value("starterRC",false);m.hp=n("hp",100);m.fuelItems=n("fuelItems",0);m.explosiveItems=n("explosiveItems",0);m.burnRemaining=n("burnRemaining",0);m.burnKind=j.contains("burnKind")?j["burnKind"]:J();m.ammo=n("ammo",0);
+   std::string at=s("ammoType");if(!at.empty())m.ammoType=at;if(m.type=="turret"&&!isAmmo(m.ammoType))m.ammoType="ammo";
+   if(schema<14&&m.type=="turret"&&m.at==0&&(m.side=="left"||m.side=="right"))m.starterRC=true;
+   if(schema<7&&m.type=="starter"&&m.side=="bottom")m.at=m.at<(bounds.l+bounds.r)/2.0?bounds.l:bounds.r;
+   if(schema<6&&m.type!="starter")m.at-=1;
+   if(mountValid(m))mounts.push_back(m);else oldInventory[m.type]=(oldInventory.contains(m.type)?oldInventory[m.type].get<int>():0)+1;}}
+ if(!(saved.is_object()&&saved.contains("mounts")&&saved["mounts"].is_array())||replaceDefaults)for(int at:{bounds.l,bounds.r}){Mount m;m.type="starter";m.side="bottom";m.at=at;if(mountValid(m))mounts.push_back(m);else oldInventory["starter"]=(oldInventory.contains("starter")?oldInventory["starter"].get<int>():0)+1;}
+ // TODO stage 7: rebuildMounts (their fixtures are on the outside hull)
  // The first crew member's body exists with the ship (game.js initialize), before the cargo: body order matters to Box2D.
  spare=makeCrewBody(2|32);
  if(saved.is_object()&&saved.contains("position")&&saved["position"].is_object()){shipPos.x=saved["position"].value("x",0.0);shipPos.y=saved["position"].value("y",0.0);}
@@ -41,6 +69,13 @@ Ship::Ship(const J& saved){
   if(b.contains("materials")&&b["materials"].is_object())for(auto& [k,v]:b["materials"].items()){std::string t=k;const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),t)==ty.end()){if(t.empty()||t=="empty"||t=="undefined"||t=="null")t="ammo";else continue;}
    if(v.is_number()&&v.get<double>()>0)mats[t]=(mats.contains(t)?mats[t].get<double>():0)+v.get<double>();}
   auto n=[&](const char* k){return b.contains(k)&&b[k].is_number()?b[k].get<double>():0.0;};Box& x=spawnBox({n("x"),n("y")},mats);x.body->SetTransform(x.body->GetPosition(),(float)n("angle"));}
+ // Physics machines (fabricators, recyclers, comms stations), clamped inside the hull.
+ if(saved.is_object()&&saved.contains("machines")&&saved["machines"].is_array())for(auto& m:saved["machines"]){if(!m.is_object())continue;std::string type=m.value("type","");bool phys=false;for(auto& t:data().raw.at("PHYSICS_MACHINES"))if(t==type)phys=true;
+  if(!phys||!m.contains("x")||!m.contains("y")||!m["x"].is_number()||!m["y"].is_number())continue;double x=m["x"],y=m["y"];if(!std::isfinite(x)||!std::isfinite(y))continue;
+  int w=1,h=1;{const J& ms=data().raw.at("MACHINE_SIZE");w=ms.at(type)[0];h=ms.at(type)[1];}J fields=J::object();for(auto& [k,v]:m.items())if(k!="type"&&k!="x"&&k!="y"&&k!="vx"&&k!="vy"&&k!="id")fields[k]=v;
+  Tile& t=spawnMachine(type,{clamp(x,bounds.l+w/2.0,bounds.r-w/2.0),clamp(y,bounds.t+h/2.0,bounds.b-h/2.0)},fields,m.contains("id")&&m["id"].is_string()?m["id"].get<std::string>():"");
+  if(type=="fabricator"){J mats=J::object();if(t.extra.contains("materials")&&t.extra["materials"].is_object())for(auto& [k,v]:t.extra["materials"].items()){std::string tt=k;const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),tt)==ty.end()){if(tt.empty()||tt=="empty"||tt=="undefined"||tt=="null")tt="ammo";else continue;}if(v.is_number()&&v.get<double>()>0)mats[tt]=(mats.contains(tt)?mats[tt].get<double>():0)+v.get<double>();}
+   t.extra["materials"]=mats;if(!t.extra.contains("queue")||!t.extra["queue"].is_array())t.extra["queue"]=J::array();}}
  if(saved.is_object()&&saved.contains("stacks")&&saved["stacks"].is_array())savedStacks=saved["stacks"];
  else if(saved.is_object()){
   // A save from before hands existed (no "stacks"): the old inventory — a wrench and 16 blocks, ladders, walkways and
@@ -48,8 +83,30 @@ Ship::Ship(const J& saved){
   J inv=J::object();for(auto& t:data().types)inv[t]=0;inv["wrench"]=1;inv["block"]=16;inv["ladder"]=16;inv["walkway"]=16;inv["net"]=16;
   if(saved.contains("inventory")&&saved["inventory"].is_object())for(auto& t:data().types){auto it=saved["inventory"].find(t);if(it!=saved["inventory"].end()&&it->is_number())inv[t]=std::max(0.0,std::floor(it->get<double>()));}
   Crew tmp;for(int i=0;i<5;i++){tmp.slots[i].clear();tmp.counts[i]=0;}tmp.body=spare;
+  for(auto& [k,v]:oldInventory.items())if(inv.contains(k))inv[k]=inv[k].get<double>()+v.get<double>();
   for(auto& t:data().types){int n=(int)inv[t].get<double>();if(n>0){int added=addCarried(tmp,t,n);if(n>added)scatter(t,n-added,vv(spare->GetPosition()));}}
   savedStacks=J::array();for(int i=0;i<5;i++)savedStacks.push_back(tmp.slots[i].empty()?J():J({{"type",tmp.slots[i]},{"count",tmp.counts[i]}}));}
+ // repairAmmoTypes (game.js): stored materials keep only real item types with something in them; cargo the same.
+ for(auto& [k,t]:terrain){if(t.extra.contains("materials"))t.extra["materials"]=fixMaterials(t.extra["materials"]);
+  if(t.extra.contains("cargo")&&t.extra["cargo"].is_array()){J out=J::array();for(auto c:t.extra["cargo"]){if(!c.is_object())continue;std::string ty=fixItemType(c.contains("type")&&c["type"].is_string()?c["type"].get<std::string>():"");if(ty.empty())continue;c["type"]=ty;out.push_back(c);}t.extra["cargo"]=out;}}
+ // Older saves: a starter hatch by the left wall (schema < 12); shredders were tiles before they were tools (< 13).
+ if(saved.is_object()&&schema<12){bool has=false;for(auto& [k,t]:terrain)if(t.type=="starter_hatch")has=true;
+  if(!has)for(int y=bounds.t+1;y<bounds.b;y++){int x=bounds.l+1;if(!blocks.has(key(x,y))&&!terrainAt(x,y)){addTerrain("starter_hatch",x,y,0);break;}}}
+ if(saved.is_object()&&schema<13){std::vector<std::string> gone;for(auto& [k,t]:terrain)if(t.type=="shredder")gone.push_back(k);
+  for(auto& k:gone){Tile* t=terrain.get(k);if(t->f){interior->DestroyFixture(t->f);skinDirty=true;}V2 p{t->x,t->y};terrain.erase(k);spawnItem("shredder",p,{0,0},1);}}
+ // Health and settings saved with each tile.
+ if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;Block* t=blocks.get(key(b.value("x",0),b.value("y",0)));if(t)t->hp=b.contains("hp")&&b["hp"].is_number()?b["hp"].get<double>():100;}
+ if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& o:saved["terrain"]){if(!o.is_object())continue;Tile* t=terrain.get(key(o.value("x",0),o.value("y",0)));if(!t)continue;
+  t->hp=o.contains("hp")&&o["hp"].is_number()?o["hp"].get<double>():100;t->extra["outputTimer"]=o.contains("outputTimer")&&o["outputTimer"].is_number()&&o["outputTimer"].get<double>()?o["outputTimer"]:J(0);
+  t->extra["filterMode"]=o.contains("filterMode")&&o["filterMode"].is_string()&&!o["filterMode"].get<std::string>().empty()?o["filterMode"]:J("all");
+  t->extra["filterItems"]=o.contains("filterItems")&&!o["filterItems"].is_null()&&!(o["filterItems"].is_boolean()&&!o["filterItems"].get<bool>())?o["filterItems"]:J::array();
+  auto truthy=[&](const char* k){auto it=o.find(k);return it!=o.end()&&!it->is_null()&&!(it->is_boolean()&&!it->get<bool>())&&!(it->is_number()&&it->get<double>()==0)&&!(it->is_string()&&it->get<std::string>().empty());};
+  if(truthy("pull"))t->extra["pull"]=true;if(truthy("requireOutput"))t->extra["requireOutput"]=true;
+  if(t->type=="pusher_block"&&truthy("mode")){t->extra["mode"]=o["mode"];t->extra["filteredMode"]=o.contains("filteredMode")?o["filteredMode"]:J();t->extra["maxBeam"]=o.contains("maxBeam")?o["maxBeam"]:J();t->extra["speed"]=o.contains("speed")?o["speed"]:J();
+   t->extra["filterInv"]=truthy("filterInv");t->extra["filters"]=o.contains("filters")&&o["filters"].is_array()?o["filters"]:J::array({nullptr,nullptr,nullptr});}}
+ // Ejectors were tiles once: each becomes the hull attachment on the wall it faced (or drops as an item).
+ {std::vector<std::string> ej;for(auto& [k,t]:terrain)if(t.type=="ejector")ej.push_back(k);for(auto& k:ej){Tile* t=terrain.get(k);V2 c{t->x,t->y};int r=t->rotation;if(r==0)c.y=bounds.t;else if(r==1)c.x=bounds.r;else if(r==2)c.y=bounds.b;else c.x=bounds.l;
+   V2 at{t->x,t->y};if(t->f){interior->DestroyFixture(t->f);skinDirty=true;}terrain.erase(k);Mount m;if(mountAt(c,"ejector",m)&&mountValid(m))mounts.push_back(m);else scatter("ejector",1,at);}}
 }
 Ship::~Ship(){}
 b2Fixture* Ship::fixture(const b2Shape& shape,float friction,uint16_t cat,uint16_t mask,float density){b2FixtureDef fd;fd.shape=&shape;fd.friction=friction;fd.density=density;fd.filter.categoryBits=cat;fd.filter.maskBits=mask;skinDirty=true;return interior->CreateFixture(&fd);}
@@ -58,10 +115,11 @@ b2Fixture* Ship::fixture(const b2Shape& shape,float friction,uint16_t cat,uint16
 void Ship::rebuildShell(){for(b2Fixture* f:shell)interior->DestroyFixture(f);shell.clear();skinDirty=true;std::vector<std::pair<int,int>> cells;
  for(int x=bounds.l;x<=bounds.r;x++)for(int y:{bounds.t,bounds.b})cells.push_back({x,y});for(int y=bounds.t+1;y<bounds.b;y++)for(int x:{bounds.l,bounds.r})cells.push_back({x,y});
  for(auto [x,y]:cells){b2PolygonShape s=boxShape(.5,.5,{(double)x,(double)y});b2FixtureDef fd;fd.shape=&s;fd.density=1;fd.friction=.4f;shell.push_back(interior->CreateFixture(&fd));}}
-void Ship::addBlock(int x,int y,int rotation){b2PolygonShape s=boxShape(.5,.5,{(double)x,(double)y});Block b;b.x=x;b.y=y;b.rotation=rotation;b.f=fixture(s,.7f);blocks.set(key(x,y),b);}
+void Ship::addBlock(int x,int y,int rotation){wakeCargoNear({(double)x,(double)y},2);b2PolygonShape s=boxShape(.5,.5,{(double)x,(double)y});Block b;b.x=x;b.y=y;b.rotation=rotation;b.f=fixture(s,.7f);blocks.set(key(x,y),b);}
 Tile* Ship::addTerrain(const std::string& type,int x,int y,int rotation){if(type=="ladder")rotation=0;
- if(type=="storage")return nullptr;            // TODO stage 4: spawnBox
- if(inList("PHYSICS_MACHINES",type))return nullptr; // TODO stage 5: spawnMachine
+ wakeCargoNear({(double)x,(double)y},3);
+ if(type=="storage"){spawnBox({x+.5,y+.5},J::object());return nullptr;}
+ if(inList("PHYSICS_MACHINES",type)){int w,h;machineSize(type,w,h);return &spawnMachine(type,{x+(w-1)/2.0,y+(h-1)/2.0},J::object(),"");}
  Tile t;t.type=type;t.x=x;t.y=y;t.rotation=rotation;b2Fixture* f=nullptr;
  if(type=="wedge"||type=="walkway_wedge"){double a=rotation*M_PI/2;b2Vec2 vs[3];const double pts[3][2]={{-.5,-.5},{.5,.5},{-.5,.5}};
   for(int i=0;i<3;i++)vs[i]=b2Vec2((float)(x+pts[i][0]*std::cos(a)-pts[i][1]*std::sin(a)),(float)(y+pts[i][0]*std::sin(a)+pts[i][1]*std::cos(a)));
@@ -75,7 +133,10 @@ Tile* Ship::addTerrain(const std::string& type,int x,int y,int rotation){if(type
  t.f=f;if(type=="door"||type=="spawn")t.access="crew";if(type=="sign")t.extra["text"]="";if(type=="paint")t.extra["color"]=data().raw.at("PAINT_DEFAULT");
  return &terrain.set(key(x,y),t);}
 // terrainAt (game.js): the tile whose cells cover c; a later tile wins a shared cell, as in the old index.
-const Tile* Ship::terrainAt(int x,int y)const{const Tile* hit=nullptr;for(auto& [k,t]:terrain)for(auto [cx,cy]:terrainCells(t))if(cx==x&&cy==y)hit=&t;return hit;}
+// terrainAt (game.js): the grid tile whose cells cover (x,y) — a later tile wins a shared cell, as in the old index —
+// else the first physics machine whose footprint has the cell's centre inside it (machineCovering).
+const Tile* Ship::terrainAt(int x,int y)const{const Tile* hit=nullptr;for(auto& [k,t]:terrain){if(t.body)continue;for(auto [cx,cy]:cellsOf(t))if(cx==x&&cy==y)hit=&t;}if(hit)return hit;
+ for(auto& [k,t]:terrain)if(t.body){int w,h;machineSize(t.type,w,h);b2Vec2 p=t.body->GetPosition();if(std::fabs(x-p.x)<w/2.0&&std::fabs(y-p.y)<h/2.0)return &t;}return nullptr;}
 std::vector<const Tile*> Ship::terrainOfType(const std::string& type)const{std::vector<const Tile*> out;for(auto& [k,t]:terrain)if(t.type==type)out.push_back(&t);return out;}
 
 // ---- Collision skin (game.js syncSkin/cellLoops/unitCell): one smooth chain loop around each patch of same-kind
@@ -124,7 +185,8 @@ Crew& Ship::newCrew(const std::string& id,const std::string& name){if(crew.size(
 void Ship::spawnKit(Crew& c){const bool cap=c.rank=="captain";for(int i=0;i<5;i++)if(c.slots[i]=="wrench"&&!cap){c.slots[i].clear();c.counts[i]=0;}
  bool has=false;for(auto& s:c.slots)if(s=="wrench")has=true;if(cap&&!has){for(int i=0;i<5;i++)if(c.slots[i].empty()){c.slots[i]="wrench";c.counts[i]=1;break;}}
  int w=-1;for(int i=0;i<5;i++)if(c.slots[i]=="wrench"){w=i;break;}selectSlot(c,std::max(0,w));
- // TODO stage 4: spawn points (spawnPointFor)
+ // ℵ14: a random spawn point set exactly to this rank, else the helm.
+ if(const Tile* sp=spawnPointFor(c.rank.empty()?"guest":c.rank))if(!c.piloting){c.climbing=false;c.body->SetTransform(b2Vec2((float)sp->x,(float)(sp->y-.13)),0);c.body->SetLinearVelocity(b2Vec2(0,0));}
 }
 // removeCrew: their stacks (but a wrench) drop where they stood; the last one's body stays for the next to join.
 void Ship::removeCrew(const std::string& id){Crew* c=crew.get(id);if(!c)return;Crew* was=actor;actor=c;V2 p=vv(c->body->GetPosition());
@@ -196,6 +258,19 @@ void Ship::command(const std::string& id,const J& msg){Crew* m=crew.get(id);if(!
  // spawnrank, sign, paint, pusher, hatch, recover, rename, the other dev ops.
  actor=nullptr;}
 J Ship::state()const{J out=J::object();out["bounds"]={{"l",bounds.l},{"r",bounds.r},{"t",bounds.t},{"b",bounds.b}};out["helm"]={{"x",helm.x},{"y",helm.y}};
+ {J bl=J::array();for(auto& [k,b]:blocks)bl.push_back({{"x",b.x},{"y",b.y},{"rotation",b.rotation},{"hp",b.hp}});out["blocks"]=bl;}
+ // machines and tiles in the shape game.js state() writes them (keys in the same order; unset ones left out)
+ {J ms=J::array(),ts=J::array();for(auto& [k,t]:terrain){if(t.body){b2Vec2 p=t.body->GetPosition();J o={{"type",t.type},{"id",t.id},{"x",p.x},{"y",p.y},{"vx",0},{"vy",0}};
+    for(const char* f:{"kind","materials","queue","job","repeat","credit","hp","busy","lastOut","sent","output"}){if(std::string(f)=="hp"){if(t.hpSet)o["hp"]=t.hp;continue;}auto it=t.extra.find(f);if(it!=t.extra.end()&&!it->is_null())o[f]=*it;}ms.push_back(o);continue;}
+   J o=J::object();auto x=[&](const char* f)->const J*{auto it=t.extra.find(f);return it!=t.extra.end()&&!it->is_null()?&*it:nullptr;};
+   o["filterMode"]=x("filterMode")?*x("filterMode"):J("all");o["filterItems"]=x("filterItems")?*x("filterItems"):J::array();o["type"]=t.type;o["x"]=t.ix();o["y"]=t.iy();o["rotation"]=t.rotation;
+   for(const char* f:{"materials","queue","job","repeat","cargo"})if(x(f))o[f]=*x(f);o["hp"]=t.hp;o["outputTimer"]=x("outputTimer")?*x("outputTimer"):J(0);
+   if(x("kind"))o["kind"]=*x("kind");if(!t.access.empty())o["access"]=t.access;if(t.type=="sign")o["text"]=x("text")?*x("text"):J("");if(t.type=="paint")o["color"]=x("color")?*x("color"):data().raw.at("PAINT_DEFAULT");
+   if(x("pull")&&x("pull")->is_boolean()&&x("pull")->get<bool>())o["pull"]=true;if(t.type=="pusher_block"&&x("beam"))o["beam"]=*x("beam");
+   if(t.type=="pusher_block"&&x("mode")){o["mode"]=*x("mode");for(const char* f:{"filteredMode","maxBeam","speed"})if(x(f))o[f]=*x(f);o["filterInv"]=x("filterInv")&&x("filterInv")->is_boolean()&&x("filterInv")->get<bool>();for(const char* f:{"filters","beamMode"})if(x(f))o[f]=*x(f);}
+   if(t.type=="loader"&&x("phase"))o["phase"]=*x("phase");if(x("requireOutput")&&x("requireOutput")->is_boolean()&&x("requireOutput")->get<bool>())o["requireOutput"]=true;ts.push_back(o);}
+  out["machines"]=ms;out["terrain"]=ts;}
+ {J ml=J::array();for(auto& m:mounts){J o={{"hp",m.hp},{"type",m.type},{"starterRC",m.starterRC},{"side",m.side},{"at",m.at},{"rotation",m.rotation},{"fuelItems",m.fuelItems},{"explosiveItems",m.explosiveItems},{"burnRemaining",m.burnRemaining},{"burnKind",m.burnKind},{"ammo",m.ammo},{"ammoType",m.ammoType}};if(!m.kind.empty())o["kind"]=m.kind;ml.push_back(o);}out["mounts"]=ml;}
  J it=J::array();for(auto& i:items){auto p=i->body->GetPosition();it.push_back({{"type",i->type},{"count",i->count},{"intakeFrom",i->intakeFrom},{"x",p.x},{"y",p.y}});}out["items"]=it;
  J bx=J::array();for(auto& b:boxes){auto p=b->body->GetPosition(),v=b->body->GetLinearVelocity();bx.push_back({{"x",p.x},{"y",p.y},{"angle",b->body->GetAngle()},{"materials",b->materials},{"size",b->size},{"vx",v.x},{"vy",v.y}});}out["boxes"]=bx;
  return out;}
