@@ -15,10 +15,10 @@
 namespace nd {
 // ordered_json keeps keys in insertion order, as JavaScript objects do (string keys), so tables iterate in the same order.
 using J=nlohmann::ordered_json;
-// Fatal input errors: the native build throws (the binding turns it into a JavaScript exception); the WebAssembly
-// build has no exceptions, so it records the message and returns an error result instead.
+// Errors: the native build throws (the binding returns it as {"error"}); the WebAssembly build has no exceptions, so
+// it prints the message and traps (core-wasm.js turns that into a JavaScript error; the page then reloads the core).
 #ifdef ND_NO_EXCEPTIONS
-void fail(const std::string& why);
+[[noreturn]] void fail(const std::string& why);
 #else
 struct Error:std::runtime_error{using std::runtime_error::runtime_error;};
 [[noreturn]] inline void fail(const std::string& why){throw Error(why);}

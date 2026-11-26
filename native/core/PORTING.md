@@ -31,7 +31,7 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | Stage | Scope | Test | Status |
 |---|---|---|---|
 | 1 | build (native + wasm), data file, era.js rules | tests/core-rules.cjs | done |
-| 2 | interior physics world, hull shell/skin, crew controller (walk, jump, ladders, ice), helm/thrusters | tests/core-crew.cjs | |
+| 2 | interior physics world, hull shell/skin, crew controller on foot (walk, jump, ladders, ice, walkways, wedges, nets) | tests/core-crew.cjs | done (identical to the mm); piloting/thrusters move to stage 7 with the exterior |
 | 3 | construction (placement, edit/remove/rotate, footprints, mounts), embiggener/shrinker | | |
 | 4 | cargo (items, stacks, merging, boxes), hatches, safeguards | | |
 | 5 | machinery (fabricators, loaders, pushers, recycler, shredder, comms, doors, spawns) | | |
@@ -39,3 +39,13 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
 | 9 | server on the core (all server tests pass), page prediction on the WebAssembly core | | |
+
+## Fixed in the JavaScript while porting (so both agree)
+- The last crew member stepped each tick lost ladder cooldown twice as fast (game.js step and serverCrewStep both
+  counted it down).
+- Only the last crew member stepped was held at the top of a ladder (clampToLadder ran once, in step); the others
+  overshot the top rung.
+
+## Not yet ported inside stage 2's files (marked TODO in the code)
+- storage tiles (expando boxes) and physics machines are skipped when a ship is built: stages 4 and 5.
+- doors open/close for nearby crew (doorOpen) and noclip flight: stage 5 / stage 8.
