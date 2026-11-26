@@ -114,7 +114,7 @@ void Ship::tickSafeguards(double dt){const J& S=data().raw.at("SAFETY");const do
 }
 // Cargo pushed out through solid hull goes back in (a broken hull lets it out into the zone: stage 7, with the exterior).
 void Ship::tickHullLeaks(){for(auto& i:items){b2Vec2 p=i->body->GetPosition();if(p.x>bounds.l-.5&&p.x<bounds.r+.5&&p.y>bounds.t-.5&&p.y<bounds.b+.5)continue;if(std::isfinite(p.x)&&std::isfinite(p.y))rescueBody(i->body,true);}}
-void Ship::tickTrashDecay(double dt){const double life=data().ammo.at("trash").value("itemDecay",45.0);
+void Ship::tickTrashDecay(double dt){const double life=val(data().ammo.at("trash"),"itemDecay",45.0);
  for(size_t k=items.size();k-->0;){Item& i=*items[k];if(i.type=="trash"&&random()<dt/life){i.count--;if(i.count<=0)destroyItem(k);}}
  for(auto& b:boxes){int n=b->materials.contains("trash")&&b->materials["trash"].is_number()?b->materials["trash"].get<int>():0;if(n>0&&random()<dt*std::min(16,n)/life/4)b->materials["trash"]=n-1;}}
 }

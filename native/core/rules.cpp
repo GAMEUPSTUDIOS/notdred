@@ -1,10 +1,10 @@
 #include "rules.h"
 namespace nd {
 const J& zoneDef(const std::string& id){const auto& z=data().zones;auto it=z.find(id);if(it!=z.end())return *it;return z.at(data().startZone);}
-bool isCombatZone(const std::string& id){return zoneDef(id).value("kind","")=="combat";}
+bool isCombatZone(const std::string& id){return val(zoneDef(id),"kind","")=="combat";}
 Half zoneHalf(const std::string& id){const J& d=zoneDef(id);
  if(d.contains("half")&&d["half"].is_object())return {d["half"]["w"].get<double>(),d["half"]["h"].get<double>()};
- const J& gen=d.at("gen");const double k=gen.value("layout","")=="block"?1:gen.value("scale",1.0);
+ const J& gen=d.at("gen");const double k=val(gen,"layout","")=="block"?1:val(gen,"scale",1.0);
  auto odd=[&](double n){double v=n*k;return v-(k>1&&std::fmod(v,2.0)==0?1:0);};
  const double w=gen.at("width").get<double>(),h0=gen.contains("height")&&gen["height"].is_number()?gen["height"].get<double>():0,h=h0?h0:w;
  return {(odd(w)-1)*2+8,(odd(h)-1)*2+8};}
@@ -16,7 +16,7 @@ double pvpMultiplierFor(double size,const std::string& id){const auto& z=data().
  const double zero=r["sizeZero"].get<double>(),full=r["sizeFull"].get<double>();return std::max(0.0,std::min(1.0,(zero-size)/(zero-full)));}
 const J& turretDef(bool starterRC,const std::string& kind){const J& t=data().turrets;std::string k=starterRC?"starter_rc":kind.empty()?"turret":kind;auto it=t.find(k);return it!=t.end()?*it:t.at("turret");}
 double turretReload(bool starterRC,const std::string& kind,const std::string& ammoType){const J& r=data().ammoReload;double scale=1;auto it=r.find(ammoType);if(it!=r.end()&&it->get<double>()!=0)scale=it->get<double>();return turretDef(starterRC,kind).at("reload").get<double>()*scale;}
-int turretCapacity(bool starterRC,const std::string& kind){const J& d=turretDef(starterRC,kind);int c=d.value("capacity",0);return c?c:16;}
+int turretCapacity(bool starterRC,const std::string& kind){const J& d=turretDef(starterRC,kind);int c=val(d,"capacity",0);return c?c:16;}
 int itemMaxHp(const std::string& type){const J& h=data().itemHp;auto it=h.find(type);int v=it!=h.end()?it->get<int>():0;return v?v:100;}
 bool isAmmo(const std::string& type){return data().ammo.contains(type);}
 J recipeNeeds(const std::string& type){const GameData& g=data();

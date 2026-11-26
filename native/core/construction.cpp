@@ -71,7 +71,7 @@ std::string Ship::validity(std::pair<int,int> c,const std::string& t,Crew& who){
  return "";}
 // ---- Building ------------------------------------------------------------------------------------------------------
 static bool notBuildable(const std::string& t){return isAmmo(t)||among(t,{"iron","explosives","fuel","flux","wrench","shredder","shredder_gold","pusher","repair","booster","empty","walk"});}
-bool Ship::beginBuild(Crew& c,std::pair<int,int> cell,const std::string& t){if(c.buildJob.is_object()){toast("Finish the current build first.");return false;}
+bool Ship::beginBuild(Crew& c,std::pair<int,int> cell,std::string t){if(c.buildJob.is_object()){toast("Finish the current build first.");return false;}
  if(notBuildable(t)){toast("Select a placeable item.");return false;}std::string err=validity(cell,t,c);if(!err.empty()){toast(err);return false;}
  if(t=="helm"?!carried(c,"wrench"):!carried(c,t)){toast("You need the item before building.");return false;}
  J j=J::object();j["c"]={{"x",cell.first},{"y",cell.second}};if(!physicsMachineType(t).empty()||t=="storage"){V2 p=c.mouseActive?c.mouse:V2(cell.first,cell.second);j["p"]={{"x",p.x},{"y",p.y}};}
@@ -99,8 +99,8 @@ void Ship::commitBuild(Crew& c,std::pair<int,int> cell,const std::string& t,int 
 // ---- Dismantling ---------------------------------------------------------------------------------------------------
 void Ship::dropContents(Tile& t,V2 p){const J m=t.extra.contains("materials")?t.extra["materials"]:J();
  if(m.is_object())for(auto& k:data().types){auto it=m.find(k);if(it!=m.end()&&it->is_number()&&it->get<double>()>0){scatter(k,(int)it->get<double>(),{p.x,p.y+.4});t.extra["materials"][k]=0;}}
- if(t.extra.contains("job")&&t.extra["job"].is_object()){J need=recipeNeeds(t.extra["job"].value("type",""));if(need.is_object())for(auto& [k,n]:need.items())scatter(k,n.get<int>(),{p.x,p.y+.4});t.extra["job"]=nullptr;}
- if(t.extra.contains("cargo")&&t.extra["cargo"].is_array())for(auto& i:t.extra["cargo"])if(i.is_object())scatter(i.value("type",""),i.value("count",1),{p.x,p.y+.4});t.extra["cargo"]=J::array();}
+ if(t.extra.contains("job")&&t.extra["job"].is_object()){J need=recipeNeeds(val(t.extra["job"],"type",""));if(need.is_object())for(auto& [k,n]:need.items())scatter(k,n.get<int>(),{p.x,p.y+.4});t.extra["job"]=nullptr;}
+ if(t.extra.contains("cargo")&&t.extra["cargo"].is_array())for(auto& i:t.extra["cargo"])if(i.is_object())scatter(val(i,"type",""),val(i,"count",1),{p.x,p.y+.4});t.extra["cargo"]=J::array();}
 void Ship::dropMachine(const std::string& k,Crew& who){Tile* t=terrain.get(k);if(!t)return;int w,h;sizeOf(t->type,w,h);V2 p=t->body?t->mpos:V2(t->x+(w-1)/2.0,t->y+(h-1)/2.0);dropContents(*t,p);
  std::string item=t->type=="fabricator"?data().raw.at("FABRICATORS").at(fabKind(*t)).at("item").get<std::string>():t->type,label=placedName(t)+" fell";
  if(t->f){interior->DestroyFixture(t->f);skinDirty=true;}if(t->body)inside->destroy(t->body);terrain.erase(k);scatter(item,1,{p.x,p.y+.4});actionEffect(p.x,p.y,"red",label,who);wakeCargoNear(p,4);}
@@ -120,7 +120,7 @@ void Ship::removeAt(Crew& c,std::pair<int,int> cell){V2 cv{(double)cell.first,(d
  if(blk){Block b=*blk;if(b.f){interior->DestroyFixture(b.f);skinDirty=true;}blocks.erase(key(cell.first,cell.second));actionEffect(cv.x,cv.y,"red",nameOf("block"),c);refund(c,"block",&cv);return;}
  tt=terrainAt(cell.first,cell.second);if(!tt){return;}std::string tk=keyOf(*this,tt);Tile& t=*terrain.get(tk);
  if(t.type=="fabricator"||t.type=="storage")dropContents(t,t.body?t.mpos:V2(t.x+.5,t.y+1));
- if(t.extra.contains("cargo")&&t.extra["cargo"].is_array())for(auto& i:t.extra["cargo"])if(i.is_object())scatter(i.value("type",""),i.value("count",1),{t.x,t.y+.4});
+ if(t.extra.contains("cargo")&&t.extra["cargo"].is_array())for(auto& i:t.extra["cargo"])if(i.is_object())scatter(val(i,"type",""),val(i,"count",1),{t.x,t.y+.4});
  Tile copy=t;if(t.f){interior->DestroyFixture(t.f);skinDirty=true;}if(t.body)inside->destroy(t.body);blocks.erase(key(cell.first,cell.second));terrain.erase(tk);
  actionEffect(cv.x,cv.y,"red",placedName(&copy),c);refund(c,copy.type=="fabricator"?data().raw.at("FABRICATORS").at(fabKind(copy)).at("item").get<std::string>():copy.type,&cv);}
 // ---- Rotating ------------------------------------------------------------------------------------------------------
@@ -201,18 +201,18 @@ void Ship::edit(Crew& c){auto cell=cursorCell(c);V2 cv{(double)cell.first,(doubl
   if(m.ammo&&(m.ammoType.empty()?"ammo":m.ammoType)!=type){toast("Eject the existing ammo first.");return;}const int cap=turretCapacity(m.starterRC,m.kind),n=std::min(carried(c,type),cap-(int)m.ammo);
   if(n<=0){toast("Turret is full ("+std::to_string(cap)+"/"+std::to_string(cap)+").");return;}m.ammoType=type;m.ammo=m.ammo+n;takeItem(c,type,n);int left=carried(c,type);
   toast(turretDef(m.starterRC,m.kind).at("name").get<std::string>()+" loaded: "+std::to_string((int)m.ammo)+"/"+std::to_string(cap)+(left?" · "+std::to_string(left)+" left in hand":""));return;}
- if(c.tool=="pusher"||c.tool=="shredder"||c.tool=="shredder_gold"||c.tool=="repair"||c.tool=="booster")return; // TODO stage 5b/7: pushAt, shredAt, repairAt, useBooster
+ if(c.tool=="pusher"){pushAt(c,c.mouse,1.0/60);return;}if(c.tool=="shredder"||c.tool=="shredder_gold"){shredAt(c,c.mouse);return;}if(c.tool=="repair"){repairAt(c,cell);return;}if(c.tool=="booster")return; // TODO stage 7: useBooster
  if(clicked&&clicked->type=="ejector"&&c.tool!="walk"&&c.tool!="remove")return; // TODO stage 5b: ejectCarried
  if(useBox(c,c.mouse))return;if(pickupAt(c,c.mouse))return;
  {bool onHelm=false;for(auto [hx,hy]:helmCells())if(hx==cell.first&&hy==cell.second)onHelm=true;if(onHelm&&c.tool!="helm"){takeHelm(c);return;}}
  const Tile* target=terrainAt(cell.first,cell.second);
- if(target&&target->type=="recycler"&&c.tool!="walk"&&c.tool!="remove"&&!c.keys.shift)return; // TODO stage 5b: recycleCarried
- if(target&&target->type=="fabricator"&&c.tool!="walk"&&c.tool!="remove"&&std::find(data().types.begin(),data().types.end(),c.tool)!=data().types.end()){if(!fabReach(c,target)){toast("Move closer to load items.");return;}return; /* TODO stage 5b: transferMaterial */}
+ if(target&&target->type=="recycler"&&c.tool!="walk"&&c.tool!="remove"&&std::find(data().types.begin(),data().types.end(),c.tool)!=data().types.end()&&!c.keys.shift){recycleCarried(c,const_cast<Tile&>(*target));return;}
+ if(target&&target->type=="fabricator"&&c.tool!="walk"&&c.tool!="remove"&&std::find(data().types.begin(),data().types.end(),c.tool)!=data().types.end()){if(!fabReach(c,target)){toast("Move closer to load items.");return;}c.activeFab=target->id;transferMaterial(c,c.tool,false);return;}
  if(c.tool=="empty"){Tile* f=const_cast<Tile*>(target);if(fabReach(c,f)){openCraft(c,f);return;}interact(c);return;}
- if(c.tool=="fuel"||c.tool=="explosives")return; // TODO stage 5b: loadThruster
+ if(c.tool=="fuel"||c.tool=="explosives"){loadThruster(c,cell,c.tool);return;}
  if(c.tool=="walk"||c.tool=="remove"){if(target&&target->type=="fabricator"&&!c.keys.shift&&c.tool=="walk"){Tile* f=const_cast<Tile*>(target);if(fabReach(c,f))openCraft(c,f);else toast("Move closer to use the fabricator.");return;}removeAt(c,cell);return;}
  beginBuild(c,buildCell(c.tool,c),c.tool);}
-void Ship::secondaryAt(Crew& c,std::pair<int,int> cell){const Tile* f=terrainAt(cell.first,cell.second);if(f&&f->type=="recycler"&&!c.slots[c.selected].empty()&&!(c.keys.shift&&c.tool=="walk"))return; // TODO stage 5b: recycleCarried
- if(c.tool=="shredder"||c.tool=="shredder_gold")return; // TODO stage 5b: shredAt
+void Ship::secondaryAt(Crew& c,std::pair<int,int> cell){const Tile* f=terrainAt(cell.first,cell.second);if(f&&f->type=="recycler"&&!c.slots[c.selected].empty()&&!(c.keys.shift&&c.tool=="walk")){recycleCarried(c,const_cast<Tile&>(*f));return;}
+ if(c.tool=="shredder"||c.tool=="shredder_gold"){shredAt(c,c.mouse);return;}
  removeAt(c,cell);}
 }

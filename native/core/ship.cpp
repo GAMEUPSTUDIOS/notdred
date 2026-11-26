@@ -20,15 +20,15 @@ Keys Keys::from(const J& k){Keys o;if(!k.is_object())return o;auto b=[&](const c
 
 Ship::Ship(const J& saved){load(saved);}
 void Ship::load(const J& saved){
- if(saved.is_object()&&saved.contains("bounds")&&saved["bounds"].is_object()){const J& b=saved["bounds"];bounds.l=b.value("l",-5);bounds.r=b.value("r",5);bounds.t=b.value("t",-4);bounds.b=b.value("b",3);}
+ if(saved.is_object()&&saved.contains("bounds")&&saved["bounds"].is_object()){const J& b=saved["bounds"];bounds.l=val(b,"l",-5);bounds.r=val(b,"r",5);bounds.t=val(b,"t",-4);bounds.b=val(b,"b",3);}
  b2BodyDef d;interior=inside->w.CreateBody(&d);
  rebuildShell();
- if(saved.is_object()&&saved.contains("helm")&&saved["helm"].is_object()){helm.x=saved["helm"].value("x",1);helm.y=saved["helm"].value("y",bounds.b-1);}else{helm.x=1;helm.y=bounds.b-1;}
- if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;int x=b.value("x",0),y=b.value("y",0);if(interiorCell(x,y)&&!(x==helm.x&&y==helm.y))addBlock(x,y,b.value("rotation",0));}
- if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object())continue;std::string type=t.value("type","");int x=t.value("x",0),y=t.value("y",0);
+ if(saved.is_object()&&saved.contains("helm")&&saved["helm"].is_object()){helm.x=val(saved["helm"],"x",1);helm.y=val(saved["helm"],"y",bounds.b-1);}else{helm.x=1;helm.y=bounds.b-1;}
+ if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;int x=val(b,"x",0),y=val(b,"y",0);if(interiorCell(x,y)&&!(x==helm.x&&y==helm.y))addBlock(x,y,val(b,"rotation",0));}
+ if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object())continue;std::string type=val(t,"type","");int x=val(t,"x",0),y=val(t,"y",0);
   if(type.empty()||type=="fabricator"||!interiorCell(x,y)||blocks.has(key(x,y)))continue;
   if(type=="storage"){spawnBox({x+.5,y+.5},t.contains("materials")&&t["materials"].is_object()?t["materials"]:J::object());continue;}
-  Tile* n=addTerrain(type,x,y,t.value("rotation",0));if(!n)continue;
+  Tile* n=addTerrain(type,x,y,val(t,"rotation",0));if(!n)continue;
   if(t.contains("cargo")&&!n->body)n->extra["cargo"]=t["cargo"];
   if(type=="sign"){std::u16string u=toU16(t.contains("text")&&t["text"].is_string()?t["text"].get<std::string>():"");for(auto& ch:u)if(ch<0x20||ch==0x7f)ch=u' ';int max=data().raw.at("SIGN_MAX");if((int)u.size()>max)u.resize(max);n->extra["text"]=fromU16(u);}
   if(type=="paint"){std::string c=t.contains("color")&&t["color"].is_string()?t["color"].get<std::string>():"";std::string cc=cleanColor(c);n->extra["color"]=cc.empty()?data().raw.at("PAINT_DEFAULT").get<std::string>():cc;}
@@ -39,19 +39,19 @@ void Ship::load(const J& saved){
  // Fabricators saved among the tiles (before they were physics machines): back where they fit, else at the floor.
  // schema as JavaScript compares it: a save without one is neither old nor new (undefined < n is false)
  const double schema=saved.is_object()&&saved.contains("schema")&&saved["schema"].is_number()?saved["schema"].get<double>():NAN;
- if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object()||t.value("type","")!="fabricator")continue;int x=t.value("x",0),y=t.value("y",0);
+ if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& t:saved["terrain"]){if(!t.is_object()||val(t,"type","")!="fabricator")continue;int x=val(t,"x",0),y=val(t,"y",0);
   if(std::isnan(schema)||!schema||schema<6){x=std::min(x,bounds.r-2);y-=2;}
-  if(fabFits(x,y,false,"fabricator")){Tile* f=addTerrain("fabricator",x,y,0);if(f&&schema>=6){f->extra["materials"]=t.contains("materials")?t["materials"]:J({{"iron",0},{"explosives",0}});f->extra["queue"]=t.contains("queue")?t["queue"]:J::array();f->extra["job"]=t.contains("job")?t["job"]:J();f->extra["repeat"]=t.value("repeat",false);}
+  if(fabFits(x,y,false,"fabricator")){Tile* f=addTerrain("fabricator",x,y,0);if(f&&schema>=6){f->extra["materials"]=t.contains("materials")?t["materials"]:J({{"iron",0},{"explosives",0}});f->extra["queue"]=t.contains("queue")?t["queue"]:J::array();f->extra["job"]=t.contains("job")?t["job"]:J();f->extra["repeat"]=val(t,"repeat",false);}
    if(f){std::string kind=t.contains("kind")&&t["kind"].is_string()?t["kind"].get<std::string>():"";f->extra["kind"]=data().raw.at("FABRICATORS").contains(kind)?kind:"legacy";}}
   else{bool placed=false;for(int xx=bounds.r-2;xx>bounds.l;xx--)if(fabFits(xx,bounds.b-3,true,"fabricator")){addTerrain("fabricator",xx,bounds.b-3,0);placed=true;break;}if(!placed)oldInventory["fabricator"]=(oldInventory.contains("fabricator")?oldInventory["fabricator"].get<int>():0)+1;}}
  // Hull attachments; a ship saved without the list gets the two starter thrusters.
  bool replaceDefaults=false;J oldMounts=saved.is_object()&&saved.contains("mounts")&&saved["mounts"].is_array()?saved["mounts"]:J::array();
- {const std::pair<const char*,int> oldDefault[4]={{"bottom",-2},{"top",0},{"left",0},{"right",0}};auto isDefault=[&](const J& m,const char* side,int at){return m.is_object()&&m.value("type","")=="thruster"&&m.value("side","")==side&&m.contains("at")&&m["at"].is_number()&&m["at"].get<double>()==at;};
+ {const std::pair<const char*,int> oldDefault[4]={{"bottom",-2},{"top",0},{"left",0},{"right",0}};auto isDefault=[&](const J& m,const char* side,int at){return m.is_object()&&val(m,"type","")=="thruster"&&val(m,"side","")==side&&m.contains("at")&&m["at"].is_number()&&m["at"].get<double>()==at;};
   if(schema<6){replaceDefaults=true;for(auto& [side,at]:oldDefault){bool any=false;for(auto& m:oldMounts)if(isDefault(m,side,at))any=true;if(!any)replaceDefaults=false;}}
   if(replaceDefaults){J kept=J::array();for(auto& m:oldMounts){bool d=false;for(auto& [side,at]:oldDefault)if(isDefault(m,side,at))d=true;if(!d)kept.push_back(m);}oldMounts=kept;}}
  if(saved.is_object()&&saved.contains("mounts")&&saved["mounts"].is_array()){for(auto& j:oldMounts){if(!j.is_object())continue;Mount m;
    auto s=[&](const char* k){return j.contains(k)&&j[k].is_string()?j[k].get<std::string>():std::string();};auto n=[&](const char* k,double d){return j.contains(k)&&j[k].is_number()?j[k].get<double>():d;};
-   m.type=s("type");m.kind=s("kind");m.side=s("side");m.at=(int)n("at",0);m.starterRC=j.value("starterRC",false);m.hp=n("hp",100);m.fuelItems=n("fuelItems",0);m.explosiveItems=n("explosiveItems",0);m.burnRemaining=n("burnRemaining",0);m.burnKind=j.contains("burnKind")?j["burnKind"]:J();m.ammo=n("ammo",0);
+   m.type=s("type");m.kind=s("kind");m.side=s("side");m.at=(int)n("at",0);m.starterRC=val(j,"starterRC",false);m.hp=n("hp",100);m.fuelItems=n("fuelItems",0);m.explosiveItems=n("explosiveItems",0);m.burnRemaining=n("burnRemaining",0);m.burnKind=j.contains("burnKind")?j["burnKind"]:J();m.ammo=n("ammo",0);
    std::string at=s("ammoType");if(!at.empty())m.ammoType=at;if(m.type=="turret"&&!isAmmo(m.ammoType))m.ammoType="ammo";
    if(schema<14&&m.type=="turret"&&m.at==0&&(m.side=="left"||m.side=="right"))m.starterRC=true;
    if(schema<7&&m.type=="starter"&&m.side=="bottom")m.at=m.at<(bounds.l+bounds.r)/2.0?bounds.l:bounds.r;
@@ -61,7 +61,7 @@ void Ship::load(const J& saved){
  // TODO stage 7: rebuildMounts (their fixtures are on the outside hull)
  // The first crew member's body exists with the ship (game.js initialize), before the cargo: body order matters to Box2D.
  spare=makeCrewBody(2|32);
- if(saved.is_object()&&saved.contains("position")&&saved["position"].is_object()){shipPos.x=saved["position"].value("x",0.0);shipPos.y=saved["position"].value("y",0.0);}
+ if(saved.is_object()&&saved.contains("position")&&saved["position"].is_object()){shipPos.x=val(saved["position"],"x",0.0);shipPos.y=val(saved["position"],"y",0.0);}
  if(saved.is_object()&&saved.contains("items")&&saved["items"].is_array())for(auto& i:saved["items"]){if(!i.is_object())continue;std::string type=i.contains("type")&&i["type"].is_string()?i["type"].get<std::string>():"";
   const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),type)==ty.end()){if(type.empty()||type=="empty"||type=="undefined"||type=="null")type="ammo";else continue;}
   auto n=[&](const char* k){return i.contains(k)&&i[k].is_number()?i[k].get<double>():0.0;};int count=i.contains("count")&&i["count"].is_number()&&i["count"].get<double>()?(int)i["count"].get<double>():1;
@@ -71,7 +71,7 @@ void Ship::load(const J& saved){
    if(v.is_number()&&v.get<double>()>0)mats[t]=(mats.contains(t)?mats[t].get<double>():0)+v.get<double>();}
   auto n=[&](const char* k){return b.contains(k)&&b[k].is_number()?b[k].get<double>():0.0;};Box& x=spawnBox({n("x"),n("y")},mats);x.body->SetTransform(x.body->GetPosition(),(float)n("angle"));}
  // Physics machines (fabricators, recyclers, comms stations), clamped inside the hull.
- if(saved.is_object()&&saved.contains("machines")&&saved["machines"].is_array())for(auto& m:saved["machines"]){if(!m.is_object())continue;std::string type=m.value("type","");bool phys=false;for(auto& t:data().raw.at("PHYSICS_MACHINES"))if(t==type)phys=true;
+ if(saved.is_object()&&saved.contains("machines")&&saved["machines"].is_array())for(auto& m:saved["machines"]){if(!m.is_object())continue;std::string type=val(m,"type","");bool phys=false;for(auto& t:data().raw.at("PHYSICS_MACHINES"))if(t==type)phys=true;
   if(!phys||!m.contains("x")||!m.contains("y")||!m["x"].is_number()||!m["y"].is_number())continue;double x=m["x"],y=m["y"];if(!std::isfinite(x)||!std::isfinite(y))continue;
   int w=1,h=1;{const J& ms=data().raw.at("MACHINE_SIZE");w=ms.at(type)[0];h=ms.at(type)[1];}J fields=J::object();for(auto& [k,v]:m.items())if(k!="type"&&k!="x"&&k!="y"&&k!="vx"&&k!="vy"&&k!="id")fields[k]=v;
   Tile& t=spawnMachine(type,{clamp(x,bounds.l+w/2.0,bounds.r-w/2.0),clamp(y,bounds.t+h/2.0,bounds.b-h/2.0)},fields,m.contains("id")&&m["id"].is_string()?m["id"].get<std::string>():"");
@@ -96,8 +96,8 @@ void Ship::load(const J& saved){
  if(saved.is_object()&&schema<13){std::vector<std::string> gone;for(auto& [k,t]:terrain)if(t.type=="shredder")gone.push_back(k);
   for(auto& k:gone){Tile* t=terrain.get(k);if(t->f){interior->DestroyFixture(t->f);skinDirty=true;}V2 p{t->x,t->y};terrain.erase(k);spawnItem("shredder",p,{0,0},1);}}
  // Health and settings saved with each tile.
- if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;Block* t=blocks.get(key(b.value("x",0),b.value("y",0)));if(t)t->hp=b.contains("hp")&&b["hp"].is_number()?b["hp"].get<double>():100;}
- if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& o:saved["terrain"]){if(!o.is_object())continue;Tile* t=terrain.get(key(o.value("x",0),o.value("y",0)));if(!t)continue;
+ if(saved.is_object()&&saved.contains("blocks")&&saved["blocks"].is_array())for(auto& b:saved["blocks"]){if(!b.is_object())continue;Block* t=blocks.get(key(val(b,"x",0),val(b,"y",0)));if(t)t->hp=b.contains("hp")&&b["hp"].is_number()?b["hp"].get<double>():100;}
+ if(saved.is_object()&&saved.contains("terrain")&&saved["terrain"].is_array())for(auto& o:saved["terrain"]){if(!o.is_object())continue;Tile* t=terrain.get(key(val(o,"x",0),val(o,"y",0)));if(!t)continue;
   t->hp=o.contains("hp")&&o["hp"].is_number()?o["hp"].get<double>():100;t->extra["outputTimer"]=o.contains("outputTimer")&&o["outputTimer"].is_number()&&o["outputTimer"].get<double>()?o["outputTimer"]:J(0);
   t->extra["filterMode"]=o.contains("filterMode")&&o["filterMode"].is_string()&&!o["filterMode"].get<std::string>().empty()?o["filterMode"]:J("all");
   t->extra["filterItems"]=o.contains("filterItems")&&!o["filterItems"].is_null()&&!(o["filterItems"].is_boolean()&&!o["filterItems"].get<bool>())?o["filterItems"]:J::array();
@@ -149,6 +149,7 @@ void Ship::reloadAfterResize(const J& r){const J saved=r["saved"];
  blocks.clear();terrain.clear();mounts.clear();items.clear();boxes.clear();shell.clear();effects=J::array();interior=nullptr;skinBody=nullptr;spare=nullptr;skinDirty=true;savedStacks=J();
  inside=std::make_unique<World>(V2(0,20));load(saved);savedStacks=J();
  const std::string actorId=r["actor"];
+ for(auto& [id,c]:crew)c.shredReady=0;   /* the old game kept shredder cooldowns per crew body, and the bodies are new */
  for(auto& [id,c]:crew){if(id==actorId){c.body=spare;spare=nullptr;const J& st=saved["stacks"];for(int i=0;i<5;i++){const J& a=st[i];c.slots[i]=a.is_object()?a["type"].get<std::string>():"";c.counts[i]=a.is_object()?a["count"].get<int>():0;}
    c.piloting=false;c.climbing=false;c.jumpTime=0;c.jumpWas=false;c.ladderCooldown=0;c.keys=Keys();c.activeFab.clear();c.buildRotation=0;c.buildJob=J();c.pusherPull=false;c.pusherHeld=false;c.manning.clear();}}
  for(auto& [id,c]:crew){if(id==actorId)continue;c.body=makeCrewBody(2|128);for(auto& x:r["others"])if(x["id"]==id){c.body->SetTransform(b2Vec2((float)x["x"].get<double>(),(float)x["y"].get<double>()),0);c.body->SetLinearVelocity(b2Vec2((float)x["vx"].get<double>(),(float)x["vy"].get<double>()));c.body->SetEnabled(x["active"].get<bool>());c.body->SetGravityScale((float)x["gs"].get<double>());}setRank(id,c.rank);}
@@ -265,10 +266,10 @@ void Ship::clampToLadder(Crew& c){if(!c.climbing)return;double lo=1e18,hi=-1e18;
  if(!any)return;V2 p=vv(c.body->GetPosition());double y=clamp(p.y,lo-1.13,hi+.4);if(y!=p.y){setTransform(c.body,{c.ladderX,y});setVel(c.body,{0,0});}}
 // One tick (game.js step + room-runtime serverCrewStep/serverCrewAfterStep), the parts ported so far.
 void Ship::tick(double dt){clock+=dt;
- mergeTouchingCargo();tickHullLeaks();tickTrashDecay(dt);
+ syncMachines();mergeTouchingCargo();tickHullLeaks();/* TODO stage 7: tickZone, tickEjectors */tickRecyclers(dt);tickTrashDecay(dt);/* TODO stage 7: updateShipMass, tickShields */tickFabricators(dt);tickPushers(dt);tickLoaders(dt);
  for(auto& e:effects)e["life"]=e["life"].get<double>()-dt;{J kept=J::array();for(auto& e:effects)if(e["life"].get<double>()>0)kept.push_back(e);effects=kept;}
  for(auto& [id,c]:crew){actor=&c;c.inputAge+=dt;if(c.inputAge>.5){c.keys=Keys();c.pusherHeld=false;}c.ladderCooldown=std::max(0.0,c.ladderCooldown-dt);
-  if(c.sandbox&&c.buildJob.is_object())c.buildJob["elapsed"]=c.buildJob["duration"];tickBuild(c,dt);/* TODO stage 5b: held pusher (pushAt) */stepController(c,dt);}actor=nullptr;
+  if(c.sandbox&&c.buildJob.is_object())c.buildJob["elapsed"]=c.buildJob["duration"];tickBuild(c,dt);if(c.pusherHeld&&c.tool=="pusher"&&!c.piloting)pushAt(c,c.mouse,dt);stepController(c,dt);}actor=nullptr;
  syncSkin();inside->step(dt);tickSafeguards(dt);
  const double maxSpeed=data().raw.at("SAFETY").at("maxCrewSpeed").get<double>();
  for(auto& [id,c]:crew){clampToLadder(c);if(c.piloting)continue;b2Body* b=c.body;V2 p=vv(b->GetPosition()),v=vv(b->GetLinearVelocity());
@@ -282,6 +283,8 @@ J Ship::crewState()const{J out=J::array();for(auto& [id,c]:crew){auto p=c.body->
 namespace nd {
 // ---- Commands (room-runtime command): the parts ported so far ------------------------------------------------------
 static bool isInt(const J& v){return v.is_number_integer()||(v.is_number_float()&&std::floor(v.get<double>())==v.get<double>());}
+// The fabricator a crafting/loading action is for: the one named (its window is open) when it's in reach, else the nearest.
+Tile* Ship::fabFor(Crew& m,const J& msg){if(msg.contains("fab")&&msg["fab"].is_string()){for(auto& [k,t]:terrain)if(t.id==msg["fab"].get<std::string>()&&fabReach(m,&t))return &t;}return nearFab(m);}
 void Ship::command(const std::string& id,const J& msg){Crew* m=crew.get(id);if(!m||!msg.is_object())return;actor=m;
  const std::string a=msg.contains("action")&&msg["action"].is_string()?msg["action"].get<std::string>():"";
  auto allowed=[&](){if(m->rank=="captain"||a=="dev")return true;if(a=="rename"||a=="door"||a=="spawnrank")return false;if(m->rank=="guest"&&a=="sign")return false;return true;};
@@ -310,8 +313,20 @@ void Ship::command(const std::string& id,const J& msg){Crew* m=crew.get(id);if(!
   else if(op=="sandbox"){m->sandbox=!m->sandbox;toast(std::string("Sandbox build mode ")+(m->sandbox?"on: building is instant and uses no items.":"off."));}
   else if(op=="give"&&msg.contains("item")&&msg["item"].is_string()){std::string item=msg["item"];const auto& ty=data().types;if(std::find(ty.begin(),ty.end(),item)!=ty.end()){
    double c=msg.contains("count")&&msg["count"].is_number()?std::floor(msg["count"].get<double>()):0;int n=(int)clamp(c&&std::isfinite(c)?c:1,1,512);giveItem(*m,item,n);}}}
- // TODO later stages: interact, leave, edit, remove, rotate, helm, portal, craft, material, clearQueue, repeat, door,
- // spawnrank, sign, paint, pusher, hatch, recover, rename, the other dev ops.
+ else if(a=="craft"){int n;J item=msg.contains("item")?msg["item"]:J();if(item.is_string()&&!recipeNeeds(item.get<std::string>()).is_null()&&intOf("count",n)&&n>=1&&n<=8){Tile* f=fabFor(*m,msg);if(f){m->activeFab=f->id;craft(*m,item,n);}}}
+ else if(a=="material"&&msg.contains("item")&&msg["item"].is_string()&&std::find(data().types.begin(),data().types.end(),msg["item"].get<std::string>())!=data().types.end()){Tile* f=fabFor(*m,msg);if(f){m->activeFab=f->id;transferMaterial(*m,msg["item"],flagOf("eject"));}}
+ else if(a=="clearQueue"){Tile* f=fabFor(*m,msg);if(f){m->activeFab=f->id;clearQueue(*m);}}
+ else if(a=="repeat"){Tile* f=fabFor(*m,msg);if(f){m->activeFab=f->id;f->extra["repeat"]=flagOf("value");}}
+ else if((a=="door"||a=="spawnrank"||a=="sign"||a=="paint"||a=="pusher"||a=="hatch")&&msg.contains("cell")&&msg["cell"].is_object()){const J& cj=msg["cell"];
+  if(cj.contains("x")&&cj.contains("y")&&isInt(cj["x"])&&isInt(cj["y"])){std::pair<int,int> cell{(int)cj["x"].get<double>(),(int)cj["y"].get<double>()};const Tile* tc=terrainAt(cell.first,cell.second);Tile* t=const_cast<Tile*>(tc);
+   auto reach=[&](){return t&&(vv(m->body->GetPosition())-V2(t->x,t->y)).len()<=8&&!buildBlocked(*m,{t->x,t->y},t->f);};
+   if(a=="door"){if(t&&t->type=="door"&&reach()&&setDoorAccess(*t,val(msg,"access",J()).is_string()?msg["access"].get<std::string>():"")){const std::string ac=t->access;toast(std::string("Door: ")+(ac=="captain"?"captain only":ac=="crew"?"crew and captain":"everyone")+".");}}
+   else if(a=="spawnrank"){const std::string rk=msg.contains("rank")&&msg["rank"].is_string()?msg["rank"].get<std::string>():"";if(t&&t->type=="spawn"&&reach()&&(rk=="captain"||rk=="crew"||rk=="guest")){t->access=rk;toast(std::string("Spawn point: ")+(rk=="captain"?"captain":rk=="crew"?"crew":"guests")+" spawn here.");}}
+   else if(a=="sign"){if(t&&t->type=="sign"&&reach()){std::u16string u=toU16(msg.contains("text")&&msg["text"].is_string()?msg["text"].get<std::string>():"");for(auto& ch:u)if(ch<0x20||ch==0x7f)ch=u' ';int max=data().raw.at("SIGN_MAX");if((int)u.size()>max)u.resize(max);t->extra["text"]=fromU16(u);}}
+   else if(a=="paint"){std::string col=cleanColor(msg.contains("color")&&msg["color"].is_string()?msg["color"].get<std::string>():"");if(t&&t->type=="paint"&&!col.empty()&&reach())t->extra["color"]=col;}
+   else if(a=="pusher"){if(msg.contains("settings")&&msg["settings"].is_object())configurePusher(*m,cell,msg["settings"]);}
+   else if(a=="hatch")configureHatch(*m,cell,msg.contains("mode")?msg["mode"]:J(),msg.contains("items")?msg["items"]:J(),flagOf("pull"),flagOf("requireOutput"));}}
+ // TODO later stages: portal, rename, the other dev ops.
  actor=nullptr;}
 J Ship::state()const{J out=J::object();out["bounds"]={{"l",bounds.l},{"r",bounds.r},{"t",bounds.t},{"b",bounds.b}};out["helm"]={{"x",helm.x},{"y",helm.y}};out["effects"]=effects;
  {J bl=J::array();for(auto& [k,b]:blocks)bl.push_back({{"x",b.x},{"y",b.y},{"rotation",b.rotation},{"hp",b.hp}});out["blocks"]=bl;}

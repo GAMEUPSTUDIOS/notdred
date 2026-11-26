@@ -35,7 +35,7 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 3 | crew inventory (slots, stacks, carried/addCarried/takeItem/giveItem/moveStack/refund), loose items (spawnItem, scatter, dropItem, pickupAt, mergeTouchingCargo, wakeCargoNear), expando boxes (spawnBox, boxSpace, resizeBox, boxInsert, useBox), commands select/drop/moveStack/dev give | tests/core-cargo.cjs | done (within 3 cm; hands, notices, counts and boxes exact) |
 | 4 | loading saves (every migration in initialize), mounts (mountAt, mountValid, mountWidth, mountPoint, mountHit, inward), physics machines (spawnMachine, machineSpace, supportsMachine, machineOnTop, fabFits, syncMachines), spawn points, placement helpers | tests/core-ship-parts.cjs | done (exact; mount fixtures wait for the exterior, stage 7) |
 | 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut; game.js edit/interact/takeHelm/recover; pickupAt, useBox, turret ammo load/eject, turret controllers) | tests/core-build.cjs | done (edit's branches for later systems are marked TODO and do nothing) |
-| 5b | machinery (fabricators, loaders, pushers, recycler, shredder, comms, ejectors, spawns), hatches | | |
+| 5b | machinery (fabricators, loaders, pushers and the handheld pusher, recyclers, shredders, repairs, thruster tanks, comms, hatch filters, door/spawn/sign/paint settings) | tests/core-machines.cjs | done (ejectors and hatches' zone side wait for the exterior) |
 | 6 | zone generator, zones (rocks, mining, docks, Freeport, portals), missions | | |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
@@ -61,6 +61,10 @@ totals, counts and logic everywhere.
 - doors open/close for nearby crew (doorOpen) and noclip flight: stage 5 / stage 8.
 
 ## Notes
+- `extra` (a tile's JavaScript fields) is an insertion-ordered object stored in a vector: adding a key moves the
+  others, so code that keeps a reference into it first makes every key it will touch (`ensure`). Fields are read
+  with `val()` (core.h), never nlohmann's `value()`, which throws (or aborts the WebAssembly build) on a field of
+  the wrong type.
 - Physics machines keep their centre in doubles (`Tile::mpos`), as the planck bodies did; their Box2D body is only a
   marker (fixture-less, static).
 - resizeCut reloads the ship from its own shifted save in a fresh world mid-tick (`reloadAfterResize`), as

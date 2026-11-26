@@ -30,3 +30,14 @@ inline double clamp(double v,double a,double b){return std::max(a,std::min(b,v))
 // Ship bounds in ship tiles (left, right, top, bottom: inclusive hull rows/columns).
 struct Bounds{int l=-5,r=5,t=-4,b=3;};
 }
+namespace nd {
+// Safe field reads (nlohmann's value() throws, or aborts in WebAssembly, when the field is there but of another type —
+// a hand-edited save, a null an extra field was made as). The default is returned for missing, null or mistyped fields.
+inline std::string val(const J& o,const char* k,const char* d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_string()?it->get<std::string>():std::string(d);}
+inline std::string val(const J& o,const char* k,const std::string& d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_string()?it->get<std::string>():d;}
+inline double val(const J& o,const char* k,double d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_number()?it->get<double>():d;}
+inline int val(const J& o,const char* k,int d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_number()?(int)it->get<double>():d;}
+inline float val(const J& o,const char* k,float d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_number()?(float)it->get<double>():d;}
+inline bool val(const J& o,const char* k,bool d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()&&it->is_boolean()?it->get<bool>():d;}
+inline J val(const J& o,const char* k,const J& d){if(!o.is_object())return d;auto it=o.find(k);return it!=o.end()?*it:d;}
+}

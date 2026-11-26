@@ -10,7 +10,7 @@ namespace nd {
 namespace nd {
 void fail(const std::string& why){std::fprintf(stderr,"core error: %s\n",why.c_str());std::fflush(stderr);std::abort();}
 #endif
-static Bounds boundsOf(const J& b){Bounds o;if(b.is_object()){o.l=b.value("l",o.l);o.r=b.value("r",o.r);o.t=b.value("t",o.t);o.b=b.value("b",o.b);}return o;}
+static Bounds boundsOf(const J& b){Bounds o;if(b.is_object()){o.l=val(b,"l",o.l);o.r=val(b,"r",o.r);o.t=val(b,"t",o.t);o.b=val(b,"b",o.b);}return o;}
 // Safe readers for request fields (a wrong type must not abort the WebAssembly build).
 static double num(const J& q,const char* k,double d){auto it=q.find(k);return it!=q.end()&&it->is_number()?it->get<double>():d;}
 static bool flag(const J& q,const char* k){auto it=q.find(k);return it!=q.end()&&it->is_boolean()&&it->get<bool>();}
@@ -26,8 +26,8 @@ static J rule(const std::string& fn,const J& a){
  if(fn=="shipSize")return shipSize(boundsOf(a.at(0)));
  if(fn=="shipExpansions")return shipExpansions(boundsOf(a.at(0)));
  if(fn=="pvpMultiplier")return pvpMultiplierFor(a.at(0).get<double>(),s(1));
- if(fn=="turretReload"){const J& m=a.at(0);return turretReload(m.value("starterRC",false),str(m.value("kind",J())),str(m.value("ammoType",J())));}
- if(fn=="turretCapacity"){const J& m=a.at(0);return turretCapacity(m.value("starterRC",false),str(m.value("kind",J())));}
+ if(fn=="turretReload"){const J& m=a.at(0);return turretReload(val(m,"starterRC",false),str(val(m,"kind",J())),str(val(m,"ammoType",J())));}
+ if(fn=="turretCapacity"){const J& m=a.at(0);return turretCapacity(val(m,"starterRC",false),str(val(m,"kind",J())));}
  if(fn=="itemMaxHp")return itemMaxHp(s(0));
  if(fn=="isAmmo")return isAmmo(s(0));
  if(fn=="recipeNeeds")return recipeNeeds(s(0));
