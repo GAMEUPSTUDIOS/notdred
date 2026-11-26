@@ -37,7 +37,7 @@ both core builds, and compares results: exactly for rules, within stated toleran
 | 5 | construction (construction.js: validity, buildAnchor, placementPoint, beginBuild/tickBuild/commitBuild, removeAt, rotateSelection, resizeCut; game.js edit/interact/takeHelm/recover; pickupAt, useBox, turret ammo load/eject, turret controllers) | tests/core-build.cjs | done (edit's branches for later systems are marked TODO and do nothing) |
 | 5b | machinery (fabricators, loaders, pushers and the handheld pusher, recyclers, shredders, repairs, thruster tanks, comms, hatch filters, door/spawn/sign/paint settings) | tests/core-machines.cjs | done (ejectors and hatches' zone side wait for the exterior) |
 | 6a | zone generator (caves, pit, block) | tests/core-zonegen.cjs | done (bit for bit, every zone and seed) |
-| 6 | zones (rocks, mining, docks, Freeport, portals), missions | | |
+| 6 | zones (zones.js: rocks and chunks, mining, docks, Freeport layout and berths, portals, arrivals, loot, boulders), missions.js | | next |
 | 7 | combat (rounds, turrets, damage, shields, bots, PvP) and the shared zone sim (zone-runtime) | | |
 | 8 | room orchestration (crew, ranks, commands), save codec (same format), snapshots (same wire format) | | |
 | 9 | server on the core (all server tests pass), page prediction on the WebAssembly core | | |
@@ -70,6 +70,17 @@ totals, counts and logic everywhere.
   marker (fixture-less, static).
 - resizeCut reloads the ship from its own shifted save in a fresh world mid-tick (`reloadAfterResize`), as
   initialize did, so the rest of that tick runs on the new ship.
+
+## The exterior (stage 7 design)
+Today each JavaScript room keeps its own planck copy of the outside (`world`: rock chunks, Freeport walls and docks,
+the hull body with shell and mount fixtures, kinematic "ghosts" of other ships, loot, boulders), while the shared zone
+simulation (server/zone-runtime.js, one per zone, native Box2D) owns bots, rounds, zone loot and every ship's hull;
+rooms send thrust and knocks to it and take their pose back each tick (zone-bus.cjs). The core keeps one world per
+zone instead: a `Zone` with the rock chunks (same greedy 8×8 merging), walls/docks, every ship's hull (shell + mount
+fixtures, as rebuildShell/rebuildMounts made them), bots, rounds, loot and boulders. A Ship points at its hull in its
+Zone; the queries rooms ran on their copy (rock overlap, RC fire, docking contacts, arrival checks) go to the zone
+world. One copy of the outside instead of one per ship. Ported from zones.js, combat.js, missions.js and
+zone-runtime.js; checked against a JavaScript ZoneBus with the same ships, seeds and inputs.
 
 ## Next steps (resume here)
 The room's command surface is `command(id,msg)` in server/room-runtime.js: input, select, interact, leave, edit,
