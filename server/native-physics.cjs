@@ -1,4 +1,5 @@
 'use strict';
+//This code is really cursed but it works so don't touch it.  I will probably rewrite the backend in C++ so it can use native box2D.
 const native=require('../build/physics.node');let nextWorld=1,nextBody=1;const ids=new WeakMap(),fixtureCache=new WeakMap(),sent=new WeakMap();
 // Each step sends the native solver only what changed since it last saw a body: new bodies, bodies the game moved,
 // pushed, woke, resized or re-shaped (fixtures are sent only when they change). A body the game left alone — most
