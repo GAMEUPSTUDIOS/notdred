@@ -561,6 +561,7 @@ The default server listens on loopback only. To accept LAN clients, start with `
 - Hull-mounted three-cell ejectors, corrected portrait proportions/orientation, fixed-pivot directional thruster nozzles.
 - Right-click hatch menus with all/off/whitelist/blacklist policies, blocked-output checks and cooldowns.
 - Base64/DEFLATE vector saves, validation, checksums, automatic persistence and import/export.
+- There are future plans in the works to rewrite the backend fully in C++ to run faster, with better support for the new multithreaded server.  This is going to be vastly superior to using node js worker threads, and will probably make use of shared memory across multiple threads.  
 
 ## Scope and outstanding work
 
